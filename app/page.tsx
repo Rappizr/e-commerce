@@ -236,14 +236,21 @@ export default function AlmacoPage() {
             <p className="text-xs uppercase tracking-widest text-neutral-400 mb-1">KATALOG PILIHAN</p>
             <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">COLLECTIONS</h2>
           </div>
-          <button className="text-xs font-semibold uppercase tracking-widest underline underline-offset-8 hover:text-neutral-500 transition-colors duration-300">
+          <Link
+            href="/product-detail"
+            className="text-xs font-semibold uppercase tracking-widest underline underline-offset-8 hover:text-neutral-500 transition-colors duration-300"
+          >
             LIHAT SEMUA
-          </button>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
           {collections.map((item, idx) => (
-            <div key={idx} className="group cursor-pointer">
+            <Link
+              key={idx}
+              href="/product-detail"
+              className="group cursor-pointer block"
+            >
               <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4 shadow-sm">
                 <Image
                   src={item.image}
@@ -261,7 +268,7 @@ export default function AlmacoPage() {
                 </h3>
                 <span className="text-neutral-500 tracking-tight">{item.price}</span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </section>
