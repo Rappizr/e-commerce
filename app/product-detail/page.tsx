@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import Image from "next/image";
 
+import Navbar from "../Navbar";
+
 export default function ProductDetailPage() {
   // State management
   const [selectedColor, setSelectedColor] = useState("camel");
@@ -29,9 +31,13 @@ export default function ProductDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#1C1C1C] flex flex-col font-sans selection:bg-[#C49A70] selection:text-white">
+    <div className="min-h-screen bg-[#E6E3DA] text-[#1C1C1C] flex flex-col font-sans selection:bg-[#C49A70] selection:text-white">
+      <Navbar />
+
       {/* Product Detail Main Section */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-8 md:py-14">
+
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
           
           {/* LEFT COLUMN: Media Showcase Gallery */}
