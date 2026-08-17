@@ -2,8 +2,10 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
-import Navbar from "../Navbar";
+
 
 export default function ProductDetailPage() {
   // State management
@@ -32,10 +34,36 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#E6E3DA] text-[#1C1C1C] flex flex-col font-sans selection:bg-[#C49A70] selection:text-white">
-      <Navbar />
+      {/* Header Khusus: Hanya Logo + Nama Brand dan Tombol Kembali */}
+      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200/80">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-85">
+            <div className="relative w-9 h-9 overflow-hidden rounded-full border border-neutral-200 shadow-sm">
+              <Image
+                src="/LOGO.jpeg"
+                alt="Almaco Logo"
+                fill
+                className="object-cover"
+              />
+            </div>
+            <span className="text-xl md:text-2xl font-black tracking-widest text-neutral-900 uppercase">
+              ALMACO FASHION
+            </span>
+          </Link>
+
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-xs uppercase tracking-widest font-semibold text-neutral-700 hover:text-neutral-950 transition-colors border border-neutral-300 px-4 py-2 hover:border-neutral-900"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Kembali</span>
+          </Link>
+        </div>
+      </header>
 
       {/* Product Detail Main Section */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-8 md:py-14">
+
 
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
@@ -237,3 +265,5 @@ export default function ProductDetailPage() {
     </div>
   );
 }
+
+
