@@ -7,26 +7,25 @@ import Link from 'next/link';
 
 export default function Beranda() {
   const brandTicker = Array(12).fill('ALMACO FASHION');
-  const deliveryTicker = Array(12).fill('TESTIMONI PENGIRIMAN');
+  const deliveryTicker = Array(12).fill('TESTIMONI');
 
   const collections = [
-
     {
-      title: 'Tailored Wool Coat',
+      title: 'Mantel Wol Elegan',
       price: 'Rp 1.899.000',
-      tag: 'Outerwear',
+      tag: 'Pakaian Luar',
       image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop',
     },
     {
-      title: 'Oversized Knitwear',
+      title: 'Rajut Oversized Nyaman',
       price: 'Rp 849.000',
-      tag: 'Knit',
+      tag: 'Rajutan',
       image: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?q=80&w=800&auto=format&fit=crop',
     },
     {
-      title: 'Minimalist Trousers',
+      title: 'Celana Panjang Minimalis',
       price: 'Rp 699.000',
-      tag: 'Bottoms',
+      tag: 'Bawahan',
       image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800&auto=format&fit=crop',
     },
   ];
@@ -34,27 +33,27 @@ export default function Beranda() {
   const testimonialImages = [
     {
       image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 1',
+      alt: 'Bukti Testimoni Pengiriman 1',
     },
     {
       image: 'https://images.unsplash.com/photo-1513094735237-8f2714d57c13?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 2',
+      alt: 'Bukti Testimoni Pengiriman 2',
     },
     {
       image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 3',
+      alt: 'Bukti Testimoni Pengiriman 3',
     },
     {
       image: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 4',
+      alt: 'Bukti Testimoni Pengiriman 4',
     },
     {
       image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 5',
+      alt: 'Bukti Testimoni Pengiriman 5',
     },
     {
       image: 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?q=80&w=800&auto=format&fit=crop',
-      alt: 'Testimoni Pengiriman 6',
+      alt: 'Bukti Testimoni Pengiriman 6',
     },
   ];
 
@@ -91,10 +90,9 @@ export default function Beranda() {
       <Navbar />
 
       <section className="relative h-[85vh] w-full flex items-center justify-start overflow-hidden">
-
         <Image
           src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=2000&auto=format&fit=crop"
-          alt="Almaco Autumn Winter Collection"
+          alt="Koleksi Musim Gugur Musim Dingin Almaco"
           fill
           priority
           className="object-cover object-center brightness-75"
@@ -103,10 +101,10 @@ export default function Beranda() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/20" />
         <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 w-full text-white">
           <p className="text-xs md:text-sm font-semibold tracking-[0.3em] uppercase mb-4 text-neutral-200">
-            Autumn / Winter
+            Musim Gugur / Musim Dingin
           </p>
           <h1 className="text-6xl sm:text-8xl md:text-9xl font-serif tracking-tight leading-none uppercase">
-            COLLECTION <br />
+            KOLEKSI <br />
             <span className="font-light italic">2026</span>
           </h1>
         </div>
@@ -129,7 +127,7 @@ export default function Beranda() {
         <div className="flex justify-between items-end mb-12">
           <div>
             <p className="text-xs uppercase tracking-widest text-neutral-400 mb-1">KATALOG PILIHAN</p>
-            <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">COLLECTIONS</h2>
+            <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">KOLEKSI TERBARU</h2>
           </div>
           <Link
             href="/product-detail"
@@ -184,8 +182,8 @@ export default function Beranda() {
       <section id="testimoni" className="bg-[#DFDBCF]/60 py-24 border-b border-neutral-300/70 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 mb-14">
           <div className="text-center max-w-xl mx-auto">
-            <p className="text-xs uppercase tracking-widest text-neutral-400 mb-2">LIVE PROOF OF DELIVERY</p>
-            <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">TESTIMONI PENGIRIMAN</h2>
+            <p className="text-xs uppercase tracking-widest text-neutral-400 mb-2">BUKTI PENGIRIMAN ASLI</p>
+            <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">TESTIMONI</h2>
           </div>
         </div>
 
@@ -209,46 +207,43 @@ export default function Beranda() {
       </section>
 
       <footer className="bg-[#E6E3DA] border-t border-neutral-300/70 pt-16 pb-12">
-
         <div className="max-w-7xl mx-auto px-6">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-16">
             <div className="md:col-span-6 space-y-4">
               <h3 className="text-3xl font-black tracking-tight uppercase text-neutral-950">
-                ALMACO
+                ALMACO FASHION
               </h3>
               <p className="text-neutral-500 text-sm max-w-sm leading-relaxed">
-                Architectural tailoring for modern minds. Designed in Milan, crafted without compromise.
+                Sentuhan rancangan arsitektural untuk kepribadian modern. Didesain dengan presisi dan diproduksi tanpa kompromi.
               </p>
             </div>
 
             <div className="md:col-span-3 space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-400">
-                SHOP
+                BELANJA
               </h4>
               <ul className="space-y-2.5 text-sm font-medium text-neutral-700">
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Men</Link></li>
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Women</Link></li>
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Accessories</Link></li>
+                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Pria</Link></li>
+                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Wanita</Link></li>
+                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Aksesori</Link></li>
               </ul>
             </div>
 
             <div className="md:col-span-3 space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-400">
-                COMPANY
+                TENTANG KAMI
               </h4>
               <ul className="space-y-2.5 text-sm font-medium text-neutral-700">
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">About</Link></li>
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Journal</Link></li>
-                <li><Link href="#beranda" className="hover:text-neutral-950 transition-colors duration-200">Careers</Link></li>
+                <li><Link href="/tentang-kami" className="hover:text-neutral-950 transition-colors duration-200">Tentang Kami</Link></li>
               </ul>
             </div>
           </div>
 
           <div className="pt-8 border-t border-neutral-200 flex flex-col md:flex-row justify-between items-center gap-4 text-[11px] tracking-wider uppercase text-neutral-400">
-            <p>© 2026 ALMACO. ALL RIGHTS RESERVED.</p>
+            <p>© 2026 ALMACO. HAK CIPTA DILINDUNGI UNDANG-UNDANG.</p>
             <div className="flex space-x-6">
-              <Link href="#" className="hover:text-neutral-700 transition-colors duration-200">PRIVACY POLICY</Link>
-              <Link href="#" className="hover:text-neutral-700 transition-colors duration-200">TERMS OF SERVICE</Link>
+              <Link href="#" className="hover:text-neutral-700 transition-colors duration-200">KEBIJAKAN PRIVASI</Link>
+              <Link href="#" className="hover:text-neutral-700 transition-colors duration-200">SYARAT & KETENTUAN</Link>
             </div>
           </div>
         </div>
