@@ -185,9 +185,10 @@ export default function Beranda() {
           {products.map((item) => (
             <Link
               key={item.id}
-              href="/product-detail"
+              href={`/product-detail?id=${item.id}`}
               className="group bg-white border border-neutral-200/80 overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all duration-300"
             >
+
               <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
                 <Image
                   src={item.image}
