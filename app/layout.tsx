@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { KeranjangProvider } from "./penyimpanan/KeranjangContext";
-
+import { AuthProvider } from "./penyimpanan/authcontext"; 
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,15 +27,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
-      lang="en"
+      lang="id"
       className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#E6E3DA] text-[#1A1A1A]">
-        <KeranjangProvider>{children}</KeranjangProvider>
+        <AuthProvider>
+          <KeranjangProvider>
+            {children}
+          </KeranjangProvider>
+        </AuthProvider>
       </body>
     </html>
   );
 }
-
-
-
