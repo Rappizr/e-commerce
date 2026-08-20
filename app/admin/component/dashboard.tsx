@@ -10,26 +10,34 @@ import {
   ArrowDownRight, 
   ArrowUpRight 
 } from 'lucide-react';
+import { useKeranjang } from '../../penyimpanan/KeranjangContext';
 
 interface DashboardProps {
   onNavigate?: (menu: 'pesanan' | 'produk' | 'pembayaran' | 'testimoni' | 'keuangan') => void;
 }
 
+
 export default function DashboardComponent({ onNavigate }: DashboardProps) {
-  const [activePoint, setActivePoint] = useState<number | null>(4); // Default pilih hari Jumat
+  const [activePoint, setActivePoint] = useState<number | null>(null);
+  const { pesananList } = useKeranjang();
+
+  const totalPendapatan = pesananList.reduce((acc, p) => acc + (p.status !== 'Dibatalkan' ? p.total : 0), 0);
+  const perluVerifikasiCount = pesananList.filter((p) => p.status === 'Menunggu Verifikasi').length;
+  const totalPesananCount = pesananList.length;
 
   const chartPoints = [
-    { day: 'Sen', total: 1200000, x: 30, y: 130 },
-    { day: 'Sel', total: 1850000, x: 110, y: 95 },
-    { day: 'Rab', total: 950000,  x: 190, y: 145 },
-    { day: 'Kam', total: 2400000, x: 270, y: 60 },
-    { day: 'Jum', total: 3100000, x: 350, y: 20 },
-    { day: 'Sab', total: 2100000, x: 430, y: 80 },
-    { day: 'Min', total: 1500000, x: 510, y: 115 },
+    { day: 'Sen', total: 0, x: 30, y: 170 },
+    { day: 'Sel', total: 0, x: 110, y: 170 },
+    { day: 'Rab', total: 0,  x: 190, y: 170 },
+    { day: 'Kam', total: 0, x: 270, y: 170 },
+    { day: 'Jum', total: 0, x: 350, y: 170 },
+    { day: 'Sab', total: 0, x: 430, y: 170 },
+    { day: 'Min', total: totalPendapatan, x: 510, y: totalPendapatan > 0 ? 40 : 170 },
   ];
 
-  // Path kurva bezier halus
-  const curvePath = "M 30,130 C 70,110 80,95 110,95 C 140,95 160,145 190,145 C 220,145 240,60 270,60 C 300,60 320,20 350,20 C 380,20 400,80 430,80 C 460,80 480,115 510,115";
+  const curvePath = totalPendapatan > 0 
+    ? "M 30,170 C 110,170 190,170 270,170 C 350,170 430,170 510,40"
+    : "M 30,170 L 510,170";
   const fillPath = `${curvePath} L 510,180 L 30,180 Z`;
 
   return (
@@ -39,7 +47,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         <div className="bg-white border border-neutral-200 p-5 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Pendapatan</p>
-            <h3 className="text-xl font-bold text-neutral-950 mt-1">Rp 12.450.000</h3>
+            <h3 className="text-xl font-bold text-neutral-950 mt-1">Rp {totalPendapatan.toLocaleString('id-ID')}</h3>
           </div>
           <div className="w-10 h-10 bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center rounded-full">
             <DollarSign className="w-5 h-5" />
@@ -49,7 +57,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         <div className="bg-white border border-neutral-200 p-5 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Perlu Verifikasi</p>
-            <h3 className="text-xl font-bold text-neutral-950 mt-1">3 Pembayaran</h3>
+            <h3 className="text-xl font-bold text-neutral-950 mt-1">{perluVerifikasiCount} Pembayaran</h3>
           </div>
           <div className="w-10 h-10 bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center rounded-full">
             <Clock className="w-5 h-5" />
@@ -59,7 +67,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         <div className="bg-white border border-neutral-200 p-5 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Pesanan</p>
-            <h3 className="text-xl font-bold text-neutral-950 mt-1">84 Transaksi</h3>
+            <h3 className="text-xl font-bold text-neutral-950 mt-1">{totalPesananCount} Transaksi</h3>
           </div>
           <div className="w-10 h-10 bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center rounded-full">
             <ShoppingBag className="w-5 h-5" />
@@ -69,13 +77,14 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         <div className="bg-white border border-neutral-200 p-5 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Total Produk Aktif</p>
-            <h3 className="text-xl font-bold text-neutral-950 mt-1">24 Busana</h3>
+            <h3 className="text-xl font-bold text-neutral-950 mt-1">8 Busana</h3>
           </div>
           <div className="w-10 h-10 bg-neutral-100 text-neutral-800 border border-neutral-200 flex items-center justify-center rounded-full">
             <Package className="w-5 h-5" />
           </div>
         </div>
       </div>
+
 
       {/* Baris Grafik Garis & Arus Kas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -169,23 +178,24 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
                   <ArrowDownRight className="w-3.5 h-3.5" />
                   <span>Kas Masuk (Penjualan)</span>
                 </div>
-                <p className="text-base font-bold text-emerald-950">Rp 12.450.000</p>
+                <p className="text-base font-bold text-emerald-950">Rp {totalPendapatan.toLocaleString('id-ID')}</p>
               </div>
 
               <div className="p-3.5 bg-rose-50/70 border border-rose-200">
                 <div className="flex items-center gap-1 text-[10px] font-bold uppercase text-rose-700 mb-1">
                   <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Kas Keluar (Kain & Ekspedisi)</span>
+                  <span>Kas Keluar (Operasional)</span>
                 </div>
-                <p className="text-base font-bold text-rose-950">Rp 4.120.000</p>
+                <p className="text-base font-bold text-rose-950">Rp 0</p>
               </div>
             </div>
           </div>
 
           <div className="border-t border-neutral-100 pt-3 flex justify-between items-center text-xs">
             <span className="font-bold text-neutral-500 uppercase tracking-wider">Laba Bersih</span>
-            <span className="font-bold text-neutral-950 text-sm">Rp 8.330.000</span>
+            <span className="font-bold text-neutral-950 text-sm">Rp {totalPendapatan.toLocaleString('id-ID')}</span>
           </div>
+
         </div>
 
       </div>

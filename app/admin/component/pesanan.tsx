@@ -2,80 +2,17 @@
 
 import React, { useState } from 'react';
 import { Search, MessageSquare, Truck, CheckCircle2 } from 'lucide-react';
-
-interface PesananItem {
-  id: string;
-  pembeli: string;
-  whatsapp: string;
-  produk: string;
-  qty: number;
-  hargaProduk: number;
-  ongkir: number;
-  total: number;
-  alamat: string;
-  kota: string;
-  kecamatan: string;
-  status: string;
-  tanggal: string;
-}
+import { useKeranjang, Pesanan } from '../../penyimpanan/KeranjangContext';
 
 export default function PesananComponent() {
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [search, setSearch] = useState('');
+  const { pesananList, updateStatusPesanan } = useKeranjang();
 
-  const [pesanan, setPesanan] = useState<PesananItem[]>([
-    {
-      id: 'ORD-20260819-01',
-      pembeli: 'Siti Rahmawati',
-      whatsapp: '628883199088',
-      produk: 'Daster Arab Renda Rayon Premium (Maroon)',
-      qty: 2,
-      hargaProduk: 230000,
-      ongkir: 24000,
-      total: 254000,
-      alamat: 'Jl. Raya Abepura No. 45, RT 03/RW 02',
-      kota: 'Kota Jayapura',
-      kecamatan: 'Abepura',
-      status: 'Menunggu Verifikasi',
-      tanggal: '19 Agu 2026, 10:15',
-    },
-    {
-      id: 'ORD-20260819-02',
-      pembeli: 'Nurul Hidayah',
-      whatsapp: '6281234567890',
-      produk: 'Gamis Abaya Silk Polos (Black)',
-      qty: 1,
-      hargaProduk: 275000,
-      ongkir: 24000,
-      total: 299000,
-      alamat: 'Kompleks Griya Asri Blok C No. 10',
-      kota: 'Kab. Tulungagung',
-      kecamatan: 'Bandung',
-      status: 'Diproses',
-      tanggal: '19 Agu 2026, 09:30',
-    },
-    {
-      id: 'ORD-20260818-03',
-      pembeli: 'Dewi Lestari',
-      whatsapp: '6285712345678',
-      produk: 'Setcel Knit Crinkle Kulot (Mocca)',
-      qty: 1,
-      hargaProduk: 189000,
-      ongkir: 24000,
-      total: 213000,
-      alamat: 'Jl. Merpati Putih No. 12',
-      kota: 'Kota Bandung',
-      kecamatan: 'Cibiru',
-      status: 'Dikirim',
-      tanggal: '18 Agu 2026, 16:45',
-    },
-  ]);
-
-  const updateStatus = (id: string, nextStatus: string) => {
-    setPesanan((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: nextStatus } : item))
-    );
+  const updateStatus = (id: string, nextStatus: any) => {
+    updateStatusPesanan(id, nextStatus);
   };
+
 
   const generateWaUrl = (item: PesananItem) => {
     const text = [
@@ -109,13 +46,14 @@ export default function PesananComponent() {
     return `https://api.whatsapp.com/send?phone=${item.whatsapp}&text=${encodeURIComponent(text)}`;
   };
 
-  const filtered = pesanan.filter((p) => {
+  const filtered = pesananList.filter((p) => {
     const matchStatus = filterStatus === 'Semua' || p.status === filterStatus;
     const matchSearch =
       p.id.toLowerCase().includes(search.toLowerCase()) ||
       p.pembeli.toLowerCase().includes(search.toLowerCase());
     return matchStatus && matchSearch;
   });
+
 
   return (
     <div className="space-y-4">

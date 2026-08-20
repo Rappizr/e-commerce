@@ -3,26 +3,19 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { Check, X, Eye } from 'lucide-react';
+import { useKeranjang } from '../../penyimpanan/KeranjangContext';
 
 export default function VerifikasiBayarComponent() {
-  const [konfirmasi, setKonfirmasi] = useState([
-    {
-      id: 1,
-      invoice: 'INV-20260819-01',
-      pengirim: 'Siti Rahmawati',
-      bank: 'BCA',
-      nominal: 230000,
-      tanggal: '19 Agu 2026, 10:20',
-      bukti: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&auto=format&fit=crop',
-      status: 'Menunggu',
-    },
-  ]);
-
+  const { pesananList, updateStatusPesanan } = useKeranjang();
   const [selectedBukti, setSelectedBukti] = useState<string | null>(null);
 
-  const handleApprove = (id: number) => {
-    setKonfirmasi((prev) => prev.map((k) => (k.id === id ? { ...k, status: 'Disetujui' } : k)));
+  const konfirmasiList = pesananList.filter((p) => p.status === 'Menunggu Verifikasi');
+
+  const handleApprove = (id: string) => {
+    updateStatusPesanan(id, 'Diproses');
+    alert('Pembayaran disetujui! Status pesanan kini beralih ke Diproses.');
   };
+
 
   return (
     <div className="space-y-4">
@@ -43,39 +36,42 @@ export default function VerifikasiBayarComponent() {
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 font-medium">
-            {konfirmasi.map((item) => (
-              <tr key={item.id} className="hover:bg-neutral-50/80">
-                <td className="p-4 font-bold text-neutral-900">{item.invoice}</td>
-                <td className="p-4">
-                  <span className="block font-bold">{item.pengirim}</span>
-                  <span className="text-[10px] text-neutral-400">Bank: {item.bank}</span>
-                </td>
-                <td className="p-4 font-bold">Rp {item.nominal.toLocaleString('id-ID')}</td>
-                <td className="p-4">
-                  <button
-                    onClick={() => setSelectedBukti(item.bukti)}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-800 underline"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Lihat Struk</span>
-                  </button>
-                </td>
-                <td className="p-4">
-                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200">
-                    {item.status}
-                  </span>
-                </td>
-                <td className="p-4 text-center space-x-2">
-                  <button
-                    onClick={() => handleApprove(item.id)}
-                    className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800"
-                  >
-                    Setujui
-                  </button>
+            {konfirmasiList.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-neutral-400 text-xs">
+                  Belum ada pembayaran yang perlu diverifikasi.
                 </td>
               </tr>
-            ))}
+            ) : (
+              konfirmasiList.map((item) => (
+                <tr key={item.id} className="hover:bg-neutral-50/80">
+                  <td className="p-4 font-bold text-neutral-900">{item.id}</td>
+                  <td className="p-4">
+                    <span className="block font-bold">{item.pembeli}</span>
+                    <span className="text-[10px] text-neutral-400">Bank: {item.metodePembayaran}</span>
+                  </td>
+                  <td className="p-4 font-bold">Rp {item.total.toLocaleString('id-ID')}</td>
+                  <td className="p-4">
+                    <span className="text-[11px] text-neutral-400 italic">Transfer Bank/COD</span>
+                  </td>
+                  <td className="p-4">
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200">
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-center space-x-2">
+                    <button
+                      onClick={() => handleApprove(item.id)}
+                      className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800"
+                    >
+                      Setujui
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
+
         </table>
       </div>
 

@@ -10,9 +10,10 @@ import {
   X,
   DollarSign
 } from 'lucide-react';
+import { useKeranjang } from '../../penyimpanan/KeranjangContext';
 
 interface TransaksiKas {
-  id: number;
+  id: number | string;
   tanggal: string;
   keterangan: string;
   kategori: string;
@@ -21,40 +22,20 @@ interface TransaksiKas {
 }
 
 export default function KeuanganComponent() {
-  const [transaksi, setTransaksi] = useState<TransaksiKas[]>([
-    {
-      id: 1,
-      tanggal: '19 Agu 2026',
-      keterangan: 'Pembelian 2x Daster Arab Renda (INV-091)',
-      kategori: 'Penjualan Web',
-      tipe: 'masuk',
-      nominal: 230000,
-    },
-    {
-      id: 2,
-      tanggal: '18 Agu 2026',
-      keterangan: 'Restock Rol Kain Rayon Premium (3 Roll)',
-      kategori: 'Bahan Baku & Kain',
-      tipe: 'keluar',
-      nominal: 1850000,
-    },
-    {
-      id: 3,
-      tanggal: '18 Agu 2026',
-      keterangan: 'Penjualan 1x Gamis Abaya Silk (INV-088)',
-      kategori: 'Penjualan Web',
-      tipe: 'masuk',
-      nominal: 275000,
-    },
-    {
-      id: 4,
-      tanggal: '17 Agu 2026',
-      keterangan: 'Pembelian Polymailer & Plastik Klip Packing',
-      kategori: 'Operasional & Packing',
-      tipe: 'keluar',
-      nominal: 120000,
-    },
-  ]);
+  const { pesananList } = useKeranjang();
+  const [transaksiCustom, setTransaksiCustom] = useState<TransaksiKas[]>([]);
+
+  const transaksiPenjualan: TransaksiKas[] = pesananList.map((p) => ({
+    id: p.id,
+    tanggal: p.tanggal,
+    keterangan: `Pesanan Web ${p.id} (${p.pembeli})`,
+    kategori: 'Penjualan Web',
+    tipe: 'masuk',
+    nominal: p.total,
+  }));
+
+  const transaksi = [...transaksiPenjualan, ...transaksiCustom];
+
 
   const [filterTipe, setFilterTipe] = useState<'semua' | 'masuk' | 'keluar'>('semua');
   const [showModal, setShowModal] = useState(false);
@@ -89,16 +70,17 @@ export default function KeuanganComponent() {
       nominal: Number(formKas.nominal.replace(/[^0-9]/g, '')),
     };
 
-    setTransaksi([newKas, ...transaksi]);
+    setTransaksiCustom([newKas, ...transaksiCustom]);
     setFormKas({ keterangan: '', kategori: 'Bahan Baku & Kain', tipe: 'keluar', nominal: '' });
     setShowModal(false);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: number | string) => {
     if (confirm('Hapus catatan transaksi ini?')) {
-      setTransaksi((prev) => prev.filter((t) => t.id !== id));
+      setTransaksiCustom((prev) => prev.filter((t) => t.id !== id));
     }
   };
+
 
   const filteredTransaksi = transaksi.filter((t) => {
     if (filterTipe === 'semua') return true;

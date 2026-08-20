@@ -3,20 +3,53 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, User, MapPin, Check } from 'lucide-react';
 import Footer from '../Footer';
 import { useKeranjang } from '../penyimpanan/KeranjangContext';
 import PembayaranComponent from './component/pembayaran';
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const [isDropship, setIsDropship] = useState(false);
   const [useInsurance, setUseInsurance] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const { cartItems, subtotal } = useKeranjang();
+  const [nama, setNama] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [kota, setKota] = useState('');
+  const [alamat, setAlamat] = useState('');
+  const [selectedBank, setSelectedBank] = useState('mandiri');
+
+  const { cartItems, subtotal, tambahPesanan } = useKeranjang();
 
   const shippingFee = cartItems.length > 0 ? 24000 : 0;
   const total = subtotal + shippingFee + (useInsurance ? 5000 : 0);
+
+  const handlePay = () => {
+    if (!nama || !whatsapp || !kota || !alamat) {
+      alert('Mohon lengkapi semua data penerima.');
+      return;
+    }
+
+    const itemTitles = cartItems.map((i) => `${i.title} (${i.size}, ${i.color}) x${i.qty}`).join(', ');
+    const totalQty = cartItems.reduce((acc, i) => acc + i.qty, 0);
+
+    tambahPesanan({
+      pembeli: nama,
+      whatsapp: whatsapp,
+      produk: itemTitles,
+      qty: totalQty,
+      hargaProduk: subtotal,
+      ongkir: shippingFee,
+      total: total,
+      alamat: alamat,
+      kota: kota,
+      metodePembayaran: selectedBank.toUpperCase(),
+    });
+
+    setIsSubmitted(true);
+  };
 
   if (isSubmitted) {
     return <PembayaranComponent totalAmount={total} />;

@@ -12,6 +12,24 @@ export interface ItemKeranjang {
   image: string;
 }
 
+export interface Pesanan {
+  id: string;
+  pembeli: string;
+  whatsapp: string;
+  produk: string;
+  qty: number;
+  hargaProduk: number;
+  ongkir: number;
+  total: number;
+  alamat: string;
+  kota: string;
+  kecamatan: string;
+  status: 'Menunggu Verifikasi' | 'Diproses' | 'Dikirim' | 'Selesai' | 'Dibatalkan';
+  tanggal: string;
+  metodePembayaran: string;
+  bukti?: string;
+}
+
 interface KeranjangContextType {
   cartItems: ItemKeranjang[];
   tambahKeKeranjang: (item: Omit<ItemKeranjang, 'qty'>, qty?: number) => void;
@@ -20,19 +38,27 @@ interface KeranjangContextType {
   clearCart: () => void;
   totalCount: number;
   subtotal: number;
+  pesananList: Pesanan[];
+  tambahPesanan: (pesananBaru: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => void;
+  updateStatusPesanan: (id: string, status: Pesanan['status']) => void;
 }
 
 const KeranjangContext = createContext<KeranjangContextType | undefined>(undefined);
 
 export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<ItemKeranjang[]>([]);
+  const [pesananList, setPesananList] = useState<Pesanan[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('almaco_keranjang');
-      if (saved) {
-        setCartItems(JSON.parse(saved));
+      const savedCart = localStorage.getItem('almaco_keranjang');
+      if (savedCart) {
+        setCartItems(JSON.parse(savedCart));
+      }
+      const savedPesanan = localStorage.getItem('almaco_pesanan');
+      if (savedPesanan) {
+        setPesananList(JSON.parse(savedPesanan));
       }
     } catch (e) {
       console.error(e);
@@ -43,8 +69,9 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem('almaco_keranjang', JSON.stringify(cartItems));
+      localStorage.setItem('almaco_pesanan', JSON.stringify(pesananList));
     }
-  }, [cartItems, isLoaded]);
+  }, [cartItems, pesananList, isLoaded]);
 
   const tambahKeKeranjang = (newItem: Omit<ItemKeranjang, 'qty'>, qty = 1) => {
     setCartItems((prev) => {
@@ -84,6 +111,33 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     setCartItems([]);
   };
 
+  const tambahPesanan = (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomId = Math.floor(1000 + Math.random() * 9000);
+    const newPesanan: Pesanan = {
+      ...data,
+      id: `ORD-${dateStr}-${randomId}`,
+      tanggal: today.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      status: 'Menunggu Verifikasi',
+    };
+
+    setPesananList((prev) => [newPesanan, ...prev]);
+    clearCart();
+  };
+
+  const updateStatusPesanan = (id: string, status: Pesanan['status']) => {
+    setPesananList((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status } : item))
+    );
+  };
+
   const totalCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.qty, 0);
 
@@ -97,6 +151,9 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         totalCount,
         subtotal,
+        pesananList,
+        tambahPesanan,
+        updateStatusPesanan,
       }}
     >
       {children}
@@ -111,6 +168,7 @@ export function useKeranjang() {
   }
   return context;
 }
+
 
 
 
