@@ -31,7 +31,7 @@ export default function FAQPage() {
 
   const noWhatsapp = '628883199088';
   const pesanWhatsapp = 'Halo Admin ALMACO FASHION, saya ingin bertanya hal yang tidak ada di daftar FAQ.';
-  const waUrl = `https://wa.me/${noWhatsapp}?text=${encodeURIComponent(pesanWhatsapp)}`;
+  const waUrl = `https://api.whatsapp.com/send?phone=${noWhatsapp}&text=${encodeURIComponent(pesanWhatsapp)}`;
 
   const categories = [
     { name: 'Semua', icon: HelpCircle },
@@ -112,62 +112,76 @@ export default function FAQPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white">
-      
-      {/* Header Halaman */}
+    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
+      <style jsx global>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3.5 transition-opacity hover:opacity-85">
-            <div className="relative w-10 h-10 overflow-hidden rounded-full border border-neutral-300 shadow-xs shrink-0">
-              <Image src="/LOGO.jpeg" alt="Almaco Logo" fill className="object-cover" />
+        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-9 h-9 sm:w-12 sm:h-12 shrink-0">
+              <Image
+                src="/logo.png"
+                alt="Almaco Logo"
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
-            <span className="text-xl md:text-2xl font-black tracking-[0.15em] text-neutral-950 uppercase">
-              ALMACO FASHION
-            </span>
+            <div className="leading-none truncate">
+              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
+                <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
+              </div>
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1 truncate">
+                Fashionable • Syari • Berkualitas
+              </span>
+            </div>
           </Link>
 
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs uppercase tracking-widest font-semibold text-neutral-700 hover:text-neutral-950 transition-colors border border-neutral-300 px-4 py-2 hover:border-neutral-900 bg-white"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-xs shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Kembali</span>
           </Link>
         </div>
       </header>
 
-      {/* Konten Utama FAQ */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        
-        {/* Banner Judul & Pencarian */}
-        <div className="text-center space-y-3 mb-10">
-          <span className="text-[11px] font-bold uppercase tracking-[0.3em] text-neutral-400 block">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
+        <div className="text-center space-y-2.5 sm:space-y-3 mb-8 sm:mb-10">
+          <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-neutral-400 block">
             PUSAT BANTUAN & INFORMASI
           </span>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-serif uppercase tracking-tight text-neutral-950">
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-serif uppercase tracking-tight text-neutral-950 leading-snug">
             PERTANYAAN UMUM (FAQ)
           </h1>
-          <p className="text-xs sm:text-sm text-neutral-600 max-w-lg mx-auto leading-relaxed pt-1">
+          <p className="text-xs sm:text-sm text-neutral-600 max-w-lg mx-auto leading-relaxed pt-0.5 sm:pt-1">
             Temukan jawaban cepat seputar tata cara pembelian, pembayaran, pengiriman paket, hingga panduan perawatan produk kami.
           </p>
 
-          {/* Form Pencarian FAQ */}
-          <div className="max-w-xl mx-auto pt-4">
+          <div className="max-w-xl mx-auto pt-3 sm:pt-4">
             <div className="relative">
               <input
                 type="text"
                 placeholder="Cari pertanyaan... (contoh: pengiriman, retur, bahan)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-neutral-300 pl-11 pr-4 py-3.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 shadow-xs"
+                className="w-full bg-white border border-neutral-300 pl-10 sm:pl-11 pr-4 py-2.5 sm:py-3 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 shadow-xs"
               />
-              <Search className="w-4 h-4 text-neutral-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
         </div>
 
-        {/* Tab Filter Kategori */}
-        <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-2 mb-8">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-2 mb-6 sm:mb-8">
           {categories.map((cat) => {
             const Icon = cat.icon;
             const isActive = activeCategory === cat.name;
@@ -175,7 +189,7 @@ export default function FAQPage() {
               <button
                 key={cat.name}
                 onClick={() => setActiveCategory(cat.name)}
-                className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all border whitespace-nowrap ${
+                className={`inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs uppercase tracking-wider font-semibold transition-all border whitespace-nowrap shrink-0 ${
                   isActive
                     ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs'
                     : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-900'
@@ -188,8 +202,7 @@ export default function FAQPage() {
           })}
         </div>
 
-        {/* Daftar Akordion FAQ */}
-        <div className="space-y-3">
+        <div className="space-y-3 sm:space-y-3.5">
           {filteredFaqs.length > 0 ? (
             filteredFaqs.map((item) => (
               <div
@@ -198,13 +211,13 @@ export default function FAQPage() {
               >
                 <button
                   onClick={() => toggleAccordion(item.id)}
-                  className="w-full p-5 sm:p-6 flex items-center justify-between text-left gap-4"
+                  className="w-full p-4 sm:p-6 flex items-center justify-between text-left gap-3 sm:gap-4"
                 >
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 block">
+                  <div className="space-y-1 min-w-0">
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-neutral-400 block">
                       {item.category}
                     </span>
-                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-neutral-900">
+                    <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-neutral-900 leading-snug">
                       {item.question}
                     </h3>
                   </div>
@@ -216,7 +229,7 @@ export default function FAQPage() {
                 </button>
 
                 {openAccordion === item.id && (
-                  <div className="px-5 sm:px-6 pb-6 pt-1 border-t border-neutral-100 animate-in fade-in duration-200">
+                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-1 border-t border-neutral-100 animate-in fade-in duration-200">
                     <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
                       {item.answer}
                     </p>
@@ -225,24 +238,23 @@ export default function FAQPage() {
               </div>
             ))
           ) : (
-            <div className="bg-white border border-neutral-200 p-10 text-center space-y-2">
+            <div className="bg-white border border-neutral-200 p-8 sm:p-10 text-center space-y-1.5">
               <p className="text-xs font-bold uppercase tracking-wider text-neutral-800">
                 Pertanyaan tidak ditemukan
               </p>
-              <p className="text-xs text-neutral-500">
+              <p className="text-[11px] sm:text-xs text-neutral-500">
                 Coba gunakan kata kunci lain atau langsung tanyakan ke Admin WhatsApp kami.
               </p>
             </div>
           )}
         </div>
 
-        {/* Kotak Bantuan WhatsApp */}
-        <div className="mt-12 bg-[#EFECE6] border border-neutral-300 p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="space-y-1 text-center sm:text-left">
-            <h4 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+        <div className="mt-8 sm:mt-12 bg-[#EFECE6] border border-neutral-300 p-5 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6 text-center sm:text-left">
+          <div className="space-y-1">
+            <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
               Masih Memiliki Pertanyaan Lain?
             </h4>
-            <p className="text-xs text-neutral-600 leading-relaxed">
+            <p className="text-[11px] sm:text-xs text-neutral-600 leading-relaxed">
               Tim admin layanan pelanggan kami siap membantu Anda setiap hari Senin - Sabtu.
             </p>
           </div>
@@ -251,16 +263,14 @@ export default function FAQPage() {
             href={waUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold uppercase tracking-widest px-6 py-3.5 rounded-full shadow-md transition-all shrink-0 hover:scale-105 active:scale-95"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest px-5 sm:px-6 py-3 sm:py-3.5 rounded-full shadow-md transition-all shrink-0 hover:scale-105 active:scale-95"
           >
             <MessageCircle className="w-4 h-4" />
             <span>Chat Admin WhatsApp</span>
           </a>
         </div>
-
       </main>
 
-      {/* Footer Komponen */}
       <Footer />
     </div>
   );

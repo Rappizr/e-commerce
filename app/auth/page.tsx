@@ -31,15 +31,11 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between">
-      
-      {/* Header Full-Width Rata Tepi seperti Beranda */}
+    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
       <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-full px-4 sm:px-8 lg:px-12 h-20 flex items-center justify-between gap-4">
-          
-          {/* Logo & Brand Rata Kiri */}
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85">
-            <div className="relative w-11 h-11 sm:w-13 sm:h-13 shrink-0">
+        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-9 h-9 sm:w-12 sm:h-12 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -48,35 +44,31 @@ export default function AuthPage() {
                 className="object-contain"
               />
             </div>
-            <div className="leading-none">
-              <div className="text-xl sm:text-2xl uppercase tracking-tight text-neutral-950">
+            <div className="leading-none truncate">
+              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
                 <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-medium tracking-wide block mt-1">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1 truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
           </Link>
 
-          {/* Tombol Kembali Rata Kanan */}
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-4 py-2.5 transition-all duration-200 shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-xs shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Kembali ke Beranda</span>
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Kembali ke Beranda</span>
+            <span className="xs:hidden">Kembali</span>
           </Link>
-
         </div>
       </header>
 
-      {/* Form Pendaftaran & Login */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white border border-neutral-200 p-8 shadow-xs">
-          
-          {/* Brand Logo & Teks di Atas Kotak Form */}
-          <div className="flex flex-col items-center justify-center text-center mb-6 space-y-1">
-            <div className="relative w-14 h-14 shrink-0 mb-1">
+      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
+        <div className="w-full max-w-md bg-white border border-neutral-200 p-6 sm:p-8 shadow-xs">
+          <div className="flex flex-col items-center justify-center text-center mb-5 sm:mb-6 space-y-1">
+            <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0 mb-1">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -89,17 +81,16 @@ export default function AuthPage() {
               <div className="text-xl sm:text-2xl uppercase tracking-tight text-neutral-950">
                 <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-medium tracking-wider block mt-0.5">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wider block mt-0.5">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
           </div>
 
-          {/* Tab Pilihan Daftar / Masuk */}
-          <div className="flex border-b border-neutral-200 mb-6 text-xs uppercase tracking-widest font-bold">
+          <div className="flex border-b border-neutral-200 mb-5 sm:mb-6 text-[11px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-bold">
             <button
               onClick={() => setIsLoginMode(false)}
-              className={`flex-1 py-3 text-center transition-all border-b-2 ${
+              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
                 !isLoginMode ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400 hover:text-neutral-700'
               }`}
             >
@@ -107,7 +98,7 @@ export default function AuthPage() {
             </button>
             <button
               onClick={() => setIsLoginMode(true)}
-              className={`flex-1 py-3 text-center transition-all border-b-2 ${
+              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
                 isLoginMode ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400 hover:text-neutral-700'
               }`}
             >
@@ -115,10 +106,10 @@ export default function AuthPage() {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             {!isLoginMode && (
               <div>
-                <label className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
                   Nama Lengkap <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -128,15 +119,15 @@ export default function AuthPage() {
                     placeholder="Nama Lengkap Anda"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
                   />
-                  <User className="w-4 h-4 text-neutral-400 absolute right-3 top-3 pointer-events-none" />
+                  <User className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+              <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
                 Alamat Email <span className="text-red-500">*</span>
               </label>
               <div className="relative">
@@ -146,15 +137,15 @@ export default function AuthPage() {
                   placeholder="nama@email.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
                 />
-                <Mail className="w-4 h-4 text-neutral-400 absolute right-3 top-3 pointer-events-none" />
+                <Mail className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
               </div>
             </div>
 
             {!isLoginMode && (
               <div>
-                <label className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
                   No WhatsApp <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
@@ -164,15 +155,15 @@ export default function AuthPage() {
                     placeholder="08xxxxxxxxxx"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
                   />
-                  <Phone className="w-4 h-4 text-neutral-400 absolute right-3 top-3 pointer-events-none" />
+                  <Phone className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+              <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
                 Kata Sandi <span className="text-red-500">*</span>
               </label>
               <div className="relative">
@@ -182,20 +173,19 @@ export default function AuthPage() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
                 />
-                <Lock className="w-4 h-4 text-neutral-400 absolute right-3 top-3 pointer-events-none" />
+                <Lock className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.2em] py-3.5 transition shadow-xs mt-2"
+              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] py-3 sm:py-3.5 transition shadow-xs mt-2"
             >
               {isLoginMode ? 'Masuk Sekarang' : 'Daftar Akun'}
             </button>
           </form>
-
         </div>
       </main>
 
