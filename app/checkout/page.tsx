@@ -45,8 +45,10 @@ export default function CheckoutPage() {
       total: total,
       alamat: alamat,
       kota: kota,
+      kecamatan: '-',
       metodePembayaran: selectedBank.toUpperCase(),
     });
+
 
     setIsSubmitted(true);
   };
@@ -120,6 +122,8 @@ export default function CheckoutPage() {
                   <input
                     type="text"
                     required
+                    value={nama}
+                    onChange={(e) => setNama(e.target.value)}
                     placeholder="Contoh: Siti Rahmawati"
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                   />
@@ -131,6 +135,8 @@ export default function CheckoutPage() {
                   <input
                     type="tel"
                     required
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="Contoh: 081234567890"
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                   />
@@ -144,6 +150,8 @@ export default function CheckoutPage() {
                 <input
                   type="text"
                   required
+                  value={kota}
+                  onChange={(e) => setKota(e.target.value)}
                   placeholder="Contoh: Jawa Timur, Kab. Tulungagung, Kec. Bandung"
                   className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                 />
@@ -156,10 +164,13 @@ export default function CheckoutPage() {
                 <textarea
                   rows={3}
                   required
+                  value={alamat}
+                  onChange={(e) => setAlamat(e.target.value)}
                   placeholder="Contoh: Jl. Merpati No. 12, RT 02/RW 03, Dusun Krajan"
                   className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                 />
               </div>
+
 
               <div className="flex items-center gap-2 pt-2">
                 <input
@@ -301,11 +312,12 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                onClick={() => setIsSubmitted(true)}
+                onClick={handlePay}
                 className="w-full bg-neutral-950 hover:bg-black text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition duration-300 transform hover:scale-[1.01] active:scale-[0.99] block text-center"
               >
                 BAYAR SEKARANG
               </button>
+
             </div>
           </div>
 

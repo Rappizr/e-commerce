@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
 import Image from 'next/image';
 import { Plus, Trash2, AlertTriangle, X, Check, Upload, PackagePlus } from 'lucide-react';
 
@@ -19,13 +20,68 @@ export default function ProdukComponent() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Dynamic Kategori State dengan Auto-Save localStorage (Default Kosong)
+  const [kategoriList, setKategoriList] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('almaco_kategori_list');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return [];
+  });
+
+  const [newKategoriInput, setNewKategoriInput] = useState('');
+  const [showAddKategoriInput, setShowAddKategoriInput] = useState(false);
+  const [deleteKategoriTarget, setDeleteKategoriTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('almaco_kategori_list', JSON.stringify(kategoriList));
+  }, [kategoriList]);
+
   const [formProduk, setFormProduk] = useState({
     nama: '',
-    kategori: 'Daster',
+    kategori: '', // Tidak otomatis terisi
     harga: '',
     stok: '',
     gambar: '',
   });
+
+  const handleAddKategori = () => {
+    const trimmed = newKategoriInput.trim();
+    if (!trimmed) return;
+    if (kategoriList.some((k) => k.toLowerCase() === trimmed.toLowerCase())) {
+      alert('Kategori ini sudah ada!');
+      return;
+    }
+    const updated = [...kategoriList, trimmed];
+    setKategoriList(updated);
+    setFormProduk((prev) => ({ ...prev, kategori: trimmed }));
+    setNewKategoriInput('');
+    setShowAddKategoriInput(false);
+    setToastMessage(`Kategori "${trimmed}" berhasil ditambahkan!`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const confirmDeleteKategori = () => {
+    if (!deleteKategoriTarget) return;
+    const kat = deleteKategoriTarget;
+    const updated = kategoriList.filter((k) => k !== kat);
+    setKategoriList(updated);
+    if (formProduk.kategori === kat) {
+      setFormProduk((prev) => ({ ...prev, kategori: '' }));
+    }
+    setDeleteKategoriTarget(null);
+    setToastMessage(`Kategori "${kat}" berhasil dihapus.`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+
+
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -205,22 +261,83 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Kategori *</label>
-                  <select
-                    value={formProduk.kategori}
-                    onChange={(e) => setFormProduk({ ...formProduk, kategori: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-950 uppercase cursor-pointer"
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Pilih Kategori Busana *</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddKategoriInput(!showAddKategoriInput)}
+                    className="text-[11px] font-bold text-neutral-900 hover:underline inline-flex items-center gap-1"
                   >
-                    <option value="Daster">Daster</option>
-                    <option value="Gamis">Gamis</option>
-                    <option value="Setcel">Setcel</option>
-                    <option value="Kaftan">Kaftan</option>
-                    <option value="Aksesori">Aksesori</option>
-                  </select>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{showAddKategoriInput ? 'Batal' : 'Tambah Kategori Baru'}</span>
+                  </button>
                 </div>
 
+                {/* Input Tambah Kategori Baru */}
+                {showAddKategoriInput && (
+                  <div className="flex gap-2 p-2 bg-neutral-100 border border-neutral-200 animate-in fade-in duration-200">
+                    <input
+                      type="text"
+                      placeholder="Nama Kategori Baru (misal: Mukena)"
+                      value={newKategoriInput}
+                      onChange={(e) => setNewKategoriInput(e.target.value)}
+                      className="flex-1 bg-white border border-neutral-300 px-3 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddKategori}
+                      className="px-3 py-1.5 bg-neutral-950 text-white text-xs font-bold uppercase tracking-wider hover:bg-black transition"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                )}
+
+                {/* Daftar Chip/Badge Kategori yang BISA DIPILIH dan DIHAPUS */}
+                {kategoriList.length === 0 ? (
+                  <div className="p-3 bg-neutral-50 border border-dashed border-neutral-300 text-neutral-400 text-center">
+                    <p className="text-xs italic">Belum ada kategori yang ditambahkan.</p>
+                    <p className="text-[10px] text-neutral-400 font-medium">Klik <strong>"+ Tambah Kategori Baru"</strong> di atas untuk membuat kategori busana pertama Anda.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {kategoriList.map((kat) => {
+                      const isSelected = formProduk.kategori === kat;
+                      return (
+                        <div
+                          key={kat}
+                          onClick={() => setFormProduk({ ...formProduk, kategori: kat })}
+                          className={`group relative inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-bold uppercase cursor-pointer transition ${
+                            isSelected
+                              ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs'
+                              : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:border-neutral-400 hover:bg-white'
+                          }`}
+                        >
+                          <span>{kat}</span>
+                          {/* Tombol Hapus Kategori */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteKategoriTarget(kat);
+                            }}
+                            className={`p-0.5 rounded-full hover:bg-rose-600 hover:text-white transition ${
+                              isSelected ? 'text-neutral-300' : 'text-neutral-400 opacity-60 group-hover:opacity-100'
+                            }`}
+                            title={`Hapus kategori "${kat}"`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Jumlah Stok *</label>
                   <input
@@ -232,19 +349,20 @@ export default function ProdukComponent() {
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-950"
                   />
                 </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Harga Satuan (Rp) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: 115000"
+                    value={formProduk.harga}
+                    onChange={(e) => setFormProduk({ ...formProduk, harga: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-950"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Harga Satuan (Rp) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: 115000"
-                  value={formProduk.harga}
-                  onChange={(e) => setFormProduk({ ...formProduk, harga: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-950"
-                />
-              </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Foto Produk Busana *</label>
@@ -296,6 +414,46 @@ export default function ProdukComponent() {
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog Konfirmasi Hapus Kategori UI/UX */}
+      {deleteKategoriTarget && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-neutral-200 max-w-sm w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-950">
+                  Hapus Kategori
+                </h3>
+                <p className="text-[11px] text-neutral-500">Hapus "{deleteKategoriTarget}"?</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-600 leading-relaxed">
+              Apakah Anda yakin ingin menghapus kategori <strong className="text-neutral-900">"{deleteKategoriTarget}"</strong> dari pilihan?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setDeleteKategoriTarget(null)}
+                className="px-3.5 py-1.5 bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-100 text-xs font-bold uppercase tracking-wider transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteKategori}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+              >
+                Ya, Hapus
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -362,4 +520,5 @@ export default function ProdukComponent() {
     </div>
   );
 }
+
 
