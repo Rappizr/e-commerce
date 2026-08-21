@@ -29,7 +29,7 @@ export default function Beranda() {
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('almaco_user');
+    const savedUser = localStorage.getItem('almaco_user') || localStorage.getItem('user');
     if (savedUser) {
       setIsLoggedIn(true);
     }
@@ -186,7 +186,6 @@ export default function Beranda() {
         }
       `}</style>
 
-      {/* Pop-up Notifikasi Tengah Atas Elegan */}
       {toastMessage && (
         <div className="fixed top-6 sm:top-8 inset-x-0 z-50 flex justify-center px-4 pointer-events-none animate-in fade-in slide-in-from-top-6 duration-300">
           <div className="bg-neutral-950/95 backdrop-blur-md text-white px-4 sm:px-6 py-3 border border-neutral-800 shadow-2xl flex items-center gap-3 sm:gap-4 max-w-md w-full sm:w-auto rounded-full pointer-events-auto">
@@ -243,9 +242,6 @@ export default function Beranda() {
             <nav className="hidden lg:flex items-center space-x-6 text-xs tracking-[0.15em] uppercase font-bold text-neutral-700">
               <Link href="/" className="hover:text-neutral-950 transition-colors py-1">
                 Beranda
-              </Link>
-              <Link href="/tentang-kami" className="hover:text-neutral-950 transition-colors py-1">
-                Tentang Kami
               </Link>
               <Link href="/#testimoni" className="hover:text-neutral-950 transition-colors py-1">
                 Testimoni
@@ -319,13 +315,6 @@ export default function Beranda() {
               Beranda
             </Link>
             <Link
-              href="/tentang-kami"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-xs font-bold uppercase tracking-wider text-neutral-800 border-b border-neutral-100"
-            >
-              Tentang Kami
-            </Link>
-            <Link
               href="/#testimoni"
               onClick={() => setMobileMenuOpen(false)}
               className="block py-2 text-xs font-bold uppercase tracking-wider text-neutral-800 border-b border-neutral-100"
@@ -333,11 +322,11 @@ export default function Beranda() {
               Testimoni
             </Link>
             <Link
-              href="/auth"
+              href={isLoggedIn ? "/profile" : "/auth"}
               onClick={() => setMobileMenuOpen(false)}
               className="block py-2 text-xs font-bold uppercase tracking-wider text-neutral-800"
             >
-              {isLoggedIn ? 'Akun Saya' : 'Masuk / Daftar Akun'}
+              {isLoggedIn ? 'Profile Saya' : 'Masuk / Daftar Akun'}
             </Link>
           </div>
         )}
@@ -447,7 +436,6 @@ export default function Beranda() {
                 </div>
               </Link>
 
-              {/* Tombol Aksi Bawah yang Bersih dan Terintegrasi */}
               <div className="px-3 pb-3 sm:px-4 sm:pb-4">
                 <button
                   type="button"

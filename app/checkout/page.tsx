@@ -1,17 +1,33 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, User, MapPin, Check } from 'lucide-react';
+import { ArrowLeft, User, MapPin, Check, Plus, BookmarkCheck, ChevronDown, X } from 'lucide-react';
 import Footer from '../Footer';
 import { useKeranjang } from '../penyimpanan/KeranjangContext';
 import PembayaranComponent from './component/pembayaran';
+
+interface SavedAddress {
+  id: number;
+  label: string;
+  recipient: string;
+  phone: string;
+  city: string;
+  address: string;
+  postalCode?: string;
+  isDefault?: boolean;
+}
 
 export default function CheckoutPage() {
   const [isDropship, setIsDropship] = useState(false);
   const [useInsurance, setUseInsurance] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [showAddressPicker, setShowAddressPicker] = useState(false);
+  const [showNewAddressModal, setShowNewAddressModal] = useState(false);
 
   const [nama, setNama] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -20,10 +36,108 @@ export default function CheckoutPage() {
   const [catatan, setCatatan] = useState('');
   const [selectedBank, setSelectedBank] = useState('bca');
 
+  const [newAddrLabel, setNewAddrLabel] = useState('');
+  const [newAddrName, setNewAddrName] = useState('');
+  const [newAddrPhone, setNewAddrPhone] = useState('');
+  const [newAddrCity, setNewAddrCity] = useState('');
+  const [newAddrDetail, setNewAddrDetail] = useState('');
+
   const { cartItems, subtotal, tambahPesanan } = useKeranjang();
 
   const shippingFee = cartItems.length > 0 ? 24000 : 0;
   const total = subtotal + shippingFee + (useInsurance ? 5000 : 0);
+
+  useEffect(() => {
+    let addresses: SavedAddress[] = [];
+    const localAddr = localStorage.getItem('almaco_addresses');
+    
+    if (localAddr) {
+      try {
+        addresses = JSON.parse(localAddr);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    if (!addresses || addresses.length === 0) {
+      addresses = [
+        {
+          id: 1,
+          label: 'Rumah (Utama)',
+          recipient: 'Rappi Ramadhan',
+          phone: '08883199088',
+          city: 'Papua, Kota Jayapura, Abepura',
+          address: 'Jl. Raya Abepura No. 45, RT 03/RW 02',
+          postalCode: '99225',
+          isDefault: true,
+        },
+        {
+          id: 2,
+          label: 'Kantor / Studio',
+          recipient: 'Rappi (Studio Almaco)',
+          phone: '08883199088',
+          city: 'Jawa Barat, Kota Bandung, Cibiru',
+          address: 'Kompleks Ruko Cibiru Regency Blok B-12',
+          postalCode: '40614',
+          isDefault: false,
+        },
+      ];
+    }
+
+    setSavedAddresses(addresses);
+
+    const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+    if (defaultAddr) {
+      setSelectedAddressId(defaultAddr.id);
+      setNama(defaultAddr.recipient);
+      setWhatsapp(defaultAddr.phone);
+      setKota(defaultAddr.city);
+      setAlamat(defaultAddr.address + (defaultAddr.postalCode ? ` - ${defaultAddr.postalCode}` : ''));
+    }
+  }, []);
+
+  const handleSelectAddress = (addr: SavedAddress) => {
+    setSelectedAddressId(addr.id);
+    setNama(addr.recipient);
+    setWhatsapp(addr.phone);
+    setKota(addr.city);
+    setAlamat(addr.address + (addr.postalCode ? ` - ${addr.postalCode}` : ''));
+    setShowAddressPicker(false);
+  };
+
+  const handleSaveNewAddressModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAddrName.trim() || !newAddrPhone.trim() || !newAddrCity.trim() || !newAddrDetail.trim()) {
+      alert('Mohon lengkapi seluruh data alamat baru.');
+      return;
+    }
+
+    const newEntry: SavedAddress = {
+      id: Date.now(),
+      label: newAddrLabel.trim() || 'Alamat Baru',
+      recipient: newAddrName.trim(),
+      phone: newAddrPhone.trim(),
+      city: newAddrCity.trim(),
+      address: newAddrDetail.trim(),
+      isDefault: false,
+    };
+
+    const updatedList = [newEntry, ...savedAddresses];
+    setSavedAddresses(updatedList);
+    try {
+      localStorage.setItem('almaco_addresses', JSON.stringify(updatedList));
+    } catch (e) {
+      console.error(e);
+    }
+
+    handleSelectAddress(newEntry);
+    setNewAddrLabel('');
+    setNewAddrName('');
+    setNewAddrPhone('');
+    setNewAddrCity('');
+    setNewAddrDetail('');
+    setShowNewAddressModal(false);
+  };
 
   const handlePay = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,23 +151,35 @@ export default function CheckoutPage() {
       return;
     }
 
-    tambahPesanan({
-      pembeli: nama,
-      whatsapp: whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp,
-      produk: itemTitles,
-      qty: totalQty,
-      hargaProduk: subtotal,
-      ongkir: shippingFee,
-      total: total,
-      alamat: alamat,
-      kota: kota,
-      kecamatan: kota,
-      metodePembayaran: selectedBank.toUpperCase(),
-    });
+    const itemTitles = cartItems.map((i: any) => `${i.title} (${i.size}, ${i.color}) x${i.qty}`).join(', ');
+    const totalQty = cartItems.reduce((acc: number, i: any) => acc + i.qty, 0);
+
+    if (typeof tambahPesanan === 'function') {
+      try {
+        (tambahPesanan as any)({
+          id: `ORD-${Date.now()}`,
+          pembeli: nama,
+          whatsapp: whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp,
+          produk: itemTitles,
+          qty: totalQty,
+          hargaProduk: subtotal,
+          ongkir: shippingFee,
+          total: total,
+          alamat: alamat,
+          kota: kota,
+          kecamatan: kota,
+          catatan: catatan,
+          metodePembayaran: selectedBank.toUpperCase(),
+          status: 'Menunggu Verifikasi',
+          tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
     setIsSubmitted(true);
   };
-
 
   if (isSubmitted) {
     return <PembayaranComponent totalAmount={total} />;
@@ -102,12 +228,75 @@ export default function CheckoutPage() {
         <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           <div className="lg:col-span-7 space-y-6">
             <div className="bg-white border border-neutral-200/80 p-5 sm:p-7 space-y-5 shadow-xs">
-              <div className="flex items-center gap-2 border-b border-neutral-100 pb-3 sm:pb-4">
-                <User className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-800" />
-                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900">
-                  Data Penerima
-                </h2>
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-100 pb-3 sm:pb-4 gap-2">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-800" />
+                  <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900">
+                    Data Penerima
+                  </h2>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {savedAddresses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddressPicker(!showAddressPicker)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-neutral-700 hover:text-neutral-950 bg-neutral-100 hover:bg-neutral-200 px-2.5 py-1.5 border border-neutral-300 transition"
+                    >
+                      <BookmarkCheck className="w-3.5 h-3.5 text-neutral-600" />
+                      <span>Ganti Alamat ({savedAddresses.length})</span>
+                      <ChevronDown className="w-3 h-3 ml-0.5" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAddressModal(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-neutral-900 hover:bg-black px-2.5 py-1.5 transition shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Alamat Baru</span>
+                  </button>
+                </div>
               </div>
+
+              {showAddressPicker && savedAddresses.length > 0 && (
+                <div className="p-3.5 bg-neutral-50 border border-neutral-300 space-y-2.5 animate-in fade-in duration-200">
+                  <p className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
+                    PILIH DARI ALAMAT PROFIL TERSIMPAN:
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {savedAddresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        onClick={() => handleSelectAddress(addr)}
+                        className={`p-3 bg-white border cursor-pointer transition flex items-start justify-between gap-3 text-left ${
+                          selectedAddressId === addr.id
+                            ? 'border-neutral-950 ring-1 ring-neutral-950 bg-neutral-50/50'
+                            : 'border-neutral-200 hover:border-neutral-400'
+                        }`}
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-neutral-900">{addr.label}</span>
+                            {addr.isDefault && (
+                              <span className="bg-neutral-900 text-white text-[8px] font-bold uppercase px-1.5 py-0.2">Utama</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-semibold text-neutral-800">{addr.recipient} ({addr.phone})</p>
+                          <p className="text-[11px] text-neutral-600 line-clamp-1">{addr.address}, {addr.city}</p>
+                        </div>
+                        {selectedAddressId === addr.id && (
+                          <div className="w-4 h-4 rounded-full bg-neutral-950 text-white flex items-center justify-center shrink-0 mt-0.5">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                 <div className="space-y-1 sm:space-y-1.5">
@@ -118,7 +307,10 @@ export default function CheckoutPage() {
                     type="text"
                     required
                     value={nama}
-                    onChange={(e) => setNama(e.target.value)}
+                    onChange={(e) => {
+                      setNama(e.target.value);
+                      setSelectedAddressId(null);
+                    }}
                     placeholder="Contoh: Siti Rahmawati"
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                   />
@@ -131,7 +323,10 @@ export default function CheckoutPage() {
                     type="tel"
                     required
                     value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
+                    onChange={(e) => {
+                      setWhatsapp(e.target.value);
+                      setSelectedAddressId(null);
+                    }}
                     placeholder="Contoh: 081234567890"
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                   />
@@ -146,7 +341,10 @@ export default function CheckoutPage() {
                   type="text"
                   required
                   value={kota}
-                  onChange={(e) => setKota(e.target.value)}
+                  onChange={(e) => {
+                    setKota(e.target.value);
+                    setSelectedAddressId(null);
+                  }}
                   placeholder="Contoh: Jawa Timur, Kab. Tulungagung, Kec. Bandung"
                   className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                 />
@@ -160,18 +358,16 @@ export default function CheckoutPage() {
                   rows={3}
                   required
                   value={alamat}
-                  onChange={(e) => setAlamat(e.target.value)}
+                  onChange={(e) => {
+                    setAlamat(e.target.value);
+                    setSelectedAddressId(null);
+                  }}
                   placeholder="Contoh: Jl. Merpati No. 12, RT 02/RW 03, Dusun Krajan"
                   className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
                 />
               </div>
 
-<<<<<<< HEAD
-
-              <div className="flex items-center gap-2 pt-2">
-=======
               <div className="flex items-center gap-2 pt-1">
->>>>>>> e17b229c4dbcb4db6ed962d855466d78ed3d3a96
                 <input
                   type="checkbox"
                   id="dropship"
@@ -216,7 +412,7 @@ export default function CheckoutPage() {
                 {cartItems.length === 0 ? (
                   <p className="text-xs text-neutral-400 py-2">Belum ada barang di keranjang.</p>
                 ) : (
-                  cartItems.map((item) => (
+                  cartItems.map((item: any) => (
                     <div key={`${item.id}-${item.size}-${item.color}`} className="flex gap-3 sm:gap-4 items-center justify-between border-t border-neutral-100 pt-3">
                       <div className="flex gap-3 items-center min-w-0">
                         <div className="relative w-14 h-18 sm:w-16 sm:h-20 bg-neutral-100 shrink-0 border border-neutral-200">
@@ -314,22 +510,129 @@ export default function CheckoutPage() {
               </div>
 
               <button
-<<<<<<< HEAD
-                type="button"
-                onClick={handlePay}
-                className="w-full bg-neutral-950 hover:bg-black text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition duration-300 transform hover:scale-[1.01] active:scale-[0.99] block text-center"
-=======
                 type="submit"
                 className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] font-bold uppercase py-3.5 sm:py-4 shadow-md transition duration-300 block text-center"
->>>>>>> e17b229c4dbcb4db6ed962d855466d78ed3d3a96
               >
                 BAYAR SEKARANG
               </button>
-
             </div>
           </div>
         </form>
       </main>
+
+      {showNewAddressModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setShowNewAddressModal(false)}
+          />
+
+          <div className="relative z-10 w-full max-w-lg bg-white border border-neutral-200 shadow-2xl p-5 sm:p-7 space-y-4 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowNewAddressModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-neutral-900 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="border-b border-neutral-100 pb-2.5">
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-neutral-950">
+                Tambah Alamat Pengiriman
+              </h3>
+              <p className="text-[11px] text-neutral-500">Alamat ini akan disimpan dan langsung digunakan untuk checkout saat ini.</p>
+            </div>
+
+            <form onSubmit={handleSaveNewAddressModal} className="space-y-3">
+              <div>
+                <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                  Label Alamat
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Rumah Baru, Kos, Kantor Cabang"
+                  value={newAddrLabel}
+                  onChange={(e) => setNewAddrLabel(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                    Nama Penerima <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nama Lengkap"
+                    value={newAddrName}
+                    onChange={(e) => setNewAddrName(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                    No WhatsApp <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="08xxxxxxxxxx"
+                    value={newAddrPhone}
+                    onChange={(e) => setNewAddrPhone(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                  Kota / Kecamatan <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Jawa Timur, Kab. Tulungagung, Kec. Bandung"
+                  value={newAddrCity}
+                  onChange={(e) => setNewAddrCity(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
+                  Alamat Lengkap <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Nama jalan, nomor rumah, RT/RW, patokan..."
+                  value={newAddrDetail}
+                  onChange={(e) => setNewAddrDetail(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewAddressModal(false)}
+                  className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-xs font-bold uppercase tracking-wider py-2.5 transition text-center"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider py-2.5 transition text-center shadow-xs"
+                >
+                  Gunakan Alamat Ini
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
