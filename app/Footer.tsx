@@ -3,9 +3,12 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { MapPin, Clock, MessageSquare, HelpCircle } from 'lucide-react';
 
 export default function Footer() {
+  const router = useRouter();
+
   const pesanWhatsapp = 'Halo Admin ALMACO FASHION, saya ingin bertanya seputar produk dan pemesanan.';
   
   const admin1 = '6285138472520'; 
@@ -18,6 +21,19 @@ export default function Footer() {
     instagram: 'https://www.instagram.com/almaco_fashion/',
     facebook: 'https://facebook.com/almacofashion',
     telegram: 'https://t.me/almacofashion',
+  };
+
+  const handleProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const isUserLoggedIn = 
+      typeof window !== 'undefined' && 
+      (localStorage.getItem('almaco_user_auth') === 'true' || !!localStorage.getItem('almaco_user_token'));
+
+    if (isUserLoggedIn) {
+      router.push('/profile');
+    } else {
+      router.push('/auth');
+    }
   };
 
   return (
@@ -77,9 +93,13 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/profile" className="hover:text-neutral-950 transition-colors">
+                <button
+                  type="button"
+                  onClick={handleProfileClick}
+                  className="hover:text-neutral-950 transition-colors text-left bg-transparent border-none p-0 cursor-pointer text-xs font-medium text-neutral-600"
+                >
                   Akun & Alamat Saya
-                </Link>
+                </button>
               </li>
               <li>
                 <Link href="/faq" className="hover:text-neutral-950 transition-colors flex items-center gap-1.5">
@@ -102,16 +122,16 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/kebijakan-privasi" className="hover:text-neutral-950 transition-colors">
+                <Link href="/kebijakan-garansi" className="hover:text-neutral-950 transition-colors">
                   Kebijakan Garansi & Retur
                 </Link>
               </li>
             </ul>
 
             <div className="pt-2 space-y-2">
-<h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-900">
-    HUBUNGI ADMIN
-  </h4>
+              <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-900">
+                HUBUNGI ADMIN
+              </h4>
               
               <a 
                 href={waUrlAdmin1} 
