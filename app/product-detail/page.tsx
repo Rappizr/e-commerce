@@ -8,12 +8,58 @@ import { ArrowLeft, Check, X, ShoppingBag, ChevronLeft, ChevronRight, Images, Zo
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
 
+const colorMap: Record<string, string> = {
+  hitam: "#181818",
+  black: "#181818",
+  putih: "#FFFFFF",
+  white: "#FFFFFF",
+  "cokelat karamel": "#C49A70",
+  cokelat: "#8B5A2B",
+  caramel: "#C49A70",
+  mocca: "#9E7B66",
+  moka: "#9E7B66",
+  cream: "#EED9C4",
+  krem: "#EED9C4",
+  "sage green": "#8A9A86",
+  sage: "#8A9A86",
+  hijau: "#3A5A40",
+  "hijau botol": "#1B4332",
+  navy: "#1B263B",
+  biru: "#2B4C7E",
+  maroon: "#5E1914",
+  merah: "#9E2A2B",
+  "dusty pink": "#D8A48F",
+  pink: "#E8A598",
+  "abu misty": "#D1D5DB",
+  "abu-abu": "#6D6B63",
+  abu: "#6D6B63",
+  grey: "#6D6B63",
+  lilac: "#B8A9C9",
+  ungu: "#6A4C93",
+  terracotta: "#C86446",
+  mustard: "#D4A373",
+  denim: "#4A6B82",
+  khaki: "#BDB76B",
+  army: "#4B5320",
+  olive: "#556B2F",
+};
+
+const getColorHex = (name: string): string | null => {
+  const normalized = name.toLowerCase().trim();
+  if (colorMap[normalized]) return colorMap[normalized];
+  for (const key in colorMap) {
+    if (normalized.includes(key)) return colorMap[key];
+  }
+  return null;
+};
+
 const dummyProducts = [
   {
     id: "1",
     title: "Daster Arab Renda Rayon Premium",
     category: "DASTER",
     price: "Rp 115.000",
+    stok: 24,
     desc: "Daster Arab Renda elegan berbahan Rayon Premium super adem dan lembut di kulit. Dilengkapi hiasan renda cantik serta potongan busui-friendly yang nyaman dipakai harian.",
     images: [
       "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
@@ -22,12 +68,8 @@ const dummyProducts = [
       "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800&auto=format&fit=crop",
     ],
-    colors: [
-      { id: "camel", name: "COKELAT KARAMEL", bgClass: "bg-[#C49A70]" },
-      { id: "black", name: "HITAM ELEGAN", bgClass: "bg-[#181818]" },
-      { id: "grey", name: "ABU-ABU OLIVE", bgClass: "bg-[#6D6B63]" },
-    ],
-    sizes: ["XS", "S", "M", "L", "XL"],
+    warna: ["Cokelat Karamel", "Hitam", "Abu Misty", "Sage Green"],
+    ukuran: ["XS", "S", "M", "L", "XL"],
     details: [
       "Bahan kualitas premium super adem & lembut",
       "Jahitan rapi kelas butik eksklusif",
@@ -40,6 +82,7 @@ const dummyProducts = [
     title: "Daster Midi Floral Rayon Adem",
     category: "DASTER",
     price: "Rp 89.000",
+    stok: 12,
     desc: "Daster midi santai dengan motif floral kekinian. Terbuat dari katun rayon pilihan yang ringan, dingin, dan memberikan keleluasaan bergerak sepanjang hari.",
     images: [
       "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop",
@@ -48,12 +91,8 @@ const dummyProducts = [
       "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1485968579580-b6d095142e6e?q=80&w=800&auto=format&fit=crop",
     ],
-    colors: [
-      { id: "camel", name: "COKELAT KARAMEL", bgClass: "bg-[#C49A70]" },
-      { id: "black", name: "HITAM", bgClass: "bg-[#181818]" },
-      { id: "grey", name: "ABU MISTY", bgClass: "bg-[#6D6B63]" },
-    ],
-    sizes: ["XS", "S", "M", "L"],
+    warna: ["Cokelat Karamel", "Hitam", "Mocca"],
+    ukuran: ["XS", "S", "M", "L"],
     details: [
       "Bahan kualitas premium super adem & lembut",
       "Jahitan rapi kelas butik eksklusif",
@@ -69,9 +108,14 @@ function ProductDetailContent() {
 
   const product = dummyProducts.find((p) => p.id === productId) || dummyProducts[0];
   const allImages = Array.isArray(product.images) ? product.images : [(product as any).images?.main || ""];
+  const sisaStok = typeof product.stok === 'number' ? product.stok : 15;
 
-  const [selectedColor, setSelectedColor] = useState(product.colors?.[0]?.id || "camel");
-  const [selectedSize, setSelectedSize] = useState(product.sizes?.[0] || "M");
+  const rawWarnaList: string[] = (product as any).warna 
+    ? (product as any).warna 
+    : (product as any).colors?.map((c: any) => c.name || c) || ["Default"];
+
+  const [selectedColor, setSelectedColor] = useState(rawWarnaList[0] || "Default");
+  const [selectedSize, setSelectedSize] = useState((product as any).ukuran?.[0] || (product as any).sizes?.[0] || "M");
   const [openAccordion, setOpenAccordion] = useState<string | null>("details");
   const [showCenterModal, setShowCenterModal] = useState(false);
 
@@ -99,14 +143,13 @@ function ProductDetailContent() {
 
   const handleAddToCart = () => {
     const numericPrice = parseInt(product.price.replace(/[^0-9]/g, "")) || 100000;
-    const selectedColorName = product.colors?.find((c) => c.id === selectedColor)?.name || "Default";
     
     tambahKeKeranjang({
       id: product.id,
       title: product.title,
       price: numericPrice,
       size: selectedSize,
-      color: selectedColorName,
+      color: selectedColor,
       image: allImages[0],
     });
 
@@ -118,7 +161,6 @@ function ProductDetailContent() {
   return (
     <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-12 py-8 md:py-14 relative">
       
-      {/* Pop-up Dialog Sukses Tambah Keranjang */}
       {showCenterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -162,7 +204,7 @@ function ProductDetailContent() {
                   {product.title}
                 </h4>
                 <p className="text-[11px] text-neutral-500 uppercase tracking-wider truncate">
-                  Ukuran: <strong className="text-neutral-800">{selectedSize}</strong> | Warna: <strong className="text-neutral-800">{product.colors?.find((c) => c.id === selectedColor)?.name}</strong>
+                  Ukuran: <strong className="text-neutral-800">{selectedSize}</strong> | Warna: <strong className="text-neutral-800">{selectedColor}</strong>
                 </p>
                 <p className="text-xs font-bold text-neutral-900">
                   {product.price}
@@ -190,7 +232,6 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* MODAL LIGHTBOX FULLSCREEN SEMUA FOTO PRODUK */}
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -252,10 +293,7 @@ function ProductDetailContent() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
 
-        {/* Gallery Foto Produk dengan Dukungan Multi-Foto & Tombol Lihat Lainnya */}
         <div className="lg:col-span-7 space-y-4">
-          
-          {/* Foto Utama Besar */}
           <div 
             onClick={() => openLightbox(0)}
             className="relative aspect-[3/4] w-full bg-stone-200 overflow-hidden shadow-sm group cursor-pointer"
@@ -273,11 +311,8 @@ function ProductDetailContent() {
             </div>
           </div>
 
-          {/* Baris 2 Foto Detail Bawah */}
           {allImages.length > 1 && (
             <div className="grid grid-cols-2 gap-4">
-              
-              {/* Foto 2 (Bawah Kiri) */}
               <div 
                 onClick={() => openLightbox(1)}
                 className="relative aspect-[3/4] w-full bg-stone-200 overflow-hidden shadow-sm group cursor-pointer"
@@ -294,7 +329,6 @@ function ProductDetailContent() {
                 </div>
               </div>
 
-              {/* Foto 3 (Bawah Kanan) + Overlay Lihat Foto Lainnya jika ada sisa foto */}
               {allImages[2] && (
                 <div 
                   onClick={() => openLightbox(2)}
@@ -328,59 +362,103 @@ function ProductDetailContent() {
             </div>
           )}
 
+          {allImages.length > 3 && (
+            <button
+              type="button"
+              onClick={() => openLightbox(0)}
+              className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-xs font-bold uppercase tracking-widest py-3 transition flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Images className="w-4 h-4" />
+              <span>Buka Semua Galeri Foto ({allImages.length} Foto)</span>
+            </button>
+          )}
         </div>
 
-        {/* Informasi & Pilihan Ukuran Produk */}
         <div className="lg:col-span-5 lg:sticky lg:top-28 space-y-6 pr-0 lg:pr-4">
           
-          <div>
-            <p className="text-[11px] tracking-[0.25em] text-neutral-400 font-bold uppercase mb-1.5">
-              {product.category}
-            </p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[11px] tracking-[0.2em] font-bold uppercase text-neutral-400">
+              <span>{product.category}</span>
+              <span className="text-neutral-300">•</span>
+              <span className={sisaStok > 0 ? "text-neutral-600" : "text-rose-600 font-bold"}>
+                {sisaStok > 0 ? `SISA STOK: ${sisaStok} PCS` : "STOK HABIS"}
+              </span>
+            </div>
 
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif text-neutral-900 tracking-tight leading-tight">
               {product.title}
             </h1>
 
-            <p className="text-xl md:text-2xl text-neutral-900 mt-2.5 font-semibold tracking-wide">
-              {product.price}
-            </p>
+            <div className="flex items-baseline gap-3 pt-1">
+              <span className="text-2xl sm:text-3xl text-neutral-950 font-semibold tracking-wide">
+                {product.price}
+              </span>
+            </div>
           </div>
 
           <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
             {product.desc}
           </p>
 
-          {/* Pemilihan Warna */}
-          {product.colors && product.colors.length > 0 && (
+          {/* Pemilihan Warna Otomatis Berdasarkan Teks dari Admin */}
+          {rawWarnaList && rawWarnaList.length > 0 && (
             <div className="space-y-2.5 pt-1">
               <div className="flex items-center text-xs tracking-wider uppercase">
                 <span className="text-neutral-400 font-bold">WARNA:</span>
-                <span className="ml-2 font-semibold text-neutral-800">
-                  {product.colors.find((c) => c.id === selectedColor)?.name}
+                <span className="ml-2 font-bold text-neutral-900">
+                  {selectedColor}
                 </span>
               </div>
-              <div className="flex items-center space-x-3">
-                {product.colors.map((color) => (
-                  <button
-                    key={color.id}
-                    onClick={() => setSelectedColor(color.id)}
-                    aria-label={`Pilih warna ${color.name}`}
-                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
-                      selectedColor === color.id
-                        ? "ring-1 ring-offset-2 ring-neutral-900 scale-110"
-                        : "hover:scale-110 opacity-80 hover:opacity-100"
-                    }`}
-                  >
-                    <span className={`w-full h-full rounded-full ${color.bgClass} border border-black/10`} />
-                  </button>
-                ))}
+              
+              <div className="flex flex-wrap items-center gap-2.5">
+                {rawWarnaList.map((warnaName) => {
+                  const hexCode = getColorHex(warnaName);
+                  const isSelected = selectedColor.toLowerCase() === warnaName.toLowerCase();
+
+                  if (hexCode) {
+                    return (
+                      <button
+                        key={warnaName}
+                        type="button"
+                        onClick={() => setSelectedColor(warnaName)}
+                        title={warnaName}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                          isSelected
+                            ? "ring-2 ring-offset-2 ring-neutral-950 scale-110"
+                            : "hover:scale-105 opacity-80 hover:opacity-100"
+                        }`}
+                      >
+                        <span 
+                          style={{ backgroundColor: hexCode }}
+                          className={`w-full h-full rounded-full border ${
+                            hexCode.toLowerCase() === "#ffffff" ? "border-neutral-300" : "border-black/10"
+                          }`} 
+                        />
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={warnaName}
+                      type="button"
+                      onClick={() => setSelectedColor(warnaName)}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase transition border ${
+                        isSelected
+                          ? "bg-neutral-950 text-white border-neutral-950 shadow-xs"
+                          : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500"
+                      }`}
+                    >
+                      {warnaName}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Pemilihan Ukuran */}
-          {product.sizes && product.sizes.length > 0 && (
+          {((product as any).ukuran || (product as any).sizes) && (
             <div className="space-y-2.5 pt-1">
               <div className="flex items-center justify-between text-xs tracking-wider uppercase">
                 <span className="text-neutral-400 font-bold">UKURAN</span>
@@ -390,9 +468,10 @@ function ProductDetailContent() {
               </div>
 
               <div className="grid grid-cols-4 gap-2">
-                {product.sizes.map((size) => (
+                {((product as any).ukuran || (product as any).sizes).map((size: string) => (
                   <button
                     key={size}
+                    type="button"
                     onClick={() => setSelectedSize(size)}
                     className={`py-3 text-xs tracking-wider uppercase transition-all duration-200 border ${
                       selectedSize === size
@@ -407,18 +486,21 @@ function ProductDetailContent() {
             </div>
           )}
 
-          {/* Tombol Aksi */}
           <div className="space-y-3 pt-3">
             <button
               onClick={handleAddToCart}
-              className="w-full text-xs tracking-[0.2em] font-semibold uppercase py-4 transition-all duration-300 transform active:scale-[0.98] shadow-md flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-950 text-white"
+              disabled={sisaStok <= 0}
+              className={`w-full text-xs tracking-[0.2em] font-semibold uppercase py-4 transition-all duration-300 transform active:scale-[0.98] shadow-md flex items-center justify-center gap-2 ${
+                sisaStok > 0
+                  ? "bg-neutral-900 hover:bg-neutral-950 text-white cursor-pointer"
+                  : "bg-neutral-300 text-neutral-500 cursor-not-allowed"
+              }`}
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>TAMBAH KE KERANJANG</span>
+              <span>{sisaStok > 0 ? "TAMBAH KE KERANJANG" : "STOK HABIS"}</span>
             </button>
           </div>
 
-          {/* Akordion Detail Produk & Garansi */}
           <div className="border-t border-neutral-200 pt-4 space-y-3">
             <div className="border-b border-neutral-200 pb-3">
               <button

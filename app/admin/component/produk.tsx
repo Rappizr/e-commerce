@@ -102,6 +102,10 @@ export default function ProdukComponent() {
   const [showAddKategoriInput, setShowAddKategoriInput] = useState(false);
   const [deleteKategoriTarget, setDeleteKategoriTarget] = useState<string | null>(null);
 
+  const [inputWarnaBaru, setInputWarnaBaru] = useState('');
+
+  const warnaSaran = ['Hitam', 'Putih', 'Cokelat Karamel', 'Mocca', 'Sage Green', 'Navy', 'Maroon', 'Dusty Pink', 'Abu Misty', 'Lilac'];
+
   useEffect(() => {
     localStorage.setItem('almaco_kategori_list', JSON.stringify(kategoriList));
   }, [kategoriList]);
@@ -113,7 +117,7 @@ export default function ProdukComponent() {
     stok: '',
     deskripsi: '',
     rincianText: '',
-    warnaText: '',
+    warnaList: [] as string[],
     ukuranPilihan: [] as string[],
     gambarList: [] as string[],
   });
@@ -128,10 +132,11 @@ export default function ProdukComponent() {
       stok: '',
       deskripsi: '',
       rincianText: '',
-      warnaText: '',
+      warnaList: [],
       ukuranPilihan: [],
       gambarList: [],
     });
+    setInputWarnaBaru('');
   };
 
   const handleAddKategori = () => {
@@ -161,6 +166,46 @@ export default function ProdukComponent() {
     setDeleteKategoriTarget(null);
     setToastMessage(`Kategori "${kat}" berhasil dihapus.`);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleAddCustomColor = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = inputWarnaBaru.trim();
+    if (!trimmed) return;
+
+    if (formProduk.warnaList.some((w) => w.toLowerCase() === trimmed.toLowerCase())) {
+      setInputWarnaBaru('');
+      return;
+    }
+
+    setFormProduk((prev) => ({
+      ...prev,
+      warnaList: [...prev.warnaList, trimmed],
+    }));
+    setInputWarnaBaru('');
+  };
+
+  const toggleWarnaPreset = (warna: string) => {
+    setFormProduk((prev) => {
+      const exists = prev.warnaList.some((w) => w.toLowerCase() === warna.toLowerCase());
+      if (exists) {
+        return {
+          ...prev,
+          warnaList: prev.warnaList.filter((w) => w.toLowerCase() !== warna.toLowerCase()),
+        };
+      }
+      return {
+        ...prev,
+        warnaList: [...prev.warnaList, warna],
+      };
+    });
+  };
+
+  const handleRemoveColor = (warnaToRemove: string) => {
+    setFormProduk((prev) => ({
+      ...prev,
+      warnaList: prev.warnaList.filter((w) => w !== warnaToRemove),
+    }));
   };
 
   const handleMultipleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,11 +284,6 @@ export default function ProdukComponent() {
     }
 
     const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, ''));
-    const parsedWarna = formProduk.warnaText
-      .split(',')
-      .map((w) => w.trim())
-      .filter(Boolean);
-
     const parsedRincian = formProduk.rincianText
       .split('\n')
       .map((r) => r.trim())
@@ -260,7 +300,7 @@ export default function ProdukComponent() {
       stok: Number(formProduk.stok) || 0,
       deskripsi: formProduk.deskripsi.trim() || 'Busana modis berkualitas premium dari ALMACO FASHION.',
       rincian: parsedRincian.length > 0 ? parsedRincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
-      warna: parsedWarna.length > 0 ? parsedWarna : ['Default'],
+      warna: formProduk.warnaList.length > 0 ? formProduk.warnaList : ['Default'],
       ukuran: formProduk.ukuranPilihan.length > 0 ? formProduk.ukuranPilihan : ['All Size'],
       gambarList: finalList,
       gambarUtama: finalList[0],
@@ -600,17 +640,84 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                  Variasi Warna
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Cokelat Karamel, Hitam, Abu"
-                  value={formProduk.warnaText}
-                  onChange={(e) => setFormProduk({ ...formProduk, warnaText: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950"
-                />
+              {/* Variasi Pilihan Warna (Multi-Select & Input Custom) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
+                    <Palette className="w-3.5 h-3.5 text-neutral-500" />
+                    <span>Variasi Warna ({formProduk.warnaList.length} Warna Terpilih)</span>
+                  </label>
+                </div>
+
+                {/* Tag Warna yang Sudah Terpilih */}
+                {formProduk.warnaList.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 border border-neutral-200">
+                    {formProduk.warnaList.map((warna) => (
+                      <span
+                        key={warna}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-neutral-300 text-neutral-900 text-[10px] font-bold uppercase shadow-2xs"
+                      >
+                        <span>{warna}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveColor(warna)}
+                          className="text-neutral-400 hover:text-rose-600 p-0.5"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input Tambah Warna Manual */}
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Ketik nama warna baru (contoh: Terracotta)..."
+                    value={inputWarnaBaru}
+                    onChange={(e) => setInputWarnaBaru(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomColor();
+                      }
+                    }}
+                    className="flex-1 bg-neutral-50 border border-neutral-300 px-2.5 py-1.5 text-xs focus:bg-white focus:outline-none focus:border-neutral-950"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomColor()}
+                    className="px-3 py-1.5 bg-neutral-900 hover:bg-black text-white text-[10px] font-bold uppercase tracking-wider transition shrink-0 flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Tambah</span>
+                  </button>
+                </div>
+
+                {/* Rekomendasi Warna Populer Cepat */}
+                <div className="space-y-1 pt-0.5">
+                  <span className="text-[9px] text-neutral-400 font-medium">Pilihan cepat:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {warnaSaran.map((warna) => {
+                      const isSelected = formProduk.warnaList.some((w) => w.toLowerCase() === warna.toLowerCase());
+                      return (
+                        <button
+                          key={warna}
+                          type="button"
+                          onClick={() => toggleWarnaPreset(warna)}
+                          className={`px-2 py-0.5 text-[9px] font-semibold border transition ${
+                            isSelected
+                              ? 'bg-neutral-950 text-white border-neutral-950'
+                              : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                          }`}
+                        >
+                          {isSelected ? `✓ ${warna}` : `+ ${warna}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -695,7 +802,7 @@ export default function ProdukComponent() {
           />
           <div className="relative z-10 bg-white border border-neutral-200 max-w-sm w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="min-w-0">
@@ -736,17 +843,17 @@ export default function ProdukComponent() {
             className="fixed inset-0"
             onClick={() => setDeleteTarget(null)}
           />
-          <div className="relative z-10 bg-white border border-neutral-200 max-w-md w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative z-10 bg-white border border-neutral-200 max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-4 h-4" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-950 truncate">
+                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 truncate">
                     Konfirmasi Hapus Produk
                   </h3>
-                  <p className="text-[10px] text-neutral-500 truncate">Tindakan ini tidak dapat dibatalkan.</p>
+                  <p className="text-[10px] sm:text-[11px] text-neutral-500 truncate">Tindakan ini tidak dapat dibatalkan.</p>
                 </div>
               </div>
               <button 
