@@ -20,10 +20,15 @@ import Footer from './Footer';
 
 export default function Beranda() {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState('default');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  
+
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(['Semua']);
+
   const keranjangCtx = useKeranjang();
   const cartItems = (keranjangCtx as any)?.cartItems || [];
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
@@ -32,6 +37,20 @@ export default function Beranda() {
     const savedUser = localStorage.getItem('almaco_user') || localStorage.getItem('user');
     if (savedUser) {
       setIsLoggedIn(true);
+    }
+
+    try {
+      const savedProducts = localStorage.getItem('almaco_produk_list');
+      if (savedProducts) {
+        setProducts(JSON.parse(savedProducts));
+      }
+      const savedCategories = localStorage.getItem('almaco_kategori_list');
+      if (savedCategories) {
+        const parsedCat = JSON.parse(savedCategories);
+        setCategories(['Semua', ...parsedCat]);
+      }
+    } catch (e) {
+      console.error(e);
     }
   }, []);
 
@@ -46,17 +65,19 @@ export default function Beranda() {
     e.preventDefault();
     e.stopPropagation();
     
-    const numericPrice = typeof item.price === 'number' 
-      ? item.price 
-      : parseInt(item.price.replace(/[^0-9]/g, ''), 10);
+    const numericPrice = typeof item.harga === 'number' 
+      ? item.harga 
+      : (typeof item.price === 'number' 
+          ? item.price 
+          : parseInt(String(item.price || item.harga).replace(/[^0-9]/g, ''), 10) || 100000);
 
     const payload = {
-      id: item.id,
-      title: item.title,
+      id: String(item.id),
+      title: item.nama || item.title,
       price: numericPrice,
-      image: item.image,
-      size: 'All Size',
-      color: 'Default',
+      image: item.gambarUtama || item.gambar || (item.gambarList && item.gambarList[0]) || item.image || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop',
+      size: (item.ukuran && item.ukuran[0]) || 'All Size',
+      color: (item.warna && item.warna[0]) || 'Default',
       qty: 1,
     };
 
@@ -69,7 +90,7 @@ export default function Beranda() {
       addFn(payload);
     }
 
-    showToast(item.title);
+    showToast(item.nama || item.title);
   };
 
   const noWhatsapp = '628883199088';
@@ -79,82 +100,36 @@ export default function Beranda() {
   const brandTicker = Array(12).fill('ALMACO FASHION');
   const deliveryTicker = Array(12).fill('TESTIMONI PENGIRIMAN');
 
-  const categories = ['Semua', 'Daster', 'Gamis', 'Setcel', 'Best Seller'];
+  // Filter & Sort Logic
+  const filteredProducts = products.filter((p) => {
+    const matchCategory = selectedCategory === 'Semua' || p.kategori?.toLowerCase() === selectedCategory.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    const matchSearch = !query || 
+      p.nama?.toLowerCase().includes(query) || 
+      p.kategori?.toLowerCase().includes(query) ||
+      p.deskripsi?.toLowerCase().includes(query);
+    return matchCategory && matchSearch;
+  }).sort((a, b) => {
+    if (sortOption === 'price-low') return (a.harga || 0) - (b.harga || 0);
+    if (sortOption === 'price-high') return (b.harga || 0) - (a.harga || 0);
+    if (sortOption === 'newest') return (b.id || 0) - (a.id || 0);
+    return 0;
+  });
 
-  const products = [
-    {
-      id: 1,
-      title: 'Daster Arab Renda Rayon Premium',
-      category: 'Daster',
-      price: 'Rp 115.000',
-      image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop',
-      badge: 'Best Seller',
-    },
-    {
-      id: 2,
-      title: 'Daster Midi Floral Rayon Adem',
-      category: 'Daster',
-      price: 'Rp 89.000',
-      image: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop',
-      badge: 'Favorit',
-    },
-    {
-      id: 3,
-      title: 'Daster Kaftan Siluet Minimalis',
-      category: 'Daster',
-      price: 'Rp 135.000',
-      image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?q=80&w=800&auto=format&fit=crop',
-      badge: 'Terbaru',
-    },
-    {
-      id: 4,
-      title: 'Gamis Abaya Silk Polos Elegan',
-      category: 'Gamis',
-      price: 'Rp 275.000',
-      image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop',
-      badge: 'Eksklusif',
-    },
-    {
-      id: 5,
-      title: 'Daster Panjang Twill Busui Friendly',
-      category: 'Daster',
-      price: 'Rp 105.000',
-      image: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800&auto=format&fit=crop',
-      badge: 'Promo',
-    },
-    {
-      id: 6,
-      title: 'Setcel Knit Crinkle Kulot',
-      category: 'Setcel',
-      price: 'Rp 189.000',
-      image: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?q=80&w=800&auto=format&fit=crop',
-      badge: 'Hot Item',
-    },
-    {
-      id: 7,
-      title: 'Gamis Tiered Dress Pastel Mewah',
-      category: 'Gamis',
-      price: 'Rp 299.000',
-      image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop',
-      badge: 'Premium',
-    },
-    {
-      id: 8,
-      title: 'Setcel Rayon Motif Tie Dye Harian',
-      category: 'Setcel',
-      price: 'Rp 165.000',
-      image: 'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?q=80&w=800&auto=format&fit=crop',
-      badge: 'Best Seller',
-    },
-  ];
+  // Testimoni Live dari Admin
+  const [testimoniList, setTestimoniList] = useState<any[]>([]);
 
-  const testimonialImages = [
-    { image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?q=80&w=800&auto=format&fit=crop', alt: 'Paket 1' },
-    { image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=800&auto=format&fit=crop', alt: 'Paket 2' },
-    { image: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=800&auto=format&fit=crop', alt: 'Paket 3' },
-    { image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?q=80&w=800&auto=format&fit=crop', alt: 'Paket 4' },
-    { image: 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?q=80&w=800&auto=format&fit=crop', alt: 'Paket 5' },
-  ];
+  useEffect(() => {
+    try {
+      const savedTestimoni = localStorage.getItem('almaco_testimoni_list');
+      if (savedTestimoni) {
+        const parsed = JSON.parse(savedTestimoni);
+        setTestimoniList(parsed.filter((t: any) => t.tayang));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   return (
     <main id="beranda" className="min-h-screen bg-[#F9F8F6] text-neutral-900 antialiased selection:bg-neutral-900 selection:text-white scroll-smooth relative flex flex-col justify-between overflow-x-hidden">
@@ -229,13 +204,22 @@ export default function Beranda() {
             </div>
           </Link>
 
+          {/* Search Bar Desktop */}
           <div className="hidden md:flex flex-1 max-w-sm lg:max-w-md mx-4 lg:mx-6 items-center relative">
             <input
               type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="CARI BUSANA..."
-              className="w-full bg-neutral-50 border border-neutral-200 rounded-none px-4 py-2 text-xs tracking-wider uppercase text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-neutral-950 focus:bg-white transition-all duration-200"
+              className="w-full bg-neutral-50 border border-neutral-200 rounded-none px-4 py-2 pr-9 text-xs tracking-wider uppercase text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-neutral-950 focus:bg-white transition-all duration-200"
             />
-            <Search className="w-4 h-4 text-neutral-400 absolute right-3 pointer-events-none" />
+            {searchQuery ? (
+              <button onClick={() => setSearchQuery('')} className="absolute right-3 text-neutral-400 hover:text-neutral-900">
+                <X className="w-4 h-4" />
+              </button>
+            ) : (
+              <Search className="w-4 h-4 text-neutral-400 absolute right-3 pointer-events-none" />
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 lg:gap-8 shrink-0">
@@ -302,10 +286,18 @@ export default function Beranda() {
             <div className="relative w-full mb-3 md:hidden">
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="CARI BUSANA..."
-                className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 text-xs tracking-wider uppercase"
+                className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 pr-9 text-xs tracking-wider uppercase"
               />
-              <Search className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 pointer-events-none" />
+              {searchQuery ? (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-2.5 text-neutral-400 hover:text-neutral-900">
+                  <X className="w-4 h-4" />
+                </button>
+              ) : (
+                <Search className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 pointer-events-none" />
+              )}
             </div>
             <Link
               href="/"
@@ -368,132 +360,185 @@ export default function Beranda() {
 
       <section className="w-full px-4 sm:px-8 lg:px-12 py-8 sm:py-10 flex-1">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-200 pb-4 mb-6 sm:mb-8 gap-4">
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 w-full sm:w-auto">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`text-[11px] sm:text-xs uppercase tracking-wider px-3 sm:px-4 py-1.5 sm:py-2 transition-all whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'bg-neutral-900 text-white font-semibold shadow-xs'
-                    : 'bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-900'
-                }`}
+          
+          {/* Dropdown Filter Kategori Sleek */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Kategori Busana:</span>
+            <div className="relative">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="text-xs font-bold uppercase tracking-wider bg-white border border-neutral-300 py-2.5 pl-4 pr-10 appearance-none focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 cursor-pointer shadow-2xs transition-all"
               >
-                {cat}
-              </button>
-            ))}
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat === 'Semua' ? 'SEMUA KATEGORI' : cat.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-neutral-600 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
-            <span className="text-xs text-neutral-400">Urutkan:</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Urutkan:</span>
             <div className="relative">
-              <select className="text-xs font-medium bg-white border border-neutral-200 py-2 pl-3 pr-8 appearance-none focus:outline-none focus:border-neutral-900 cursor-pointer">
-                <option>Paling Sesuai</option>
-                <option>Harga: Rendah ke Tinggi</option>
-                <option>Harga: Tinggi ke Rendah</option>
-                <option>Produk Terbaru</option>
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                className="text-xs font-bold uppercase tracking-wider bg-white border border-neutral-300 py-2.5 pl-4 pr-10 appearance-none focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 cursor-pointer shadow-2xs transition-all"
+              >
+                <option value="default">Paling Sesuai</option>
+                <option value="price-low">Harga: Rendah ke Tinggi</option>
+                <option value="price-high">Harga: Tinggi ke Rendah</option>
+                <option value="newest">Produk Terbaru</option>
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-4 h-4 text-neutral-600 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
-          {products.map((item) => (
-            <div
-              key={item.id}
-              className="group bg-white border border-neutral-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition-all duration-300"
-            >
-              <Link href={`/product-detail?id=${item.id}`} className="block relative">
-                <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
-                  <Image
-                    src={item.image}
-                    alt={item.title}
-                    fill
-                    className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <span className="absolute top-2 left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider bg-white/95 px-1.5 sm:px-2 py-0.5 border border-neutral-200 text-neutral-900">
-                    {item.badge}
-                  </span>
+        {/* Grid Etalase Produk Real Admin */}
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white border border-neutral-200 p-12 text-center text-neutral-400 space-y-3 shadow-xs my-6">
+            <ShoppingBag className="w-12 h-12 mx-auto text-neutral-300" />
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                {searchQuery || selectedCategory !== 'Semua' 
+                  ? 'Produk Tidak Ditemukan' 
+                  : 'Belum Ada Produk Tersedia'}
+              </p>
+              <p className="text-[11px] text-neutral-400">
+                {searchQuery || selectedCategory !== 'Semua'
+                  ? `Tidak ada busana yang sesuai dengan pencarian atau kategori ini.`
+                  : 'Produk busana akan otomatis muncul di sini begitu diunggah dari Panel Admin.'}
+              </p>
+            </div>
+            {(searchQuery || selectedCategory !== 'Semua') && (
+              <button
+                onClick={() => {
+                  setSelectedCategory('Semua');
+                  setSearchQuery('');
+                }}
+                className="inline-flex items-center gap-1.5 bg-neutral-950 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 mt-2 hover:bg-black transition"
+              >
+                Reset Filter
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
+            {filteredProducts.map((item) => {
+              const displayImg = item.gambarUtama || item.gambar || (item.gambarList && item.gambarList[0]) || item.image || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop';
+              const displayPrice = typeof item.harga === 'number' 
+                ? `Rp ${item.harga.toLocaleString('id-ID')}` 
+                : item.price || `Rp ${item.harga}`;
+              const displayTitle = item.nama || item.title;
+              const displayCat = item.kategori || item.category || 'BUSANA';
 
-                  <div className="hidden sm:block absolute inset-x-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="w-full bg-neutral-900/95 backdrop-blur-xs text-white text-[11px] font-semibold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-neutral-950">
-                      <ShoppingBag className="w-3.5 h-3.5" /> Lihat Detail
+              return (
+                <div
+                  key={item.id}
+                  className="group bg-white border border-neutral-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition-all duration-300"
+                >
+                  <Link href={`/product-detail?id=${item.id}`} className="block relative">
+                    <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
+                      <Image
+                        src={displayImg}
+                        alt={displayTitle}
+                        fill
+                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <span className="absolute top-2 left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider bg-white/95 px-1.5 sm:px-2 py-0.5 border border-neutral-200 text-neutral-900">
+                        {item.stok > 0 ? `Stok: ${item.stok}` : 'Habis'}
+                      </span>
+
+                      <div className="hidden sm:block absolute inset-x-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="w-full bg-neutral-900/95 backdrop-blur-xs text-white text-[11px] font-semibold py-2.5 uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-neutral-950">
+                          <ShoppingBag className="w-3.5 h-3.5" /> Lihat Detail
+                        </div>
+                      </div>
                     </div>
+
+                    <div className="p-3 sm:p-4 space-y-1 sm:space-y-1.5">
+                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400 font-semibold block">
+                        {displayCat}
+                      </span>
+                      <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
+                        {displayTitle}
+                      </h4>
+                      <p className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight">
+                        {displayPrice}
+                      </p>
+                    </div>
+                  </Link>
+
+                  <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickAdd(e, item)}
+                      className="w-full bg-neutral-900 hover:bg-neutral-800 text-white text-[10px] sm:text-[11px] font-bold uppercase tracking-wider py-2 sm:py-2.5 flex items-center justify-center gap-1.5 border border-neutral-900 transition-colors active:scale-[0.98]"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Keranjang</span>
+                    </button>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-                <div className="p-3 sm:p-4 space-y-1 sm:space-y-1.5">
-                  <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400 font-semibold block">
-                    {item.category}
-                  </span>
-                  <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
-                    {item.title}
-                  </h4>
-                  <p className="text-xs sm:text-sm font-bold text-neutral-900 tracking-tight">
-                    {item.price}
-                  </p>
-                </div>
-              </Link>
-
-              <div className="px-3 pb-3 sm:px-4 sm:pb-4">
-                <button
-                  type="button"
-                  onClick={(e) => handleQuickAdd(e, item)}
-                  className="w-full bg-neutral-900 hover:bg-neutral-800 text-white text-[10px] sm:text-[11px] font-bold uppercase tracking-wider py-2 sm:py-2.5 flex items-center justify-center gap-1.5 border border-neutral-900 transition-colors active:scale-[0.98]"
+      {/* Section Testimoni Pengiriman (Hanya Muncul Jika Ada Testimoni Real Dari Admin) */}
+      {testimoniList.length > 0 && (
+        <>
+          <div className="w-full bg-neutral-900 text-white py-3 sm:py-3.5 overflow-hidden border-y border-neutral-800">
+            <div className="animate-marquee flex items-center">
+              {deliveryTicker.concat(deliveryTicker).map((item, idx) => (
+                <span
+                  key={idx}
+                  className="text-[11px] sm:text-xs font-bold tracking-[0.3em] sm:tracking-[0.4em] uppercase text-neutral-400 mx-4 sm:mx-8 select-none whitespace-nowrap"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Keranjang</span>
-                </button>
+                  ✦ {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <section id="testimoni" className="bg-[#EFECE6] py-12 sm:py-16 border-b border-neutral-200 overflow-hidden w-full">
+            <div className="w-full px-4 sm:px-8 lg:px-12 mb-6 sm:mb-8 text-center">
+              <p className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
+                BUKTI PENGIRIMAN ASLI
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-serif uppercase tracking-tight">
+                TESTIMONI
+              </h2>
+            </div>
+
+            <div className="w-full overflow-hidden">
+              <div className="animate-marquee-slow flex items-center">
+                {testimoniList.concat(testimoniList).map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="w-[180px] sm:w-[260px] aspect-[4/5] relative bg-neutral-200 mx-2 sm:mx-3 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
+                  >
+                    <Image
+                      src={item.foto}
+                      alt={`Testimoni ${idx + 1}`}
+                      fill
+                      className="object-cover object-center"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="w-full bg-neutral-900 text-white py-3 sm:py-3.5 overflow-hidden border-y border-neutral-800">
-        <div className="animate-marquee flex items-center">
-          {deliveryTicker.concat(deliveryTicker).map((item, idx) => (
-            <span
-              key={idx}
-              className="text-[11px] sm:text-xs font-bold tracking-[0.3em] sm:tracking-[0.4em] uppercase text-neutral-400 mx-4 sm:mx-8 select-none whitespace-nowrap"
-            >
-              ✦ {item}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <section id="testimoni" className="bg-[#EFECE6] py-12 sm:py-16 border-b border-neutral-200 overflow-hidden w-full">
-        <div className="w-full px-4 sm:px-8 lg:px-12 mb-6 sm:mb-8 text-center">
-          <p className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
-            BUKTI PENGIRIMAN ASLI
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-serif uppercase tracking-tight">
-            TESTIMONI
-          </h2>
-        </div>
-
-        <div className="w-full overflow-hidden">
-          <div className="animate-marquee-slow flex items-center">
-            {testimonialImages.concat(testimonialImages).map((item, idx) => (
-              <div
-                key={idx}
-                className="w-[180px] sm:w-[260px] aspect-[4/5] relative bg-neutral-200 mx-2 sm:mx-3 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
-              >
-                <Image
-                  src={item.image}
-                  alt={item.alt}
-                  fill
-                  className="object-cover object-center"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+          </section>
+        </>
+      )}
 
       <Footer />
+
 
       <a
         href={waUrl}

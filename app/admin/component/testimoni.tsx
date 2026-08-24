@@ -12,11 +12,28 @@ interface FotoTestimoniItem {
 }
 
 export default function TestimoniComponent() {
-  const [fotoTestimoni, setFotoTestimoni] = useState<FotoTestimoniItem[]>([]);
+  const [fotoTestimoni, setFotoTestimoni] = useState<FotoTestimoniItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('almaco_testimoni_list');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return [];
+  });
+
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [previewFoto, setPreviewFoto] = useState<string | null>(null);
   const [zoomFoto, setZoomFoto] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    localStorage.setItem('almaco_testimoni_list', JSON.stringify(fotoTestimoni));
+  }, [fotoTestimoni]);
 
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,6 +61,7 @@ export default function TestimoniComponent() {
     setPreviewFoto(null);
     setShowUploadModal(false);
   };
+
 
   const toggleTayang = (id: number) => {
     setFotoTestimoni((prev) =>

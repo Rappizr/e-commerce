@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
+
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -53,76 +54,91 @@ const getColorHex = (name: string): string | null => {
   return null;
 };
 
-const dummyProducts = [
-  {
-    id: "1",
-    title: "Daster Arab Renda Rayon Premium",
-    category: "DASTER",
-    price: "Rp 115.000",
-    stok: 24,
-    desc: "Daster Arab Renda elegan berbahan Rayon Premium super adem dan lembut di kulit. Dilengkapi hiasan renda cantik serta potongan busui-friendly yang nyaman dipakai harian.",
-    images: [
-      "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1595777457583-95e059d581b8?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800&auto=format&fit=crop",
-    ],
-    warna: ["Cokelat Karamel", "Hitam", "Abu Misty", "Sage Green"],
-    ukuran: ["XS", "S", "M", "L", "XL"],
-    details: [
-      "Bahan kualitas premium super adem & lembut",
-      "Jahitan rapi kelas butik eksklusif",
-      "Nyaman dipakai untuk sehari-hari maupun bepergian",
-      "Petunjuk perawatan: cuci lembut dengan tangan",
-    ],
-  },
-  {
-    id: "2",
-    title: "Daster Midi Floral Rayon Adem",
-    category: "DASTER",
-    price: "Rp 89.000",
-    stok: 12,
-    desc: "Daster midi santai dengan motif floral kekinian. Terbuat dari katun rayon pilihan yang ringan, dingin, dan memberikan keleluasaan bergerak sepanjang hari.",
-    images: [
-      "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1595777457583-95e059d581b8?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1485968579580-b6d095142e6e?q=80&w=800&auto=format&fit=crop",
-    ],
-    warna: ["Cokelat Karamel", "Hitam", "Mocca"],
-    ukuran: ["XS", "S", "M", "L"],
-    details: [
-      "Bahan kualitas premium super adem & lembut",
-      "Jahitan rapi kelas butik eksklusif",
-      "Nyaman dipakai untuk sehari-hari maupun bepergian",
-      "Petunjuk perawatan: cuci lembut dengan tangan",
-    ],
-  },
-];
-
 function ProductDetailContent() {
+
   const searchParams = useSearchParams();
   const productId = searchParams.get("id");
 
-  const product = dummyProducts.find((p) => p.id === productId) || dummyProducts[0];
-  const allImages = Array.isArray(product.images) ? product.images : [(product as any).images?.main || ""];
-  const sisaStok = typeof product.stok === 'number' ? product.stok : 15;
-
-  const rawWarnaList: string[] = (product as any).warna 
-    ? (product as any).warna 
-    : (product as any).colors?.map((c: any) => c.name || c) || ["Default"];
-
-  const [selectedColor, setSelectedColor] = useState(rawWarnaList[0] || "Default");
-  const [selectedSize, setSelectedSize] = useState((product as any).ukuran?.[0] || (product as any).sizes?.[0] || "M");
+  const [product, setProduct] = useState<any>(null);
+  const [selectedColor, setSelectedColor] = useState("Default");
+  const [selectedSize, setSelectedSize] = useState("M");
   const [openAccordion, setOpenAccordion] = useState<string | null>("details");
   const [showCenterModal, setShowCenterModal] = useState(false);
-
   const [galleryModalOpen, setGalleryModalOpen] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const { tambahKeKeranjang } = useKeranjang();
+
+  useEffect(() => {
+    let liveProducts: any[] = [];
+    try {
+      const saved = localStorage.getItem('almaco_produk_list');
+      if (saved) {
+        liveProducts = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    const found = liveProducts.find((p) => String(p.id) === String(productId));
+    if (found) {
+      const mapped = {
+        id: String(found.id),
+        title: found.nama,
+        category: found.kategori,
+        price: `Rp ${found.harga.toLocaleString('id-ID')}`,
+        stok: found.stok,
+        desc: found.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
+        images: found.gambarList && found.gambarList.length > 0 ? found.gambarList : [found.gambarUtama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
+        warna: found.warna && found.warna.length > 0 ? found.warna : ['Default'],
+        ukuran: found.ukuran && found.ukuran.length > 0 ? found.ukuran : ['All Size'],
+        details: found.rincian && found.rincian.length > 0 ? found.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
+      };
+      setProduct(mapped);
+      setSelectedColor(mapped.warna[0]);
+      setSelectedSize(mapped.ukuran[0]);
+    } else if (liveProducts.length > 0) {
+      const first = liveProducts[0];
+      const mapped = {
+        id: String(first.id),
+        title: first.nama,
+        category: first.kategori,
+        price: `Rp ${first.harga.toLocaleString('id-ID')}`,
+        stok: first.stok,
+        desc: first.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
+        images: first.gambarList && first.gambarList.length > 0 ? first.gambarList : [first.gambarUtama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
+        warna: first.warna && first.warna.length > 0 ? first.warna : ['Default'],
+        ukuran: first.ukuran && first.ukuran.length > 0 ? first.ukuran : ['All Size'],
+        details: first.rincian && first.rincian.length > 0 ? first.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
+      };
+      setProduct(mapped);
+      setSelectedColor(mapped.warna[0]);
+      setSelectedSize(mapped.ukuran[0]);
+    } else {
+      setProduct(null);
+    }
+  }, [productId]);
+
+  if (!product) {
+    return (
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-12 py-16 text-center space-y-4">
+        <div className="bg-white border border-neutral-200 p-12 max-w-lg mx-auto shadow-xs space-y-3">
+          <ShoppingBag className="w-12 h-12 mx-auto text-neutral-300" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">Produk Tidak Ditemukan</h2>
+          <p className="text-xs text-neutral-500">Produk ini mungkin telah dihapus atau belum diunggah dari Panel Admin.</p>
+          <Link href="/" className="inline-block bg-neutral-950 text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 mt-2 hover:bg-black transition">
+            Kembali Ke Beranda
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+
+  const allImages = Array.isArray(product.images) ? product.images : [(product as any).images?.main || ""];
+  const sisaStok = typeof product.stok === 'number' ? product.stok : 15;
+  const rawWarnaList: string[] = product.warna || ["Default"];
+
 
   const toggleAccordion = (section: string) => {
     setOpenAccordion(openAccordion === section ? null : section);
@@ -232,6 +248,7 @@ function ProductDetailContent() {
         </div>
       )}
 
+
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -276,7 +293,7 @@ function ProductDetailContent() {
           </div>
 
           <div className="flex items-center justify-center gap-2 overflow-x-auto py-2 no-scrollbar">
-            {allImages.map((img, idx) => (
+            {allImages.map((img: string, idx: number) => (
               <button
                 key={idx}
                 onClick={() => setActiveImageIndex(idx)}
@@ -291,76 +308,51 @@ function ProductDetailContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
-
+      {/* Rincian Produk Desktop & Mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-start">
+        {/* Kolom Kiri: Galeri Foto */}
         <div className="lg:col-span-7 space-y-4">
           <div 
             onClick={() => openLightbox(0)}
-            className="relative aspect-[3/4] w-full bg-stone-200 overflow-hidden shadow-sm group cursor-pointer"
+            className="relative aspect-[3/4] w-full bg-neutral-100 border border-neutral-200 overflow-hidden group cursor-pointer"
           >
             <Image
-              src={allImages[0] || "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"}
+              src={allImages[0]}
               alt={product.title}
               fill
               priority
-              sizes="(max-width: 1024px) 100vw, 60vw"
-              className="object-cover object-center transition-transform duration-700 group-hover:scale-105"
+              className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
             />
-            <div className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition shadow-md">
-              <ZoomIn className="w-4 h-4" />
+            
+            <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-900 border border-neutral-200">
+              {product.category}
+            </div>
+
+            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="bg-neutral-950/90 text-white text-xs font-bold uppercase tracking-wider px-4 py-2.5 flex items-center gap-2 shadow-lg">
+                <ZoomIn className="w-4 h-4" />
+                <span>Perbesar Foto</span>
+              </div>
             </div>
           </div>
 
           {allImages.length > 1 && (
-            <div className="grid grid-cols-2 gap-4">
-              <div 
-                onClick={() => openLightbox(1)}
-                className="relative aspect-[3/4] w-full bg-stone-200 overflow-hidden shadow-sm group cursor-pointer"
-              >
-                <Image
-                  src={allImages[1]}
-                  alt="Detail Produk 1"
-                  fill
-                  sizes="(max-width: 1024px) 50vw, 30vw"
-                  className="object-cover object-center transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute top-3 right-3 bg-black/50 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-md">
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </div>
-              </div>
-
-              {allImages[2] && (
-                <div 
-                  onClick={() => openLightbox(2)}
-                  className="relative aspect-[3/4] w-full bg-stone-200 overflow-hidden shadow-sm group cursor-pointer"
+            <div className="grid grid-cols-4 gap-3">
+              {allImages.slice(0, 4).map((img: string, idx: number) => (
+                <div
+                  key={idx}
+                  onClick={() => openLightbox(idx)}
+                  className="relative aspect-[3/4] bg-neutral-100 border border-neutral-200 overflow-hidden cursor-pointer group"
                 >
-                  <Image
-                    src={allImages[2]}
-                    alt="Detail Produk 2"
-                    fill
-                    sizes="(max-width: 1024px) 50vw, 30vw"
-                    className="object-cover object-center transition-transform duration-700 group-hover:scale-105"
-                  />
-
-                  {remainingPhotosCount > 0 ? (
-                    <div className="absolute inset-0 bg-black/60 hover:bg-black/70 transition flex flex-col items-center justify-center text-white p-3 text-center space-y-1.5 backdrop-blur-[2px]">
-                      <Images className="w-6 h-6 sm:w-7 sm:h-7 mb-0.5" />
-                      <span className="text-xs sm:text-sm font-bold uppercase tracking-wider">
-                        +{remainingPhotosCount} Foto Lainnya
-                      </span>
-                      <span className="text-[10px] text-neutral-300 tracking-wider">
-                        Klik untuk melihat galeri
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="absolute top-3 right-3 bg-black/50 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition shadow-md">
-                      <ZoomIn className="w-3.5 h-3.5" />
-                    </div>
-                  )}
+                  <Image src={img} alt={`${product.title} ${idx + 1}`} fill className="object-cover group-hover:scale-105 transition duration-300" />
+                  <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition">
+                    <ZoomIn className="w-3 h-3" />
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
+
 
           {allImages.length > 3 && (
             <button
@@ -523,9 +515,10 @@ function ProductDetailContent() {
               </button>
               {openAccordion === "details" && (
                 <div className="mt-3 text-xs text-neutral-600 space-y-1.5 leading-relaxed pl-1 animate-fadeIn">
-                  {product.details?.map((detail, idx) => (
+                  {product.details?.map((detail: string, idx: number) => (
                     <p key={idx}>• {detail}</p>
                   )) || (
+
                     <>
                       <p>• Bahan kualitas premium super adem & lembut</p>
                       <p>• Jahitan rapi kelas butik eksklusif</p>

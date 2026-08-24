@@ -78,7 +78,20 @@ const compressImage = (file: File, maxDimension = 1200, quality = 0.75): Promise
 };
 
 export default function ProdukComponent() {
-  const [produk, setProduk] = useState<ProdukItem[]>([]);
+  const [produk, setProduk] = useState<ProdukItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('almaco_produk_list');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return [];
+  });
+
   const [deleteTarget, setDeleteTarget] = useState<ProdukItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -107,8 +120,13 @@ export default function ProdukComponent() {
   const warnaSaran = ['Hitam', 'Putih', 'Cokelat Karamel', 'Mocca', 'Sage Green', 'Navy', 'Maroon', 'Dusty Pink', 'Abu Misty', 'Lilac'];
 
   useEffect(() => {
+    localStorage.setItem('almaco_produk_list', JSON.stringify(produk));
+  }, [produk]);
+
+  useEffect(() => {
     localStorage.setItem('almaco_kategori_list', JSON.stringify(kategoriList));
   }, [kategoriList]);
+
 
   const [formProduk, setFormProduk] = useState({
     nama: '',
@@ -139,11 +157,21 @@ export default function ProdukComponent() {
     setInputWarnaBaru('');
   };
 
+  const [validationModal, setValidationModal] = useState<{ show: boolean; title: string; message: string }>({
+    show: false,
+    title: '',
+    message: '',
+  });
+
   const handleAddKategori = () => {
     const trimmed = newKategoriInput.trim();
     if (!trimmed) return;
     if (kategoriList.some((k) => k.toLowerCase() === trimmed.toLowerCase())) {
-      alert('Kategori ini sudah terdaftar!');
+      setValidationModal({
+        show: true,
+        title: 'Kategori Sudah Ada',
+        message: `Kategori "${trimmed}" sudah terdaftar dalam pilihan. Silakan pilih dari daftar yang tersedia.`,
+      });
       return;
     }
     const updated = [...kategoriList, trimmed];
@@ -227,7 +255,11 @@ export default function ProdukComponent() {
       setTimeout(() => setToastMessage(null), 2500);
     } catch (err) {
       console.error(err);
-      alert('Gagal memproses foto.');
+      setValidationModal({
+        show: true,
+        title: 'Gagal Memproses Foto',
+        message: 'Format foto tidak didukung atau ukuran file terlalu besar.',
+      });
     } finally {
       setIsCompressing(false);
       e.target.value = '';
@@ -274,14 +306,23 @@ export default function ProdukComponent() {
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formProduk.nama.trim() || !formProduk.harga) {
-      alert('Mohon isi nama produk dan harga jual.');
+      setValidationModal({
+        show: true,
+        title: 'Form Belum Lengkap',
+        message: 'Mohon isi Nama Model Busana dan Harga Jual sebelum menyimpan.',
+      });
       return;
     }
 
     if (!formProduk.kategori) {
-      alert('Silakan pilih salah satu kategori busana.');
+      setValidationModal({
+        show: true,
+        title: 'Pilih Kategori Busana',
+        message: 'Silakan buat dan klik pilih salah satu Kategori Busana (misal: Daster, Gamis, Abaya) sebelum menyimpan produk.',
+      });
       return;
     }
+
 
     const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, ''));
     const parsedRincian = formProduk.rincianText
@@ -897,6 +938,47 @@ export default function ProdukComponent() {
           </div>
         </div>
       )}
+
+      {/* Custom UI Warning Modal untuk Validasi Kategori & Form Produk */}
+
+      {validationModal.show && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-neutral-200 max-w-sm w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
+                  {validationModal.title}
+                </h3>
+                <p className="text-[10px] text-neutral-400 uppercase tracking-wider">Peringatan Input Form</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setValidationModal({ show: false, title: '', message: '' })}
+                className="text-neutral-400 hover:text-neutral-900 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-neutral-600 leading-relaxed bg-amber-50/50 p-3 border border-amber-100/80">
+              {validationModal.message}
+            </p>
+
+            <div className="flex items-center justify-end pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setValidationModal({ show: false, title: '', message: '' })}
+                className="w-full sm:w-auto px-5 py-2 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+              >
+                Paham & Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+}
