@@ -187,7 +187,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs space-y-1.5 sm:space-y-2">
           <h4 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900">Verifikasi Pembayaran</h4>
-          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Ada bukti transfer pelanggan yang menunggu persetujuan Anda.</p>
+          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Bukti transfer pelanggan yang menunggu persetujuan Anda.</p>
           {onNavigate && (
             <button
               onClick={() => onNavigate('pembayaran')}
@@ -200,7 +200,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
 
         <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs space-y-1.5 sm:space-y-2">
           <h4 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900">Buku Keuangan</h4>
-          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Catat modal kain, biaya operasional konveksi, dan laba bersih.</p>
+          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Catat modal, biaya operasional, dan laba bersih.</p>
           {onNavigate && (
             <button
               onClick={() => onNavigate('keuangan')}
@@ -213,7 +213,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
 
         <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs space-y-1.5 sm:space-y-2">
           <h4 className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900">Katalog Busana</h4>
-          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Perbarui stok daster, gamis, setcel, atau tambahkan produk baru.</p>
+          <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">Perbarui stok atau tambahkan produk baru.</p>
           {onNavigate && (
             <button
               onClick={() => onNavigate('produk')}

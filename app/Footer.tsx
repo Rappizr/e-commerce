@@ -164,7 +164,7 @@ export default function Footer() {
           <div className="sm:col-span-2 md:col-span-3 space-y-5 sm:space-y-6">
             <div className="space-y-2 sm:space-y-2.5">
               <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-900">
-                TEMUKAN KAMI DI
+                IKUTI KAMI DI 
               </h4>
               <div className="flex items-center gap-2.5">
                 <a

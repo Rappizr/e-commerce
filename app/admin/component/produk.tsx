@@ -587,7 +587,7 @@ export default function ProdukComponent() {
                     className="text-[10px] font-bold text-neutral-900 hover:underline inline-flex items-center gap-0.5"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>{showAddKategoriInput ? 'Tutup' : '+ Kategori'}</span>
+                    <span>{showAddKategoriInput ? 'Tutup' : 'Kategori'}</span>
                   </button>
                 </div>
 
