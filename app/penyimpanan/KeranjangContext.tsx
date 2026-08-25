@@ -1,6 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './supabase';
+
 
 export interface ItemKeranjang {
   id: string;
@@ -50,6 +52,39 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   const [pesananList, setPesananList] = useState<Pesanan[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Fetch Pesanan dari Supabase `orders`
+  const fetchOrdersFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data && !error) {
+        const mappedOrders: Pesanan[] = data.map((o: any) => ({
+          id: o.invoice_no || `ORD-${o.id}`,
+          pembeli: o.nama_pembeli || 'Pelanggan Almaco',
+          whatsapp: o.no_hp || '-',
+          produk: 'Detail Pesanan',
+          qty: 1,
+          hargaProduk: o.total_harga || 0,
+          ongkir: o.ongkir || 0,
+          total: (o.total_harga || 0) + (o.ongkir || 0),
+          alamat: o.alamat_lengkap || '-',
+          kota: '-',
+          kecamatan: '-',
+          status: o.status || 'Menunggu Verifikasi',
+          tanggal: o.created_at ? new Date(o.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-',
+          metodePembayaran: o.metode_pembayaran || 'MANUAL',
+          bukti: o.bukti_transfer,
+        }));
+        setPesananList(mappedOrders);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Orders Error:', e);
+    }
+  };
+
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('almaco_keranjang');
@@ -64,6 +99,8 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
       console.error(e);
     }
     setIsLoaded(true);
+
+    fetchOrdersFromSupabase();
   }, []);
 
   useEffect(() => {
@@ -111,13 +148,15 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     setCartItems([]);
   };
 
-  const tambahPesanan = (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
+  const tambahPesanan = async (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     const randomId = Math.floor(1000 + Math.random() * 9000);
+    const invoiceNo = `ORD-${dateStr}-${randomId}`;
+
     const newPesanan: Pesanan = {
       ...data,
-      id: `ORD-${dateStr}-${randomId}`,
+      id: invoiceNo,
       tanggal: today.toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'short',
@@ -130,13 +169,39 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
 
     setPesananList((prev) => [newPesanan, ...prev]);
     clearCart();
+
+    // Push ke Supabase `orders`
+    try {
+      await supabase.from('orders').insert([
+        {
+          invoice_no: invoiceNo,
+          nama_pembeli: data.pembeli,
+          no_hp: data.whatsapp,
+          alamat_lengkap: `${data.alamat}, ${data.kota}`,
+          total_harga: data.hargaProduk,
+          ongkir: data.ongkir,
+          metode_pembayaran: data.metodePembayaran,
+          status: 'Menunggu Verifikasi',
+        },
+      ]);
+    } catch (e) {
+      console.error('Error insert order to Supabase:', e);
+    }
   };
 
-  const updateStatusPesanan = (id: string, status: Pesanan['status']) => {
+  const updateStatusPesanan = async (id: string, status: Pesanan['status']) => {
     setPesananList((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status } : item))
     );
+
+    // Update status di Supabase
+    try {
+      await supabase.from('orders').update({ status }).eq('invoice_no', id);
+    } catch (e) {
+      console.error('Error update order status in Supabase:', e);
+    }
   };
+
 
   const totalCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.qty, 0);

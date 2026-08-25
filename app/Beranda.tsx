@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useKeranjang } from './penyimpanan/KeranjangContext';
 import Footer from './Footer';
+import { supabase } from './penyimpanan/supabase';
 
 export default function Beranda() {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
@@ -28,10 +29,55 @@ export default function Beranda() {
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>(['Semua']);
+  const [testimonials, setTestimonials] = useState<any[]>([]);
 
   const keranjangCtx = useKeranjang();
   const cartItems = (keranjangCtx as any)?.cartItems || [];
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
+
+  const fetchDataFromSupabase = async () => {
+    try {
+      // Fetch Products
+      const { data: prodData } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (prodData && prodData.length > 0) {
+        const mapped = prodData.map((p: any) => ({
+          id: p.id,
+          title: p.nama,
+          category: p.kategori,
+          price: `Rp ${Number(p.harga || 0).toLocaleString('id-ID')}`,
+          rawPrice: p.harga,
+          image: p.gambar_utama || (p.gambar_list && p.gambar_list[0]) || 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop',
+          warna: Array.isArray(p.warna) ? p.warna : ['Default'],
+          ukuran: Array.isArray(p.ukuran) ? p.ukuran : ['All Size'],
+          stok: p.stok,
+          desc: p.deskripsi,
+        }));
+        setProducts(mapped);
+
+        const extractedCats = Array.from(new Set(prodData.map((p: any) => p.kategori))).filter(Boolean);
+        if (extractedCats.length > 0) {
+          setCategories(['Semua', ...extractedCats as string[]]);
+        }
+      }
+
+      // Fetch Testimonials
+      const { data: testData } = await supabase
+        .from('testimonials')
+        .select('*')
+        .eq('tayang', true)
+        .order('created_at', { ascending: false });
+
+      if (testData) {
+        setTestimonials(testData);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Beranda Error:', e);
+    }
+  };
 
   useEffect(() => {
     const savedUser = localStorage.getItem('almaco_user') || localStorage.getItem('user');
@@ -52,7 +98,10 @@ export default function Beranda() {
     } catch (e) {
       console.error(e);
     }
+
+    fetchDataFromSupabase();
   }, []);
+
 
   const showToast = (msg: string) => {
     setToastMessage(msg);

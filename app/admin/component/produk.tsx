@@ -77,20 +77,65 @@ const compressImage = (file: File, maxDimension = 1200, quality = 0.75): Promise
   });
 };
 
+import { supabase } from '../../penyimpanan/supabase';
+
+export interface ProdukItem {
+
+  id: number;
+  nama: string;
+  kategori: string;
+  harga: number;
+  stok: number;
+  deskripsi: string;
+  rincian: string[];
+  warna: string[];
+  ukuran: string[];
+  gambarList: string[];
+  gambarUtama: string;
+}
+
 export default function ProdukComponent() {
-  const [produk, setProduk] = useState<ProdukItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('almaco_produk_list');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
-        }
+  const [produk, setProduk] = useState<ProdukItem[]>([]);
+
+  const fetchProdukFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data && !error) {
+        const mappedProducts: ProdukItem[] = data.map((p: any) => ({
+          id: p.id,
+          nama: p.nama || 'Busana Almaco',
+          kategori: p.kategori || 'Daster',
+          harga: p.harga || 0,
+          stok: p.stok || 0,
+          deskripsi: p.deskripsi || '',
+          rincian: Array.isArray(p.rincian) ? p.rincian : [],
+          warna: Array.isArray(p.warna) ? p.warna : [],
+          ukuran: Array.isArray(p.ukuran) ? p.ukuran : [],
+          gambarList: Array.isArray(p.gambar_list) ? p.gambar_list : [],
+          gambarUtama: p.gambar_utama || '',
+        }));
+        setProduk(mappedProducts);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Products Error:', e);
+    }
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem('almaco_produk_list');
+    if (saved) {
+      try {
+        setProduk(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
       }
     }
-    return [];
-  });
+    fetchProdukFromSupabase();
+  }, []);
 
   const [deleteTarget, setDeleteTarget] = useState<ProdukItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -126,6 +171,7 @@ export default function ProdukComponent() {
   useEffect(() => {
     localStorage.setItem('almaco_kategori_list', JSON.stringify(kategoriList));
   }, [kategoriList]);
+
 
 
   const [formProduk, setFormProduk] = useState({
@@ -303,8 +349,9 @@ export default function ProdukComponent() {
     });
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!formProduk.nama.trim() || !formProduk.harga) {
       setValidationModal({
         show: true,
@@ -353,15 +400,44 @@ export default function ProdukComponent() {
 
     setToastMessage(`Produk "${newProdukItem.nama}" berhasil ditambahkan!`);
     setTimeout(() => setToastMessage(null), 3500);
+
+    // Push ke Supabase `products`
+    try {
+      await supabase.from('products').insert([
+        {
+          nama: newProdukItem.nama,
+          kategori: newProdukItem.kategori,
+          harga: newProdukItem.harga,
+          stok: newProdukItem.stok,
+          deskripsi: newProdukItem.deskripsi,
+          rincian: newProdukItem.rincian,
+          warna: newProdukItem.warna,
+          ukuran: newProdukItem.ukuran,
+          gambar_list: newProdukItem.gambarList,
+          gambar_utama: newProdukItem.gambarUtama,
+        },
+      ]);
+    } catch (e) {
+      console.error('Error insert product to Supabase:', e);
+    }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setProduk((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+    const targetId = deleteTarget.id;
+    setProduk((prev) => prev.filter((p) => p.id !== targetId));
     setToastMessage(`Produk "${deleteTarget.nama}" berhasil dihapus.`);
     setDeleteTarget(null);
     setTimeout(() => setToastMessage(null), 3500);
+
+    // Delete dari Supabase
+    try {
+      await supabase.from('products').delete().eq('id', targetId);
+    } catch (e) {
+      console.error('Error delete product from Supabase:', e);
+    }
   };
+
 
   return (
     <div className="space-y-4 w-full relative">

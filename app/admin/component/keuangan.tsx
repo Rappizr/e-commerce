@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -11,6 +11,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { useKeranjang } from '../../penyimpanan/KeranjangContext';
+import { supabase } from '../../penyimpanan/supabase';
 
 interface TransaksiKas {
   id: number | string;
@@ -26,9 +27,36 @@ export default function KeuanganComponent() {
   const [transaksiCustom, setTransaksiCustom] = useState<TransaksiKas[]>([]);
   const [deleteTargetId, setDeleteTargetId] = useState<number | string | null>(null);
 
+  const fetchCashFlowFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data && !error) {
+        const mapped: TransaksiKas[] = data.map((c: any) => ({
+          id: c.id,
+          tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
+          keterangan: c.keterangan || 'Catatan Kas',
+          kategori: c.kategori || 'Kas Umum',
+          tipe: c.tipe === 'pemasukan' || c.tipe === 'masuk' ? 'masuk' : 'keluar',
+          nominal: c.nominal || 0,
+        }));
+        setTransaksiCustom(mapped);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Cash Flow Error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchCashFlowFromSupabase();
+  }, []);
+
   const transaksiPenjualan: TransaksiKas[] = pesananList.map((p: any) => ({
     id: p.id,
-    tanggal: p.tanggal || '21 Agu 2026',
+    tanggal: p.tanggal || 'Hari Ini',
     keterangan: `Pesanan Web ${p.id} (${p.pembeli})`,
     kategori: 'Penjualan Web',
     tipe: 'masuk',
@@ -57,30 +85,53 @@ export default function KeuanganComponent() {
 
   const saldoBersih = totalMasuk - totalKeluar;
 
-  const handleAddTransaksi = (e: React.FormEvent) => {
+
+  const handleAddTransaksi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKas.keterangan || !formKas.nominal) return;
 
+    const nominalNum = Number(formKas.nominal.replace(/[^0-9]/g, ''));
     const newKas: TransaksiKas = {
       id: Date.now(),
       tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
       keterangan: formKas.keterangan,
       kategori: formKas.kategori,
       tipe: formKas.tipe,
-      nominal: Number(formKas.nominal.replace(/[^0-9]/g, '')),
+      nominal: nominalNum,
     };
 
     setTransaksiCustom([newKas, ...transaksiCustom]);
     setFormKas({ keterangan: '', kategori: 'Bahan Baku & Kain', tipe: 'keluar', nominal: '' });
     setShowModal(false);
-  };
 
-  const confirmDelete = () => {
-    if (deleteTargetId !== null) {
-      setTransaksiCustom((prev) => prev.filter((t) => t.id !== deleteTargetId));
-      setDeleteTargetId(null);
+    try {
+      await supabase.from('cash_flow').insert([
+        {
+          keterangan: formKas.keterangan,
+          kategori: formKas.kategori,
+          tipe: formKas.tipe === 'masuk' ? 'pemasukan' : 'pengeluaran',
+          nominal: nominalNum,
+        },
+      ]);
+    } catch (err) {
+      console.error('Error insert cash_flow to Supabase:', err);
     }
   };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId !== null) {
+      const targetId = deleteTargetId;
+      setTransaksiCustom((prev) => prev.filter((t) => t.id !== targetId));
+      setDeleteTargetId(null);
+
+      try {
+        await supabase.from('cash_flow').delete().eq('id', targetId);
+      } catch (err) {
+        console.error('Error delete cash_flow from Supabase:', err);
+      }
+    }
+  };
+
 
   const filteredTransaksi = transaksi.filter((t) => {
     if (filterTipe === 'semua') return true;

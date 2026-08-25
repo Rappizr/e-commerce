@@ -8,6 +8,8 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, X, ShoppingBag, ChevronLeft, ChevronRight, Images, ZoomIn } from "lucide-react";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
+import { supabase } from "../penyimpanan/supabase";
+
 
 const colorMap: Record<string, string> = {
   hitam: "#181818",
@@ -70,54 +72,75 @@ function ProductDetailContent() {
   const { tambahKeKeranjang } = useKeranjang();
 
   useEffect(() => {
-    let liveProducts: any[] = [];
-    try {
-      const saved = localStorage.getItem('almaco_produk_list');
-      if (saved) {
-        liveProducts = JSON.parse(saved);
+    const fetchSingleProduct = async () => {
+      let liveProducts: any[] = [];
+      try {
+        const saved = localStorage.getItem('almaco_produk_list');
+        if (saved) {
+          liveProducts = JSON.parse(saved);
+        }
+      } catch (e) {
+        console.error(e);
       }
-    } catch (e) {
-      console.error(e);
-    }
 
-    const found = liveProducts.find((p) => String(p.id) === String(productId));
-    if (found) {
-      const mapped = {
-        id: String(found.id),
-        title: found.nama,
-        category: found.kategori,
-        price: `Rp ${found.harga.toLocaleString('id-ID')}`,
-        stok: found.stok,
-        desc: found.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
-        images: found.gambarList && found.gambarList.length > 0 ? found.gambarList : [found.gambarUtama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
-        warna: found.warna && found.warna.length > 0 ? found.warna : ['Default'],
-        ukuran: found.ukuran && found.ukuran.length > 0 ? found.ukuran : ['All Size'],
-        details: found.rincian && found.rincian.length > 0 ? found.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
-      };
-      setProduct(mapped);
-      setSelectedColor(mapped.warna[0]);
-      setSelectedSize(mapped.ukuran[0]);
-    } else if (liveProducts.length > 0) {
-      const first = liveProducts[0];
-      const mapped = {
-        id: String(first.id),
-        title: first.nama,
-        category: first.kategori,
-        price: `Rp ${first.harga.toLocaleString('id-ID')}`,
-        stok: first.stok,
-        desc: first.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
-        images: first.gambarList && first.gambarList.length > 0 ? first.gambarList : [first.gambarUtama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
-        warna: first.warna && first.warna.length > 0 ? first.warna : ['Default'],
-        ukuran: first.ukuran && first.ukuran.length > 0 ? first.ukuran : ['All Size'],
-        details: first.rincian && first.rincian.length > 0 ? first.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
-      };
-      setProduct(mapped);
-      setSelectedColor(mapped.warna[0]);
-      setSelectedSize(mapped.ukuran[0]);
-    } else {
-      setProduct(null);
-    }
+      // 1. Cari dari Supabase `products`
+      if (productId) {
+        try {
+          const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .single();
+
+          if (data && !error) {
+            const mapped = {
+              id: String(data.id),
+              title: data.nama,
+              category: data.kategori,
+              price: `Rp ${Number(data.harga || 0).toLocaleString('id-ID')}`,
+              stok: data.stok,
+              desc: data.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
+              images: Array.isArray(data.gambar_list) && data.gambar_list.length > 0 ? data.gambar_list : [data.gambar_utama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
+              warna: Array.isArray(data.warna) && data.warna.length > 0 ? data.warna : ['Default'],
+              ukuran: Array.isArray(data.ukuran) && data.ukuran.length > 0 ? data.ukuran : ['All Size'],
+              details: Array.isArray(data.rincian) && data.rincian.length > 0 ? data.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
+            };
+            setProduct(mapped);
+            setSelectedColor(mapped.warna[0]);
+            setSelectedSize(mapped.ukuran[0]);
+            return;
+          }
+        } catch (e) {
+          console.error('Fetch Supabase Single Product Error:', e);
+        }
+      }
+
+      // 2. Fallback ke Local Storage jika tidak ditemukan di Supabase
+      const found = liveProducts.find((p) => String(p.id) === String(productId));
+      if (found) {
+        const mapped = {
+          id: String(found.id),
+          title: found.nama,
+          category: found.kategori,
+          price: `Rp ${found.harga.toLocaleString('id-ID')}`,
+          stok: found.stok,
+          desc: found.deskripsi || 'Busana modis berkualitas premium dari ALMACO FASHION.',
+          images: found.gambarList && found.gambarList.length > 0 ? found.gambarList : [found.gambarUtama || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'],
+          warna: found.warna && found.warna.length > 0 ? found.warna : ['Default'],
+          ukuran: found.ukuran && found.ukuran.length > 0 ? found.ukuran : ['All Size'],
+          details: found.rincian && found.rincian.length > 0 ? found.rincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
+        };
+        setProduct(mapped);
+        setSelectedColor(mapped.warna[0]);
+        setSelectedSize(mapped.ukuran[0]);
+      } else {
+        setProduct(null);
+      }
+    };
+
+    fetchSingleProduct();
   }, [productId]);
+
 
   if (!product) {
     return (

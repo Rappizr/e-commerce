@@ -1,8 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Plus, Trash2, Upload, X, Eye, EyeOff, Check } from 'lucide-react';
+import { supabase } from '../../penyimpanan/supabase';
+
+
+
 
 interface FotoTestimoniItem {
   id: number;
@@ -12,19 +16,40 @@ interface FotoTestimoniItem {
 }
 
 export default function TestimoniComponent() {
-  const [fotoTestimoni, setFotoTestimoni] = useState<FotoTestimoniItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('almaco_testimoni_list');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
-        }
+  const [fotoTestimoni, setFotoTestimoni] = useState<FotoTestimoniItem[]>([]);
+
+  const fetchTestimonialsFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('testimonials')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data && !error) {
+        const mapped: FotoTestimoniItem[] = data.map((t: any) => ({
+          id: t.id,
+          foto: t.foto_url,
+          tanggal: t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini',
+          tayang: t.tayang ?? true,
+        }));
+        setFotoTestimoni(mapped);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Testimonials Error:', e);
+    }
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem('almaco_testimoni_list');
+    if (saved) {
+      try {
+        setFotoTestimoni(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
       }
     }
-    return [];
-  });
+    fetchTestimonialsFromSupabase();
+  }, []);
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [previewFoto, setPreviewFoto] = useState<string | null>(null);
@@ -46,7 +71,7 @@ export default function TestimoniComponent() {
     }
   };
 
-  const handleSaveFoto = (e: React.FormEvent) => {
+  const handleSaveFoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!previewFoto) return;
 
@@ -60,21 +85,49 @@ export default function TestimoniComponent() {
     setFotoTestimoni([newEntry, ...fotoTestimoni]);
     setPreviewFoto(null);
     setShowUploadModal(false);
-  };
 
-
-  const toggleTayang = (id: number) => {
-    setFotoTestimoni((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, tayang: !t.tayang } : t))
-    );
-  };
-
-  const confirmDelete = () => {
-    if (deleteTargetId !== null) {
-      setFotoTestimoni((prev) => prev.filter((t) => t.id !== deleteTargetId));
-      setDeleteTargetId(null);
+    try {
+      await supabase.from('testimonials').insert([
+        {
+          foto_url: previewFoto,
+          tayang: true,
+        },
+      ]);
+    } catch (err) {
+      console.error('Error insert testimoni to Supabase:', err);
     }
   };
+
+  const toggleTayang = async (id: number) => {
+    const target = fotoTestimoni.find((t) => t.id === id);
+    if (!target) return;
+    const newStatus = !target.tayang;
+
+    setFotoTestimoni((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, tayang: newStatus } : t))
+    );
+
+    try {
+      await supabase.from('testimonials').update({ tayang: newStatus }).eq('id', id);
+    } catch (err) {
+      console.error('Error update tayang status in Supabase:', err);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId !== null) {
+      const targetId = deleteTargetId;
+      setFotoTestimoni((prev) => prev.filter((t) => t.id !== targetId));
+      setDeleteTargetId(null);
+
+      try {
+        await supabase.from('testimonials').delete().eq('id', targetId);
+      } catch (err) {
+        console.error('Error delete testimoni from Supabase:', err);
+      }
+    }
+  };
+
 
   return (
     <div className="space-y-4 sm:space-y-5 w-full">
