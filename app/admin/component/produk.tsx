@@ -10,17 +10,11 @@ import {
   Check, 
   Upload, 
   PackagePlus, 
-  Tag, 
-  Layers, 
-  DollarSign, 
-  ImageIcon, 
   Palette, 
-  Maximize2, 
-  FileText, 
-  ListCheck, 
-  Star, 
-  Loader2 
+  Loader2,
+  Scale 
 } from 'lucide-react';
+import { supabase } from '../../penyimpanan/supabase';
 
 export interface ProdukItem {
   id: number;
@@ -28,6 +22,7 @@ export interface ProdukItem {
   kategori: string;
   harga: number;
   stok: number;
+  berat: number;
   deskripsi: string;
   rincian: string[];
   warna: string[];
@@ -77,27 +72,13 @@ const compressImage = (file: File, maxDimension = 1200, quality = 0.75): Promise
   });
 };
 
-import { supabase } from '../../penyimpanan/supabase';
-
-export interface ProdukItem {
-
-  id: number;
-  nama: string;
-  kategori: string;
-  harga: number;
-  stok: number;
-  deskripsi: string;
-  rincian: string[];
-  warna: string[];
-  ukuran: string[];
-  gambarList: string[];
-  gambarUtama: string;
-}
-
 export default function ProdukComponent() {
   const [produk, setProduk] = useState<ProdukItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // 1. Ambil data langsung dari Supabase tabel 'products'
   const fetchProdukFromSupabase = async () => {
+    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('products')
@@ -109,31 +90,26 @@ export default function ProdukComponent() {
           id: p.id,
           nama: p.nama || 'Busana Almaco',
           kategori: p.kategori || 'Daster',
-          harga: p.harga || 0,
-          stok: p.stok || 0,
+          harga: Number(p.harga || 0),
+          stok: Number(p.stok || 0),
+          berat: Number(p.berat || 0),
           deskripsi: p.deskripsi || '',
           rincian: Array.isArray(p.rincian) ? p.rincian : [],
           warna: Array.isArray(p.warna) ? p.warna : [],
           ukuran: Array.isArray(p.ukuran) ? p.ukuran : [],
-          gambarList: Array.isArray(p.gambar_list) ? p.gambar_list : [],
+          gambarList: Array.isArray(p.gambar_list) ? p.gambar_list : (p.gambar_utama ? [p.gambar_utama] : []),
           gambarUtama: p.gambar_utama || '',
         }));
         setProduk(mappedProducts);
       }
     } catch (e) {
-      console.error('Fetch Supabase Products Error:', e);
+      console.error('Fetch Supabase Error:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem('almaco_produk_list');
-    if (saved) {
-      try {
-        setProduk(JSON.parse(saved));
-      } catch (e) {
-        console.error(e);
-      }
-    }
     fetchProdukFromSupabase();
   }, []);
 
@@ -142,43 +118,20 @@ export default function ProdukComponent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
 
-  const [kategoriList, setKategoriList] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('almaco_kategori_list');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-    return ['Daster', 'Gamis', 'Setcel', 'Abaya'];
-  });
-
+  const [kategoriList, setKategoriList] = useState<string[]>(['Daster', 'Gamis', 'Setcel', 'Abaya']);
   const [newKategoriInput, setNewKategoriInput] = useState('');
   const [showAddKategoriInput, setShowAddKategoriInput] = useState(false);
   const [deleteKategoriTarget, setDeleteKategoriTarget] = useState<string | null>(null);
 
   const [inputWarnaBaru, setInputWarnaBaru] = useState('');
-
   const warnaSaran = ['Hitam', 'Putih', 'Cokelat Karamel', 'Mocca', 'Sage Green', 'Navy', 'Maroon', 'Dusty Pink', 'Abu Misty', 'Lilac'];
-
-  useEffect(() => {
-    localStorage.setItem('almaco_produk_list', JSON.stringify(produk));
-  }, [produk]);
-
-  useEffect(() => {
-    localStorage.setItem('almaco_kategori_list', JSON.stringify(kategoriList));
-  }, [kategoriList]);
-
-
 
   const [formProduk, setFormProduk] = useState({
     nama: '',
     kategori: '',
     harga: '',
     stok: '',
+    berat: '',
     deskripsi: '',
     rincianText: '',
     warnaList: [] as string[],
@@ -194,6 +147,7 @@ export default function ProdukComponent() {
       kategori: '',
       harga: '',
       stok: '',
+      berat: '',
       deskripsi: '',
       rincianText: '',
       warnaList: [],
@@ -349,6 +303,7 @@ export default function ProdukComponent() {
     });
   };
 
+  // 2. Tambah produk langsung ke Supabase
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -370,7 +325,6 @@ export default function ProdukComponent() {
       return;
     }
 
-
     const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, ''));
     const parsedRincian = formProduk.rincianText
       .split('\n')
@@ -380,64 +334,94 @@ export default function ProdukComponent() {
     const fallbackImg = 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop';
     const finalList = formProduk.gambarList.length > 0 ? formProduk.gambarList : [fallbackImg];
 
-    const newProdukItem: ProdukItem = {
-      id: Date.now(),
+    const payload = {
       nama: formProduk.nama.trim(),
       kategori: formProduk.kategori,
       harga: rawHarga,
       stok: Number(formProduk.stok) || 0,
+      berat: formProduk.berat ? Number(formProduk.berat) : null,
       deskripsi: formProduk.deskripsi.trim() || 'Busana modis berkualitas premium dari ALMACO FASHION.',
       rincian: parsedRincian.length > 0 ? parsedRincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
       warna: formProduk.warnaList.length > 0 ? formProduk.warnaList : ['Default'],
       ukuran: formProduk.ukuranPilihan.length > 0 ? formProduk.ukuranPilihan : ['All Size'],
-      gambarList: finalList,
-      gambarUtama: finalList[0],
+      gambar_list: finalList,
+      gambar_utama: finalList[0],
     };
 
-    setProduk([newProdukItem, ...produk]);
-    setShowAddModal(false);
-    resetForm();
-
-    setToastMessage(`Produk "${newProdukItem.nama}" berhasil ditambahkan!`);
-    setTimeout(() => setToastMessage(null), 3500);
-
-    // Push ke Supabase `products`
     try {
-      await supabase.from('products').insert([
-        {
-          nama: newProdukItem.nama,
-          kategori: newProdukItem.kategori,
-          harga: newProdukItem.harga,
-          stok: newProdukItem.stok,
-          deskripsi: newProdukItem.deskripsi,
-          rincian: newProdukItem.rincian,
-          warna: newProdukItem.warna,
-          ukuran: newProdukItem.ukuran,
-          gambar_list: newProdukItem.gambarList,
-          gambar_utama: newProdukItem.gambarUtama,
-        },
-      ]);
-    } catch (e) {
+      const { data, error } = await supabase
+        .from('products')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const newInsertedItem: ProdukItem = {
+          id: data.id,
+          nama: data.nama,
+          kategori: data.kategori,
+          harga: Number(data.harga || 0),
+          stok: Number(data.stok || 0),
+          berat: Number(data.berat || 0),
+          deskripsi: data.deskripsi,
+          rincian: data.rincian || [],
+          warna: data.warna || [],
+          ukuran: data.ukuran || [],
+          gambarList: data.gambar_list || [],
+          gambarUtama: data.gambar_utama || '',
+        };
+        setProduk((prev) => [newInsertedItem, ...prev]);
+      }
+
+      setShowAddModal(false);
+      resetForm();
+      setToastMessage(`Produk "${payload.nama}" berhasil diterbitkan ke Database!`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (e: any) {
       console.error('Error insert product to Supabase:', e);
+      alert('Gagal menyimpan produk ke database Supabase: ' + e.message);
     }
   };
 
+  // 3. Update stok produk (+ / -) langsung ke Supabase
+  const handleUpdateStock = async (id: number, newStock: number) => {
+    if (newStock < 0) return;
+    setProduk((prev) => prev.map((p) => (p.id === id ? { ...p, stok: newStock } : p)));
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({ stok: newStock })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Gagal update stok di Supabase:', err);
+    }
+  };
+
+  // 4. Hapus produk langsung dari Supabase
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
-    setProduk((prev) => prev.filter((p) => p.id !== targetId));
-    setToastMessage(`Produk "${deleteTarget.nama}" berhasil dihapus.`);
-    setDeleteTarget(null);
-    setTimeout(() => setToastMessage(null), 3500);
+    const targetName = deleteTarget.nama;
 
-    // Delete dari Supabase
     try {
-      await supabase.from('products').delete().eq('id', targetId);
-    } catch (e) {
+      const { error } = await supabase.from('products').delete().eq('id', targetId);
+      if (error) throw error;
+
+      setProduk((prev) => prev.filter((p) => p.id !== targetId));
+      setToastMessage(`Produk "${targetName}" berhasil dihapus.`);
+    } catch (e: any) {
       console.error('Error delete product from Supabase:', e);
+      alert('Gagal menghapus produk: ' + e.message);
+    } finally {
+      setDeleteTarget(null);
+      setTimeout(() => setToastMessage(null), 3500);
     }
   };
-
 
   return (
     <div className="space-y-4 w-full relative">
@@ -450,13 +434,14 @@ export default function ProdukComponent() {
         </div>
       )}
 
+      {/* HEADER PANEL */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 border border-neutral-200 shadow-xs">
         <div>
           <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
             Katalog Produk & Galeri
           </h2>
           <p className="text-[10px] sm:text-xs text-neutral-500">
-            Kelola data busana, foto galeri, pilihan warna, ukuran, rincian bahan, serta stok.
+            Kelola data busana, foto galeri, pilihan warna, ukuran, rincian bahan, berat per pcs, serta stok langsung di Database.
           </p>
         </div>
         <button
@@ -471,7 +456,13 @@ export default function ProdukComponent() {
         </button>
       </div>
 
-      {produk.length === 0 ? (
+      {/* LIST PRODUK DARI SUPABASE */}
+      {isLoading ? (
+        <div className="bg-white border border-neutral-200 p-12 text-center text-neutral-400 flex flex-col items-center justify-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin text-neutral-700" />
+          <span className="text-xs uppercase tracking-wider font-semibold">Mengambil data dari Supabase...</span>
+        </div>
+      ) : produk.length === 0 ? (
         <div className="bg-white border border-neutral-200 p-8 sm:p-14 text-center text-neutral-400 space-y-3 shadow-xs">
           <div className="w-12 h-12 sm:w-14 sm:h-14 bg-neutral-100 rounded-full flex items-center justify-center mx-auto text-neutral-400">
             <PackagePlus className="w-6 h-6 sm:w-7 sm:h-7" />
@@ -479,7 +470,7 @@ export default function ProdukComponent() {
           <div className="space-y-1">
             <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-800">Katalog Busana Masih Kosong</p>
             <p className="text-[10px] sm:text-xs text-neutral-500 max-w-sm mx-auto">
-              Tambahkan produk pakaian lengkap dengan galeri foto, rincian bahan, warna, dan ukuran.
+              Belum ada produk di database Supabase. Mulai tambahkan pakaian sekarang.
             </p>
           </div>
           <button
@@ -509,7 +500,7 @@ export default function ProdukComponent() {
               <div className="p-2.5 sm:p-4 space-y-1">
                 <h4 className="text-[11px] sm:text-xs font-bold text-neutral-900 line-clamp-1">{item.nama}</h4>
                 <p className="text-[9px] sm:text-[11px] text-neutral-500 line-clamp-1">
-                  {item.ukuran.join(', ')} • {item.warna.length} Warna
+                  {item.ukuran.join(', ')} • {item.warna.length} Warna {item.berat ? `• ${item.berat} gr` : ''}
                 </p>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-1 gap-1">
                   <span className="font-bold text-neutral-950 text-xs">Rp {item.harga.toLocaleString('id-ID')}</span>
@@ -522,23 +513,13 @@ export default function ProdukComponent() {
                 <div className="flex items-center gap-1">
                   <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">Stok:</span>
                   <button
-                    onClick={() => {
-                      if (item.stok > 0) {
-                        setProduk((prev) =>
-                          prev.map((p) => (p.id === item.id ? { ...p, stok: p.stok - 1 } : p))
-                        );
-                      }
-                    }}
+                    onClick={() => handleUpdateStock(item.id, Math.max(0, item.stok - 1))}
                     className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition"
                   >
                     -
                   </button>
                   <button
-                    onClick={() => {
-                      setProduk((prev) =>
-                        prev.map((p) => (p.id === item.id ? { ...p, stok: p.stok + 1 } : p))
-                      );
-                    }}
+                    onClick={() => handleUpdateStock(item.id, item.stok + 1)}
                     className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition"
                   >
                     +
@@ -558,31 +539,27 @@ export default function ProdukComponent() {
         </div>
       )}
 
+      {/* MODAL TAMBAH PRODUK BARU */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div
-            className="fixed inset-0"
-            onClick={() => setShowAddModal(false)}
-          />
+          <div className="fixed inset-0" onClick={() => setShowAddModal(false)} />
           <div className="relative z-10 bg-white border border-neutral-300 max-w-lg w-full rounded-none shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             
             <div className="p-3.5 sm:p-4 border-b border-neutral-200 flex items-center justify-between bg-white shrink-0">
               <div>
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1.5">
                   <PackagePlus className="w-4 h-4 text-neutral-900" />
-                  <span>Tambah Produk Baru</span>
+                  <span>Tambah Produk Baru ke Supabase</span>
                 </h3>
               </div>
-              <button 
-                onClick={() => setShowAddModal(false)}
-                className="p-1 text-neutral-400 hover:text-neutral-900 transition"
-              >
+              <button onClick={() => setShowAddModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900 transition">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleAddSubmit} className="p-3.5 sm:p-5 overflow-y-auto space-y-3.5 flex-1 text-xs">
               
+              {/* UPLOAD FOTO PRODUK */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
@@ -596,13 +573,7 @@ export default function ProdukComponent() {
                     <label className="text-[10px] font-bold text-neutral-900 hover:underline cursor-pointer inline-flex items-center gap-0.5">
                       <Plus className="w-3 h-3" />
                       <span>Tambah Foto</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleMultipleImageUpload}
-                        className="hidden"
-                      />
+                      <input type="file" accept="image/*" multiple onChange={handleMultipleImageUpload} className="hidden" />
                     </label>
                   )}
                 </div>
@@ -637,17 +608,12 @@ export default function ProdukComponent() {
                   <label className="aspect-[3/4] border border-dashed border-neutral-300 hover:border-neutral-950 bg-neutral-50 flex flex-col items-center justify-center p-2 text-center cursor-pointer transition">
                     <Upload className="w-4 h-4 text-neutral-400 mb-0.5" />
                     <span className="text-[9px] font-bold text-neutral-700">Unggah</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleMultipleImageUpload}
-                      className="hidden"
-                    />
+                    <input type="file" accept="image/*" multiple onChange={handleMultipleImageUpload} className="hidden" />
                   </label>
                 </div>
               </div>
 
+              {/* NAMA PRODUK */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Nama Model Busana <span className="text-red-500">*</span>
@@ -662,7 +628,8 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* 3 KOLOM: HARGA, STOK, BERAT */}
+              <div className="grid grid-cols-3 gap-2.5">
                 <div className="space-y-1">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                     Harga (Rp) <span className="text-red-500">*</span>
@@ -670,7 +637,7 @@ export default function ProdukComponent() {
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: 89.000"
+                    placeholder="Contoh: 85.000"
                     value={formProduk.harga}
                     onChange={handleHargaChange}
                     className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950 font-bold"
@@ -691,8 +658,24 @@ export default function ProdukComponent() {
                     className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950 font-bold"
                   />
                 </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
+                    <Scale className="w-3 h-3 text-neutral-500" />
+                    <span>Berat (Gram)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    placeholder="Contoh: 325"
+                    value={formProduk.berat}
+                    onChange={(e) => setFormProduk({ ...formProduk, berat: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950 font-bold"
+                  />
+                </div>
               </div>
 
+              {/* KATEGORI */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
@@ -757,7 +740,7 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* Variasi Pilihan Warna (Multi-Select & Input Custom) */}
+              {/* VARIASI WARNA */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
@@ -766,7 +749,6 @@ export default function ProdukComponent() {
                   </label>
                 </div>
 
-                {/* Tag Warna yang Sudah Terpilih */}
                 {formProduk.warnaList.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 border border-neutral-200">
                     {formProduk.warnaList.map((warna) => (
@@ -787,11 +769,10 @@ export default function ProdukComponent() {
                   </div>
                 )}
 
-                {/* Input Tambah Warna Manual */}
                 <div className="flex gap-1.5">
                   <input
                     type="text"
-                    placeholder="Ketik nama warna baru (contoh: Terracotta)..."
+                    placeholder="Ketik nama warna baru..."
                     value={inputWarnaBaru}
                     onChange={(e) => setInputWarnaBaru(e.target.value)}
                     onKeyDown={(e) => {
@@ -812,7 +793,6 @@ export default function ProdukComponent() {
                   </button>
                 </div>
 
-                {/* Rekomendasi Warna Populer Cepat */}
                 <div className="space-y-1 pt-0.5">
                   <span className="text-[9px] text-neutral-400 font-medium">Pilihan cepat:</span>
                   <div className="flex flex-wrap gap-1">
@@ -837,6 +817,7 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
+              {/* PILIHAN UKURAN */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Pilihan Ukuran
@@ -862,6 +843,7 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
+              {/* DESKRIPSI */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Deskripsi Produk
@@ -870,11 +852,12 @@ export default function ProdukComponent() {
                   rows={2}
                   value={formProduk.deskripsi}
                   onChange={(e) => setFormProduk({ ...formProduk, deskripsi: e.target.value })}
-                  placeholder="Deskripsi singkat mengenai kenyamanan busana..."
+                  placeholder="Deskripsi singkat busana..."
                   className="w-full bg-neutral-50 border border-neutral-300 p-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950"
                 />
               </div>
 
+              {/* RINCIAN DETAIL */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Rincian Detail (Poin-poin)
@@ -888,6 +871,7 @@ export default function ProdukComponent() {
                 />
               </div>
 
+              {/* TOMBOL AKSI MODAL */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-200 sticky bottom-0 bg-white">
                 <button
                   type="button"
@@ -911,15 +895,13 @@ export default function ProdukComponent() {
         </div>
       )}
 
+      {/* MODAL HAPUS KATEGORI */}
       {deleteKategoriTarget && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0"
-            onClick={() => setDeleteKategoriTarget(null)}
-          />
+          <div className="fixed inset-0" onClick={() => setDeleteKategoriTarget(null)} />
           <div className="relative z-10 bg-white border border-neutral-200 max-w-sm w-full p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="min-w-0">
@@ -931,7 +913,7 @@ export default function ProdukComponent() {
             </div>
 
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Apakah Anda yakin ingin menghapus kategori <strong className="text-neutral-900">"{deleteKategoriTarget}"</strong> dari pilihan katalog?
+              Apakah Anda yakin ingin menghapus kategori <strong className="text-neutral-900">"{deleteKategoriTarget}"</strong>?
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
@@ -954,29 +936,24 @@ export default function ProdukComponent() {
         </div>
       )}
 
+      {/* MODAL HAPUS PRODUK */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0"
-            onClick={() => setDeleteTarget(null)}
-          />
+          <div className="fixed inset-0" onClick={() => setDeleteTarget(null)} />
           <div className="relative z-10 bg-white border border-neutral-200 max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 truncate">
                     Konfirmasi Hapus Produk
                   </h3>
-                  <p className="text-[10px] sm:text-[11px] text-neutral-500 truncate">Tindakan ini tidak dapat dibatalkan.</p>
+                  <p className="text-[10px] sm:text-[11px] text-neutral-500 truncate">Tindakan ini menghapus data langsung dari database Supabase.</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setDeleteTarget(null)}
-                className="p-1 text-neutral-400 hover:text-neutral-900"
-              >
+              <button onClick={() => setDeleteTarget(null)} className="p-1 text-neutral-400 hover:text-neutral-900">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -988,13 +965,13 @@ export default function ProdukComponent() {
               <div className="space-y-0.5 overflow-hidden">
                 <p className="text-xs font-bold text-neutral-900 truncate">{deleteTarget.nama}</p>
                 <p className="text-[10px] text-neutral-500">
-                  Rp {deleteTarget.harga.toLocaleString('id-ID')} • Stok: {deleteTarget.stok}
+                  Rp {deleteTarget.harga.toLocaleString('id-ID')} • Stok: {deleteTarget.stok} {deleteTarget.berat ? `• Berat: ${deleteTarget.berat} gr` : ''}
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Apakah Anda yakin ingin menghapus produk ini dari katalog?
+              Apakah Anda yakin ingin menghapus produk ini secara permanen dari database?
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
@@ -1015,8 +992,7 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* Custom UI Warning Modal untuk Validasi Kategori & Form Produk */}
-
+      {/* MODAL VALIDASI FORM */}
       {validationModal.show && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white border border-neutral-200 max-w-sm w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -1057,4 +1033,4 @@ export default function ProdukComponent() {
       )}
     </div>
   );
-}
+}

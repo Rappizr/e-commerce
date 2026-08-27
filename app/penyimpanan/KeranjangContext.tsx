@@ -12,6 +12,7 @@ export interface ItemKeranjang {
   size: string;
   color: string;
   image: string;
+  weight: number;
 }
 
 export interface Pesanan {

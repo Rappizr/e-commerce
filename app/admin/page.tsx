@@ -13,7 +13,8 @@ import {
   MessageSquareQuote,
   Wallet,
   Menu,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 
 import DashboardComponent from './component/dashboard';
@@ -28,6 +29,7 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'pesanan' | 'produk' | 'pembayaran' | 'testimoni' | 'keuangan'>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const authStatus = localStorage.getItem('almaco_admin_auth');
@@ -38,12 +40,11 @@ export default function AdminPage() {
     }
   }, []);
 
-  const handleLogout = () => {
-    if (confirm('Apakah Anda yakin ingin keluar dari panel admin?')) {
-      localStorage.removeItem('almaco_admin_auth');
-      localStorage.removeItem('almaco_admin_user');
-      setIsAuthenticated(false);
-    }
+  const handleConfirmLogout = () => {
+    localStorage.removeItem('almaco_admin_auth');
+    localStorage.removeItem('almaco_admin_user');
+    setIsAuthenticated(false);
+    setShowLogoutModal(false);
   };
 
   const handleSelectMenu = (menu: 'dashboard' | 'pesanan' | 'produk' | 'pembayaran' | 'testimoni' | 'keuangan') => {
@@ -66,8 +67,9 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F3EE] flex flex-col md:flex-row text-neutral-900 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#F4F3EE] flex flex-col md:flex-row text-neutral-900 font-sans overflow-x-hidden relative">
       
+      {/* SIDEBAR OVERLAY MOBILE */}
       {sidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden transition-opacity"
@@ -75,6 +77,7 @@ export default function AdminPage() {
         />
       )}
 
+      {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-neutral-200 flex flex-col justify-between shrink-0 transform transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
         sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
       }`}>
@@ -82,7 +85,7 @@ export default function AdminPage() {
           <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="relative w-8 h-8 sm:w-9 sm:h-9 shrink-0">
-                <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+                <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
               </div>
               <div className="leading-tight">
                 <span className="text-xs font-black tracking-widest uppercase text-neutral-950 block">ALMACO</span>
@@ -172,7 +175,7 @@ export default function AdminPage() {
           </Link>
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setShowLogoutModal(true)}
             className="w-full flex items-center gap-3 px-3.5 py-2 text-xs uppercase tracking-wider font-semibold text-red-600 hover:bg-red-50 text-left cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -181,6 +184,7 @@ export default function AdminPage() {
         </div>
       </aside>
 
+      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-neutral-200 px-4 sm:px-8 flex items-center justify-between gap-3 sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
@@ -216,6 +220,71 @@ export default function AdminPage() {
           {activeMenu === 'testimoni' && <TestimoniComponent />}
         </main>
       </div>
+
+      {/* MODAL POPUP KONFIRMASI LOGOUT ELEGAN DI TENGAH */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0"
+            onClick={() => setShowLogoutModal(false)}
+          />
+          
+          <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            
+            {/* BRANDING LOGO & NAMA ALMACO */}
+            <div className="inline-flex items-center gap-2.5 mx-auto">
+              <div className="relative w-8 h-8 shrink-0">
+                <Image
+                  src="/logo.png"
+                  alt="Almaco Logo"
+                  fill
+                  className="object-contain"
+                />
+              </div>
+              <div className="text-left leading-tight">
+                <div className="text-base uppercase tracking-tight text-neutral-950">
+                  <span className="font-black">ALMACO</span>
+                  <span className="font-light text-neutral-500">FASHION</span>
+                </div>
+                <span className="text-[8px] text-neutral-400 font-medium tracking-wide block">
+                  Fashionable • Syari • Berkualitas
+                </span>
+              </div>
+            </div>
+
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center mx-auto mt-1">
+              <LogOut className="w-5 h-5 ml-0.5" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-950">
+                Konfirmasi Keluar
+              </h3>
+              <p className="text-xs text-neutral-500 leading-relaxed">
+                Apakah Anda yakin ingin keluar dari sesi Panel Admin ALMACO FASHION?
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                className="w-full py-2.5 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-700 hover:text-neutral-950 text-xs font-bold uppercase tracking-wider transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogout}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+              >
+                Ya, Keluar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

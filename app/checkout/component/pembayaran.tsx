@@ -4,20 +4,17 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
-  CheckCircle2, 
   Copy, 
   Check, 
   ArrowRight, 
   ShoppingBag, 
   Clock, 
-  CreditCard,
-  Building2,
   FileCheck
 } from 'lucide-react';
 import Footer from '../../Footer';
 
 interface PembayaranProps {
-  totalAmount?: number;
+  totalAmount: number;
   invoiceId?: string;
   namaPenerima?: string;
   ekspedisi?: string;
@@ -26,13 +23,10 @@ interface PembayaranProps {
 export default function PembayaranComponent({
   totalAmount = 0,
   invoiceId,
-  namaPenerima,
-  ekspedisi,
 }: PembayaranProps) {
   const [copiedRek, setCopiedRek] = useState(false);
   const [copiedNominal, setCopiedNominal] = useState(false);
 
-  // Rekening Resmi Toko
   const paymentDetails = {
     invoiceNo: invoiceId || 'ORD-' + Math.floor(100000 + Math.random() * 900000),
     bank: 'BANK BCA',
@@ -47,7 +41,7 @@ export default function PembayaranComponent({
   };
 
   const handleCopyNominal = () => {
-    navigator.clipboard.writeText(totalAmount.toString());
+    navigator.clipboard.writeText(String(totalAmount));
     setCopiedNominal(true);
     setTimeout(() => setCopiedNominal(false), 2000);
   };
@@ -57,8 +51,8 @@ export default function PembayaranComponent({
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
-            <div className="relative w-9 h-9 sm:w-12 sm:h-12 shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -67,12 +61,12 @@ export default function PembayaranComponent({
                 className="object-contain"
               />
             </div>
-            <div className="leading-none truncate">
-              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
+            <div className="leading-tight">
+              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
                 <span className="font-black">ALMACO</span>
-                <span className="font-light text-neutral-600">FASHION</span>
+                <span className="font-light text-neutral-500">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1 truncate">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -80,7 +74,7 @@ export default function PembayaranComponent({
           
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
           >
             <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden xs:inline">Kembali Beranda</span>
@@ -90,11 +84,28 @@ export default function PembayaranComponent({
       </header>
 
       {/* MAIN CONTAINER */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-14">
-        {/* STATUS BANNER */}
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        {/* LOGO BRANDING TANPA BACKGROUND */}
         <div className="text-center space-y-2 mb-6 sm:mb-8">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-200 flex items-center justify-center mx-auto mb-2">
-            <CheckCircle2 className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
+          <div className="inline-flex items-center gap-3 sm:gap-3.5 mx-auto mb-3">
+            <div className="relative w-10 h-10 sm:w-12 sm:h-12 shrink-0">
+              <Image
+                src="/logo.png"
+                alt="Almaco Logo"
+                fill
+                priority
+                className="object-contain"
+              />
+            </div>
+            <div className="text-left leading-tight">
+              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
+                <span className="font-black">ALMACO</span>
+                <span className="font-light text-neutral-500">FASHION</span>
+              </div>
+              <span className="text-[10px] sm:text-xs text-neutral-400 font-medium tracking-wide block">
+                Fashionable • Syari • Berkualitas
+              </span>
+            </div>
           </div>
           
           <span className="text-[10px] sm:text-[11px] uppercase font-bold tracking-[0.25em] text-neutral-400 block">
@@ -109,7 +120,7 @@ export default function PembayaranComponent({
         </div>
 
         <div className="bg-white border border-neutral-200 p-5 sm:p-7 shadow-xs space-y-5">
-          {/* TIMER EXPIRY */}
+          {/* TIMER */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-amber-50/70 border border-amber-200 p-3.5 text-amber-900 text-xs gap-2">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-700 shrink-0" />
@@ -120,14 +131,14 @@ export default function PembayaranComponent({
             </span>
           </div>
 
-          {/* NOMINAL TRANSFER */}
+          {/* NOMINAL TRANSFER DARI CHECKOUT */}
           <div className="border border-neutral-200 bg-neutral-50/60 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold block">
                 Total Jumlah Transfer
               </span>
               <p className="text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight mt-0.5">
-                Rp {totalAmount.toLocaleString('id-ID')}
+                Rp {Number(totalAmount).toLocaleString('id-ID')}
               </p>
               <p className="text-[10px] text-red-500 font-medium mt-0.5">
                 *Transfer tepat sesuai nominal hingga digit terakhir
@@ -143,7 +154,7 @@ export default function PembayaranComponent({
             </button>
           </div>
 
-          {/* REKENING PEMBAYARAN */}
+          {/* REKENING */}
           <div className="border border-neutral-200 p-4 sm:p-5 space-y-4 bg-white">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <div className="flex items-center gap-3">
@@ -181,7 +192,7 @@ export default function PembayaranComponent({
             </div>
           </div>
 
-          {/* PETUNJUK & TOMBOL KONFIRMASI */}
+          {/* TOMBOL AKSI */}
           <div className="pt-2 space-y-3">
             <p className="text-xs text-neutral-500 text-center leading-relaxed">
               Setelah menyelesaikan transfer via ATM, M-Banking, atau Internet Banking, silakan upload bukti transfer agar pesanan langsung diproses.
@@ -189,7 +200,7 @@ export default function PembayaranComponent({
 
             <Link
               href={`/konfirmasi-pembayaran?invoice=${encodeURIComponent(paymentDetails.invoiceNo)}`}
-              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.2em] py-4 transition-all duration-300 flex items-center justify-center gap-2 shadow-md text-center"
+              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.2em] py-4 transition-all flex items-center justify-center gap-2 shadow-md text-center"
             >
               <FileCheck className="w-4 h-4" />
               <span>Upload Bukti Pembayaran</span>
