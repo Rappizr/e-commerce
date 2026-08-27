@@ -79,7 +79,7 @@ export default function Footer() {
 
           <div className="md:col-span-3 space-y-3 sm:space-y-3.5">
             <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-neutral-900">
-              BANTUAN & LAYANAN
+              BANTUAN & LAYANAN 
             </h4>
             <ul className="space-y-2 sm:space-y-2.5 text-xs text-neutral-600 font-medium">
               <li>
