@@ -133,18 +133,14 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // Update kuantitas item (mendukung nilai absolut maupun delta)
-  const updateQty = (id: string | number, size: string, color: string, qtyOrDelta: number) => {
+  // Update kuantitas item (presisi target kuantitas)
+  const updateQty = (id: string | number, size: string, color: string, targetQty: number) => {
     setCartItems((prev) =>
       prev
         .map((item) => {
           if (String(item.id) === String(id) && item.size === size && item.color === color) {
-            // Jika nilai dioperasikan langsung (misal set angka 2, 3) atau penambahan (+1, -1)
-            let newQty = qtyOrDelta;
-            if (qtyOrDelta === 1 || qtyOrDelta === -1) {
-              newQty = item.qty + qtyOrDelta;
-            }
-            return newQty > 0 ? { ...item, qty: newQty } : item;
+            const finalQty = Number(targetQty);
+            return finalQty > 0 ? { ...item, qty: finalQty } : item;
           }
           return item;
         })
