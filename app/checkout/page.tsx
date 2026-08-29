@@ -347,69 +347,114 @@ export default function CheckoutPage() {
                 <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
                   KOTA / KABUPATEN TUJUAN <span className="text-red-500">*(KETIK MIN. 3 HURUF)</span>
                 </label>
-                <div className="relative w-full sm:w-auto" ref={courierDropdownRef}>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={searchCityInput}
+                    onChange={handleCitySearchChange}
+                    onFocus={() => cityResults.length > 0 && setShowCityDropdown(true)}
+                    placeholder="Contoh: Tulungagung / Mojokerto / Bandung"
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 pr-9"
+                  />
+                  {isSearchingCity && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 animate-spin text-neutral-500" />
+                    </div>
+                  )}
+                </div>
+
+                {showCityDropdown && cityResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-neutral-300 shadow-xl z-50 max-h-52 overflow-y-auto">
+                    {cityResults.map((c, idx) => (
+                      <div
+                        key={`${c.city_id}-${idx}`}
+                        onClick={() => handleSelectCity(c)}
+                        className="p-3 hover:bg-neutral-100 cursor-pointer border-b border-neutral-100 last:border-none text-left"
+                      >
+                        <p className="text-xs font-bold text-neutral-900">
+                          {c.type ? `${c.type} ` : ''}{c.city_name}
+                        </p>
+                        <p className="text-[10px] text-neutral-500">
+                          Provinsi: {c.province} • Kodepos: {c.postal_code || '-'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
+                  DETAIL ALAMAT LENGKAP <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={alamat}
+                  onChange={(e) => setAlamat(e.target.value)}
+                  placeholder="Nama jalan, nomor bangunan, patokan..."
+                  className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+            </div>
+
+            <div className="bg-white border border-neutral-200 shadow-xs">
+              <div className="bg-[#F1F3F5] p-4 sm:p-5 border-b border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-neutral-800">
+                  <span>Dikirim dari: <strong className="text-neutral-950 font-bold">Tulungagung</strong></span>
+                </div>
+
+                <div className="relative" ref={courierDropdownRef}>
                   <button
                     type="button"
                     disabled={isLoadingShipping || shippingOptions.length === 0}
                     onClick={() => setShowCourierDropdown(!showCourierDropdown)}
-                    className="w-full sm:w-auto bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[240px] sm:min-w-[320px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed transition"
+                    className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
                   >
                     {isLoadingShipping ? (
-                      <div className="flex items-center gap-2 mx-auto py-0.5">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                        <span>Memuat Tarif Ekspedisi...</span>
+                      <div className="flex items-center gap-2 mx-auto">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Memuat Tarif...</span>
                       </div>
                     ) : selectedCourier ? (
-                      <div className="flex items-center justify-between w-full gap-2 text-left">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate uppercase font-bold tracking-wide text-[11px] sm:text-xs">
-                            {selectedCourier.courier_name} - {selectedCourier.courier_service_name}
-                          </p>
-                          <p className="text-[10px] text-neutral-300 font-normal">
-                            {selectedCourier.duration} • Rp {selectedCourier.price.toLocaleString("id-ID")}
-                          </p>
-                        </div>
-                        <ChevronDown className={"w-4 h-4 shrink-0 transition-transform duration-200 " + (showCourierDropdown ? "rotate-180" : "")} />
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span className="uppercase tracking-wider text-[11px] sm:text-xs font-bold">
-                          {shippingOptions.length > 0 ? "PILIJ JASA KIRIM" : "MASUKKAN KOTA TUJUAN"}
+                      <>
+                        <span className="truncate uppercase tracking-wide">
+                          {selectedCourier.courier_name} {selectedCourier.courier_service_name} ({selectedCourier.duration})
                         </span>
                         <ChevronDown className="w-4 h-4 shrink-0" />
-                      </div>
+                      </>
+                    ) : (
+                      <>
+                        <span>PILIH JASA KIRIM</span>
+                        <ChevronDown className="w-4 h-4 shrink-0" />
+                      </>
                     )}
                   </button>
 
                   {showCourierDropdown && shippingOptions.length > 0 && (
-                    <div className="absolute left-0 sm:left-auto right-0 top-full mt-1.5 w-full sm:w-80 md:w-96 bg-white border border-neutral-300 shadow-2xl rounded-sm z-[70] py-1 max-h-72 overflow-y-auto divide-y divide-neutral-100">
-                      {shippingOptions.map((opt, idx) => {
-                        const isSelected = selectedCourier?.courier_name === opt.courier_name && selectedCourier?.courier_service_name === opt.courier_service_name;
-                        return (
-                          <div
-                            key={opt.company + "-" + opt.courier_service_name + "-" + idx}
-                            onClick={() => {
-                              setSelectedCourier(opt);
-                              setShowCourierDropdown(false);
-                            }}
-                            className={"px-4 py-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors " + (isSelected ? "bg-neutral-900 text-white font-bold" : "hover:bg-neutral-100 text-neutral-800")}
-                          >
-                            <div className="flex-1 min-w-0 pr-3 text-left">
-                              <div className={"font-bold uppercase tracking-wide text-xs " + (isSelected ? "text-white" : "text-neutral-900")}>
-                                {opt.courier_name} <span className={isSelected ? "text-neutral-300 font-normal" : "text-neutral-600 font-normal"}>({opt.courier_service_name})</span>
-                              </div>
-                              <div className={"text-[10px] mt-0.5 " + (isSelected ? "text-neutral-300" : "text-neutral-500")}>
-                                Estimasi: {opt.duration}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className={isSelected ? "font-bold text-xs sm:text-sm text-emerald-400" : "font-bold text-xs sm:text-sm text-neutral-950"}>
-                                Rp {opt.price.toLocaleString("id-ID")}
-                              </span>
-                            </div>
+                    <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 max-w-[90vw] bg-white border border-neutral-300 shadow-2xl rounded-sm z-50 py-1 max-h-64 overflow-y-auto">
+                      {shippingOptions.map((opt, idx) => (
+                        <div
+                          key={`${opt.company}-${opt.courier_service_name}-${idx}`}
+                          onClick={() => {
+                            setSelectedCourier(opt);
+                            setShowCourierDropdown(false);
+                          }}
+                          className={`px-4 py-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                            selectedCourier?.courier_name === opt.courier_name && selectedCourier?.courier_service_name === opt.courier_service_name
+                              ? 'bg-neutral-100 font-bold text-neutral-950' 
+                              : 'hover:bg-neutral-50 text-neutral-800'
+                          }`}
+                        >
+                          <div>
+                            <p className="uppercase">{opt.courier_name} {opt.courier_service_name} ({opt.duration})</p>
                           </div>
-                        );
-                      })}
+                          <span className="font-bold shrink-0 ml-2 text-neutral-950">
+                            Rp {opt.price.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
