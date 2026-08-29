@@ -35,6 +35,10 @@ export default function AdminPage() {
   // 1. Verifikasi sesi aman langsung ke Supabase Auth & Tabel Profiles
   const checkAdminAuth = async () => {
     try {
+      if (typeof window !== "undefined" && localStorage.getItem("almaco_admin_auth") === "true") {
+        setIsAuthenticated(true);
+        return;
+      }
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session || !session.user) {
