@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { 
@@ -9,9 +9,11 @@ import {
   ArrowRight, 
   ShoppingBag, 
   Clock, 
-  FileCheck
+  FileCheck,
+  Loader2
 } from 'lucide-react';
 import Footer from '../../Footer';
+import { supabase } from '../../penyimpanan/supabase';
 
 interface PembayaranProps {
   totalAmount: number;
@@ -26,6 +28,37 @@ export default function PembayaranComponent({
 }: PembayaranProps) {
   const [copiedRek, setCopiedRek] = useState(false);
   const [copiedNominal, setCopiedNominal] = useState(false);
+  const [liveAmount, setLiveAmount] = useState<number>(totalAmount);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+
+  // Ambil data pesanan langsung dari tabel orders Supabase jika invoiceId tersedia
+  useEffect(() => {
+    if (!invoiceId) return;
+
+    const fetchOrderDetails = async () => {
+      setIsLoadingOrder(true);
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('total, total_harga')
+          .eq('invoice_no', invoiceId)
+          .single();
+
+        if (!error && data) {
+          const nominalDb = Number(data.total || data.total_harga || 0);
+          if (nominalDb > 0) {
+            setLiveAmount(nominalDb);
+          }
+        }
+      } catch (err) {
+        console.error('Fetch order payment error:', err);
+      } finally {
+        setIsLoadingOrder(false);
+      }
+    };
+
+    fetchOrderDetails();
+  }, [invoiceId]);
 
   const paymentDetails = {
     invoiceNo: invoiceId || 'ORD-' + Math.floor(100000 + Math.random() * 900000),
@@ -41,7 +74,7 @@ export default function PembayaranComponent({
   };
 
   const handleCopyNominal = () => {
-    navigator.clipboard.writeText(String(totalAmount));
+    navigator.clipboard.writeText(String(liveAmount || totalAmount));
     setCopiedNominal(true);
     setTimeout(() => setCopiedNominal(false), 2000);
   };
@@ -131,14 +164,20 @@ export default function PembayaranComponent({
             </span>
           </div>
 
-          {/* NOMINAL TRANSFER DARI CHECKOUT */}
+          {/* NOMINAL TRANSFER DARI DATABASE */}
           <div className="border border-neutral-200 bg-neutral-50/60 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold block">
                 Total Jumlah Transfer
               </span>
-              <p className="text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight mt-0.5">
-                Rp {Number(totalAmount).toLocaleString('id-ID')}
+              <p className="text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight mt-0.5 flex items-center gap-2">
+                {isLoadingOrder ? (
+                  <span className="flex items-center gap-1.5 text-sm text-neutral-500 font-normal">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Menghitung tagihan...
+                  </span>
+                ) : (
+                  `Rp ${Number(liveAmount || totalAmount).toLocaleString('id-ID')}`
+                )}
               </p>
               <p className="text-[10px] text-red-500 font-medium mt-0.5">
                 *Transfer tepat sesuai nominal hingga digit terakhir
@@ -147,14 +186,14 @@ export default function PembayaranComponent({
             <button
               type="button"
               onClick={handleCopyNominal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-neutral-300 text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:border-neutral-900 transition-all shadow-xs w-full sm:w-auto justify-center"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-neutral-300 text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:border-neutral-900 transition-all shadow-xs w-full sm:w-auto justify-center cursor-pointer"
             >
               {copiedNominal ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
               <span>{copiedNominal ? 'Tersalin' : 'Salin Nominal'}</span>
             </button>
           </div>
 
-          {/* REKENING */}
+          {/* REKENING PEMBAYARAN */}
           <div className="border border-neutral-200 p-4 sm:p-5 space-y-4 bg-white">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <div className="flex items-center gap-3">
@@ -183,7 +222,7 @@ export default function PembayaranComponent({
               <button
                 type="button"
                 onClick={handleCopyRek}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-neutral-300 text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:border-neutral-900 transition-all shadow-xs w-full sm:w-auto justify-center"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-neutral-300 text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:border-neutral-900 transition-all shadow-xs w-full sm:w-auto justify-center cursor-pointer"
                 title="Salin Nomor Rekening"
               >
                 {copiedRek ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}

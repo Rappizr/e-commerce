@@ -3,16 +3,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
-
 export interface ItemKeranjang {
-  id: string;
+  id: string | number;
   title: string;
   price: number;
   qty: number;
   size: string;
   color: string;
   image: string;
-  weight: number;
+  weight?: number;
 }
 
 export interface Pesanan {
@@ -26,8 +25,8 @@ export interface Pesanan {
   total: number;
   alamat: string;
   kota: string;
-  kecamatan: string;
-  status: 'Menunggu Verifikasi' | 'Diproses' | 'Dikirim' | 'Selesai' | 'Dibatalkan';
+  kecamatan?: string;
+  status: 'Menunggu Verifikasi' | 'Menunggu Pembayaran' | 'Diproses' | 'Dikirim' | 'Selesai' | 'Dibatalkan';
   tanggal: string;
   metodePembayaran: string;
   bukti?: string;
@@ -36,14 +35,17 @@ export interface Pesanan {
 interface KeranjangContextType {
   cartItems: ItemKeranjang[];
   tambahKeKeranjang: (item: Omit<ItemKeranjang, 'qty'>, qty?: number) => void;
-  updateQty: (id: string, size: string, color: string, delta: number) => void;
-  removeItem: (id: string, size: string, color: string) => void;
+  updateQty: (id: string | number, size: string, color: string, qtyOrDelta: number) => void;
+  removeItem: (id: string | number, size?: string, color?: string) => void;
+  hapusItem: (id: string | number, size?: string, color?: string) => void;
   clearCart: () => void;
+  kosongkanKeranjang: () => void;
   totalCount: number;
   subtotal: number;
   pesananList: Pesanan[];
-  tambahPesanan: (pesananBaru: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => void;
-  updateStatusPesanan: (id: string, status: Pesanan['status']) => void;
+  tambahPesanan: (pesananBaru: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => Promise<string | undefined>;
+  updateStatusPesanan: (id: string, status: Pesanan['status']) => Promise<void>;
+  refreshPesanan: () => Promise<void>;
 }
 
 const KeranjangContext = createContext<KeranjangContextType | undefined>(undefined);
@@ -53,7 +55,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   const [pesananList, setPesananList] = useState<Pesanan[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Fetch Pesanan dari Supabase `orders`
+  // 1. Ambil data pesanan langsung dari tabel orders Supabase
   const fetchOrdersFromSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -66,18 +68,24 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
           id: o.invoice_no || `ORD-${o.id}`,
           pembeli: o.nama_pembeli || 'Pelanggan Almaco',
           whatsapp: o.no_hp || '-',
-          produk: 'Detail Pesanan',
+          produk: o.catatan || 'Busana ALMACO',
           qty: 1,
-          hargaProduk: o.total_harga || 0,
-          ongkir: o.ongkir || 0,
-          total: (o.total_harga || 0) + (o.ongkir || 0),
+          hargaProduk: Number(o.subtotal || o.total_harga || 0),
+          ongkir: Number(o.ongkir || 0),
+          total: Number(o.total || o.total_harga || 0),
           alamat: o.alamat_lengkap || '-',
-          kota: '-',
-          kecamatan: '-',
+          kota: o.kota || '-',
+          kecamatan: o.kecamatan || '-',
           status: o.status || 'Menunggu Verifikasi',
-          tanggal: o.created_at ? new Date(o.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-',
-          metodePembayaran: o.metode_pembayaran || 'MANUAL',
-          bukti: o.bukti_transfer,
+          tanggal: o.created_at
+            ? new Date(o.created_at).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })
+            : '-',
+          metodePembayaran: o.bank_asal || o.metode_pembayaran || 'BCA',
+          bukti: o.bukti_transfer_url || o.bukti_transfer,
         }));
         setPesananList(mappedOrders);
       }
@@ -86,51 +94,56 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Muat keranjang dari LocalStorage di sisi client
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('almaco_keranjang');
       if (savedCart) {
         setCartItems(JSON.parse(savedCart));
       }
-      const savedPesanan = localStorage.getItem('almaco_pesanan');
-      if (savedPesanan) {
-        setPesananList(JSON.parse(savedPesanan));
-      }
     } catch (e) {
       console.error(e);
     }
     setIsLoaded(true);
-
     fetchOrdersFromSupabase();
   }, []);
 
+  // Simpan keranjang ke LocalStorage setiap ada pembaruan
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem('almaco_keranjang', JSON.stringify(cartItems));
-      localStorage.setItem('almaco_pesanan', JSON.stringify(pesananList));
     }
-  }, [cartItems, pesananList, isLoaded]);
+  }, [cartItems, isLoaded]);
 
+  // Tambah item ke keranjang
   const tambahKeKeranjang = (newItem: Omit<ItemKeranjang, 'qty'>, qty = 1) => {
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
-        (i) => i.id === newItem.id && i.size === newItem.size && i.color === newItem.color
+        (i) =>
+          String(i.id) === String(newItem.id) &&
+          i.size === newItem.size &&
+          i.color === newItem.color
       );
       if (existingIndex > -1) {
         const updated = [...prev];
         updated[existingIndex].qty += qty;
         return updated;
       }
-      return [...prev, { ...newItem, qty }];
+      return [...prev, { ...newItem, qty, weight: newItem.weight || 350 }];
     });
   };
 
-  const updateQty = (id: string, size: string, color: string, delta: number) => {
+  // Update kuantitas item (mendukung nilai absolut maupun delta)
+  const updateQty = (id: string | number, size: string, color: string, qtyOrDelta: number) => {
     setCartItems((prev) =>
       prev
         .map((item) => {
-          if (item.id === id && item.size === size && item.color === color) {
-            const newQty = item.qty + delta;
+          if (String(item.id) === String(id) && item.size === size && item.color === color) {
+            // Jika nilai dioperasikan langsung (misal set angka 2, 3) atau penambahan (+1, -1)
+            let newQty = qtyOrDelta;
+            if (qtyOrDelta === 1 || qtyOrDelta === -1) {
+              newQty = item.qty + qtyOrDelta;
+            }
             return newQty > 0 ? { ...item, qty: newQty } : item;
           }
           return item;
@@ -139,9 +152,15 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const removeItem = (id: string, size: string, color: string) => {
+  // Hapus item dari keranjang
+  const removeItem = (id: string | number, size?: string, color?: string) => {
     setCartItems((prev) =>
-      prev.filter((item) => !(item.id === id && item.size === size && item.color === color))
+      prev.filter((item) => {
+        if (size && color) {
+          return !(String(item.id) === String(id) && item.size === size && item.color === color);
+        }
+        return String(item.id) !== String(id);
+      })
     );
   };
 
@@ -149,11 +168,10 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     setCartItems([]);
   };
 
+  // Buat pesanan baru ke Supabase
   const tambahPesanan = async (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
     const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    const randomId = Math.floor(1000 + Math.random() * 9000);
-    const invoiceNo = `ORD-${dateStr}-${randomId}`;
+    const invoiceNo = `ORD-${Date.now()}`;
 
     const newPesanan: Pesanan = {
       ...data,
@@ -162,16 +180,13 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
       }),
-      status: 'Menunggu Verifikasi',
+      status: 'Menunggu Pembayaran',
     };
 
     setPesananList((prev) => [newPesanan, ...prev]);
     clearCart();
 
-    // Push ke Supabase `orders`
     try {
       await supabase.from('orders').insert([
         {
@@ -179,30 +194,32 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
           nama_pembeli: data.pembeli,
           no_hp: data.whatsapp,
           alamat_lengkap: `${data.alamat}, ${data.kota}`,
-          total_harga: data.hargaProduk,
+          subtotal: data.hargaProduk,
           ongkir: data.ongkir,
-          metode_pembayaran: data.metodePembayaran,
-          status: 'Menunggu Verifikasi',
+          total: data.total,
+          total_harga: data.total,
+          bank_asal: data.metodePembayaran || 'BCA',
+          status: 'Menunggu Pembayaran',
         },
       ]);
+      return invoiceNo;
     } catch (e) {
       console.error('Error insert order to Supabase:', e);
     }
   };
 
+  // Update status pesanan di database
   const updateStatusPesanan = async (id: string, status: Pesanan['status']) => {
     setPesananList((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status } : item))
     );
 
-    // Update status di Supabase
     try {
       await supabase.from('orders').update({ status }).eq('invoice_no', id);
     } catch (e) {
       console.error('Error update order status in Supabase:', e);
     }
   };
-
 
   const totalCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.qty, 0);
@@ -214,12 +231,15 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         tambahKeKeranjang,
         updateQty,
         removeItem,
+        hapusItem: removeItem, // Alias untuk kompatibilitas
         clearCart,
+        kosongkanKeranjang: clearCart, // Alias untuk kompatibilitas
         totalCount,
         subtotal,
         pesananList,
         tambahPesanan,
         updateStatusPesanan,
+        refreshPesanan: fetchOrdersFromSupabase,
       }}
     >
       {children}
@@ -234,9 +254,3 @@ export function useKeranjang() {
   }
   return context;
 }
-
-
-
-
-
-

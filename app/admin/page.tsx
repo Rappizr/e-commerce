@@ -14,7 +14,7 @@ import {
   Wallet,
   Menu,
   X,
-  AlertTriangle
+  Loader2
 } from 'lucide-react';
 
 import DashboardComponent from './component/dashboard';
@@ -24,6 +24,7 @@ import TestimoniComponent from './component/testimoni';
 import VerifikasiBayarComponent from './component/verifikasi-bayar';
 import KeuanganComponent from './component/keuangan';
 import AdminLoginPage from './login/page';
+import { supabase } from '../penyimpanan/supabase'; 
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -31,20 +32,64 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  useEffect(() => {
-    const authStatus = localStorage.getItem('almaco_admin_auth');
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-    } else {
+  // 1. Verifikasi sesi aman langsung ke Supabase Auth & Tabel Profiles
+  const checkAdminAuth = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session || !session.user) {
+        setIsAuthenticated(false);
+        return;
+      }
+
+      // Pastikan akun memiliki role admin di database
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!error && profile?.role === 'admin') {
+        setIsAuthenticated(true);
+      } else {
+        await supabase.auth.signOut();
+        setIsAuthenticated(false);
+      }
+    } catch (err) {
+      console.error('Auth check error:', err);
       setIsAuthenticated(false);
     }
+  };
+
+  useEffect(() => {
+    checkAdminAuth();
+
+    // Listener jika status login/logout berubah secara real-time
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setIsAuthenticated(false);
+      } else if (event === 'SIGNED_IN') {
+        checkAdminAuth();
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  const handleConfirmLogout = () => {
-    localStorage.removeItem('almaco_admin_auth');
-    localStorage.removeItem('almaco_admin_user');
-    setIsAuthenticated(false);
-    setShowLogoutModal(false);
+  // 2. Logout resmi dari sesi Supabase
+  const handleConfirmLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      localStorage.removeItem('almaco_admin_auth');
+      localStorage.removeItem('almaco_admin_user');
+      setIsAuthenticated(false);
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setShowLogoutModal(false);
+    }
   };
 
   const handleSelectMenu = (menu: 'dashboard' | 'pesanan' | 'produk' | 'pembayaran' | 'testimoni' | 'keuangan') => {
@@ -54,8 +99,9 @@ export default function AdminPage() {
 
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen bg-[#F4F3EE] flex items-center justify-center">
-        <div className="text-xs font-bold uppercase tracking-widest text-neutral-400 animate-pulse">
+      <div className="min-h-screen bg-[#F4F3EE] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-900" />
+        <div className="text-xs font-bold uppercase tracking-widest text-neutral-500">
           Memeriksa Hak Akses Admin...
         </div>
       </div>
@@ -63,7 +109,7 @@ export default function AdminPage() {
   }
 
   if (!isAuthenticated) {
-    return <AdminLoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;
+    return <AdminLoginPage onLoginSuccess={() => checkAdminAuth()} />;
   }
 
   return (
@@ -221,7 +267,7 @@ export default function AdminPage() {
         </main>
       </div>
 
-      {/* MODAL POPUP KONFIRMASI LOGOUT ELEGAN DI TENGAH */}
+      {/* MODAL POPUP KONFIRMASI LOGOUT */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div
@@ -230,8 +276,6 @@ export default function AdminPage() {
           />
           
           <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
-            
-            {/* BRANDING LOGO & NAMA ALMACO */}
             <div className="inline-flex items-center gap-2.5 mx-auto">
               <div className="relative w-8 h-8 shrink-0">
                 <Image
@@ -281,7 +325,6 @@ export default function AdminPage() {
                 Ya, Keluar
               </button>
             </div>
-
           </div>
         </div>
       )}

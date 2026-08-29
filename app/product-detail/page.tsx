@@ -58,37 +58,8 @@ function ProductDetailContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get("id");
 
-  const [product, setProduct] = useState<any>(() => {
-    if (typeof window !== "undefined" && productId) {
-      try {
-        const saved = localStorage.getItem("almaco_produk_list");
-        if (saved) {
-          const list = JSON.parse(saved);
-          const found = list.find((p: any) => String(p.id) === String(productId));
-          if (found) {
-            return {
-              id: String(found.id),
-              title: found.nama,
-              category: found.kategori,
-              price: `Rp ${Number(found.harga || 0).toLocaleString("id-ID")}`,
-              stok: found.stok,
-              weight: found.berat || 350,
-              desc: found.deskripsi || "Busana modis berkualitas premium dari ALMACO FASHION.",
-              images: found.gambarList && found.gambarList.length > 0 ? found.gambarList : [found.gambarUtama || "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"],
-              warna: found.warna && found.warna.length > 0 ? found.warna : ["Default"],
-              ukuran: found.ukuran && found.ukuran.length > 0 ? found.ukuran : ["All Size"],
-              details: found.rincian && found.rincian.length > 0 ? found.rincian : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
-            };
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState(!product);
+  const [product, setProduct] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState("Default");
   const [selectedSize, setSelectedSize] = useState("All Size");
@@ -106,6 +77,7 @@ function ProductDetailContent() {
     }
 
     const fetchSingleProduct = async () => {
+      setIsLoading(true);
       try {
         const { data, error } = await supabase
           .from("products")
@@ -114,56 +86,37 @@ function ProductDetailContent() {
           .single();
 
         if (data && !error) {
+          const imgList = Array.isArray(data.gambar_list) && data.gambar_list.length > 0 
+            ? data.gambar_list 
+            : [data.gambar_utama || "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"];
+
+          const warnaArr = Array.isArray(data.warna) && data.warna.length > 0 ? data.warna : ["Default"];
+          const ukuranArr = Array.isArray(data.ukuran) && data.ukuran.length > 0 ? data.ukuran : ["All Size"];
+          const detailsArr = Array.isArray(data.rincian) && data.rincian.length > 0 
+            ? data.rincian 
+            : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"];
+
           const mapped = {
             id: String(data.id),
-            title: data.nama,
-            category: data.kategori,
+            title: data.nama || "Busana Almaco",
+            category: data.kategori || "Busana",
             price: `Rp ${Number(data.harga || 0).toLocaleString("id-ID")}`,
-            stok: data.stok,
-            weight: data.berat || 350,
+            rawPrice: Number(data.harga || 0),
+            stok: typeof data.stok === "number" ? data.stok : 0,
+            weight: Number(data.berat || 350),
             desc: data.deskripsi || "Busana modis berkualitas premium dari ALMACO FASHION.",
-            images: Array.isArray(data.gambar_list) && data.gambar_list.length > 0 ? data.gambar_list : [data.gambar_utama || "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"],
-            warna: Array.isArray(data.warna) && data.warna.length > 0 ? data.warna : ["Default"],
-            ukuran: Array.isArray(data.ukuran) && data.ukuran.length > 0 ? data.ukuran : ["All Size"],
-            details: Array.isArray(data.rincian) && data.rincian.length > 0 ? data.rincian : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
+            images: imgList,
+            warna: warnaArr,
+            ukuran: ukuranArr,
+            details: detailsArr,
           };
+
           setProduct(mapped);
-          setSelectedColor(mapped.warna[0]);
-          setSelectedSize(mapped.ukuran[0]);
-          setIsLoading(false);
-          return;
+          setSelectedColor(warnaArr[0]);
+          setSelectedSize(ukuranArr[0]);
         }
       } catch (e) {
-        console.error("Fetch Supabase Error:", e);
-      }
-
-      // Fallback ke localStorage
-      try {
-        const saved = localStorage.getItem("almaco_produk_list");
-        if (saved) {
-          const list = JSON.parse(saved);
-          const found = list.find((p: any) => String(p.id) === String(productId));
-          if (found) {
-            const mapped = {
-              id: String(found.id),
-              title: found.nama,
-              category: found.kategori,
-              price: `Rp ${Number(found.harga || 0).toLocaleString("id-ID")}`,
-              stok: found.stok,
-              weight: found.berat || 350,
-              desc: found.deskripsi || "Busana modis berkualitas premium dari ALMACO FASHION.",
-              images: found.gambarList && found.gambarList.length > 0 ? found.gambarList : [found.gambarUtama || "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"],
-              warna: found.warna && found.warna.length > 0 ? found.warna : ["Default"],
-              ukuran: found.ukuran && found.ukuran.length > 0 ? found.ukuran : ["All Size"],
-              details: found.rincian && found.rincian.length > 0 ? found.rincian : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
-            };
-            setProduct(mapped);
-            setSelectedColor(mapped.warna[0]);
-            setSelectedSize(mapped.ukuran[0]);
-          }
-        }
-      } catch (err) {
-        console.error(err);
+        console.error("Fetch Supabase Product Error:", e);
       } finally {
         setIsLoading(false);
       }
@@ -176,7 +129,7 @@ function ProductDetailContent() {
     return (
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-20 flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-neutral-800" />
-        <p className="text-xs uppercase tracking-widest font-bold text-neutral-500">Memuat Produk...</p>
+        <p className="text-xs uppercase tracking-widest font-bold text-neutral-500">Memuat Detail Produk...</p>
       </main>
     );
   }
@@ -196,12 +149,9 @@ function ProductDetailContent() {
     );
   }
 
-  const allImages = Array.isArray(product.images) && product.images.length > 0 
-    ? product.images 
-    : ["https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop"];
-  
-  const sisaStok = typeof product.stok === "number" ? product.stok : 15;
-  const rawWarnaList: string[] = product.warna || ["Default"];
+  const allImages = product.images;
+  const sisaStok = product.stok;
+  const rawWarnaList: string[] = product.warna;
 
   const toggleAccordion = (section: string) => {
     setOpenAccordion(openAccordion === section ? null : section);
@@ -221,15 +171,13 @@ function ProductDetailContent() {
   };
 
   const handleAddToCart = () => {
-    const numericPrice = parseInt(String(product.price).replace(/[^0-9]/g, "")) || 100000;
-    
-    (tambahKeKeranjang as any)({
+    tambahKeKeranjang({
       id: product.id,
       title: product.title,
-      price: numericPrice,
+      price: product.rawPrice,
       size: selectedSize,
       color: selectedColor,
-      weight: product.weight || 350,
+      weight: product.weight,
       image: allImages[0],
     });
 
@@ -372,10 +320,10 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* GRID PRODUK RAMPING & PAS */}
+      {/* GRID PRODUK RAMPING */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
         
-        {/* KOLOM FOTO (Ukuran Ramping Sesuai Contoh Butik) */}
+        {/* KOLOM FOTO */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           {/* FOTO UTAMA */}
           <div 
@@ -427,7 +375,6 @@ function ProductDetailContent() {
                   >
                     <Image src={img} alt={`Foto ${idx + 1}`} fill className="object-cover" />
                     
-                    {/* Overlay jika ada foto lebih dari 3 */}
                     {isThirdAndMore && (
                       <div className="absolute inset-0 bg-neutral-950/75 hover:bg-neutral-950/85 transition flex flex-col items-center justify-center text-white p-1 text-center">
                         <Images className="w-3.5 h-3.5 mb-0.5" />
@@ -447,11 +394,11 @@ function ProductDetailContent() {
             <div className="flex items-center gap-2 text-[10px] tracking-widest font-bold uppercase text-neutral-400">
               <span>{product.category}</span>
               <span className="text-neutral-300">•</span>
-              <span className={sisaStok > 0 ? "text-emerald-700" : "text-rose-600 font-bold"}>
+              <span className={sisaStok > 0 ? "text-emerald-700 font-bold" : "text-rose-600 font-bold"}>
                 {sisaStok > 0 ? `STOK: ${sisaStok} PCS` : "STOK HABIS"}
               </span>
               <span className="text-neutral-300">•</span>
-              <span>{product.weight || 350} GRAM</span>
+              <span>{product.weight} GRAM</span>
             </div>
 
             <h1 className="text-xl sm:text-2xl font-serif text-neutral-900 tracking-tight leading-snug">
@@ -618,8 +565,8 @@ export default function ProductDetailPage() {
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between">
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85">
-            <div className="relative w-9 h-9 sm:w-12 sm:h-12 shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85">
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -628,11 +575,11 @@ export default function ProductDetailPage() {
                 className="object-contain"
               />
             </div>
-            <div className="leading-none">
-              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
+            <div className="leading-tight">
+              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
+                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -640,7 +587,7 @@ export default function ProductDetailPage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-2xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-2xs shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Kembali</span>

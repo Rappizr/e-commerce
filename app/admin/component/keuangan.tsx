@@ -8,65 +8,29 @@ import {
   ArrowUpRight, 
   Wallet, 
   X,
-  DollarSign
+  DollarSign,
+  Loader2,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
-import { useKeranjang } from '../../penyimpanan/KeranjangContext';
 import { supabase } from '../../penyimpanan/supabase';
 
 interface TransaksiKas {
-  id: number | string;
+  id: number;
   tanggal: string;
   keterangan: string;
   kategori: string;
   tipe: 'masuk' | 'keluar';
   nominal: number;
+  order_id?: number | null;
 }
 
 export default function KeuanganComponent() {
-  const { pesananList } = useKeranjang();
-  const [transaksiCustom, setTransaksiCustom] = useState<TransaksiKas[]>([]);
-  const [deleteTargetId, setDeleteTargetId] = useState<number | string | null>(null);
-
-  const fetchCashFlowFromSupabase = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('cash_flow')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (data && !error) {
-        const mapped: TransaksiKas[] = data.map((c: any) => ({
-          id: c.id,
-          tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
-          keterangan: c.keterangan || 'Catatan Kas',
-          kategori: c.kategori || 'Kas Umum',
-          tipe: c.tipe === 'pemasukan' || c.tipe === 'masuk' ? 'masuk' : 'keluar',
-          nominal: c.nominal || 0,
-        }));
-        setTransaksiCustom(mapped);
-      }
-    } catch (e) {
-      console.error('Fetch Supabase Cash Flow Error:', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchCashFlowFromSupabase();
-  }, []);
-
-  const transaksiPenjualan: TransaksiKas[] = pesananList.map((p: any) => ({
-    id: p.id,
-    tanggal: p.tanggal || 'Hari Ini',
-    keterangan: `Pesanan Web ${p.id} (${p.pembeli})`,
-    kategori: 'Penjualan Web',
-    tipe: 'masuk',
-    nominal: p.total || 0,
-  }));
-
-  const transaksi = [...transaksiPenjualan, ...transaksiCustom];
-
+  const [transaksi, setTransaksi] = useState<TransaksiKas[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filterTipe, setFilterTipe] = useState<'semua' | 'masuk' | 'keluar'>('semua');
   const [showModal, setShowModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TransaksiKas | null>(null);
 
   const [formKas, setFormKas] = useState({
     keterangan: '',
@@ -75,6 +39,109 @@ export default function KeuanganComponent() {
     nominal: '',
   });
 
+  // 1. Ambil data mutasi kas langsung dari tabel cash_flow Supabase
+  const fetchCashFlowFromSupabase = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        const mapped: TransaksiKas[] = data.map((c: any) => {
+          const rawTipe = (c.tipe || '').toLowerCase();
+          const normalizedTipe: 'masuk' | 'keluar' = 
+            rawTipe === 'pemasukan' || rawTipe === 'masuk' ? 'masuk' : 'keluar';
+
+          return {
+            id: c.id,
+            tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
+            keterangan: c.keterangan || 'Catatan Kas',
+            kategori: c.kategori || 'Kas Umum',
+            tipe: normalizedTipe,
+            nominal: Number(c.nominal || 0),
+            order_id: c.order_id || null,
+          };
+        });
+        setTransaksi(mapped);
+      }
+    } catch (e) {
+      console.error('Fetch Supabase Cash Flow Error:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCashFlowFromSupabase();
+  }, []);
+
+  // 2. Tambah catatan transaksi kas manual ke Supabase
+  const handleAddTransaksi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formKas.keterangan.trim() || !formKas.nominal) return;
+
+    const nominalNum = Number(formKas.nominal.replace(/[^0-9]/g, ''));
+    const tipePayload = formKas.tipe === 'masuk' ? 'Pemasukan' : 'Pengeluaran';
+    const tanggalHariIni = new Date().toISOString().split('T')[0];
+
+    try {
+      const { data, error } = await supabase
+        .from('cash_flow')
+        .insert([
+          {
+            keterangan: formKas.keterangan.trim(),
+            kategori: formKas.kategori,
+            tipe: tipePayload,
+            nominal: nominalNum,
+            tanggal: tanggalHariIni,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        const newKasItem: TransaksiKas = {
+          id: data.id,
+          tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+          keterangan: data.keterangan,
+          kategori: data.kategori,
+          tipe: formKas.tipe,
+          nominal: nominalNum,
+        };
+        setTransaksi((prev) => [newKasItem, ...prev]);
+      }
+
+      setFormKas({ keterangan: '', kategori: 'Bahan Baku & Kain', tipe: 'keluar', nominal: '' });
+      setShowModal(false);
+    } catch (err: any) {
+      console.error('Error insert cash_flow to Supabase:', err);
+      alert('Gagal mencatat kas: ' + err.message);
+    }
+  };
+
+  // 3. Hapus catatan transaksi kas langsung dari Supabase
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+
+    try {
+      const { error } = await supabase.from('cash_flow').delete().eq('id', targetId);
+      if (error) throw error;
+
+      setTransaksi((prev) => prev.filter((t) => t.id !== targetId));
+    } catch (err: any) {
+      console.error('Error delete cash_flow from Supabase:', err);
+      alert('Gagal menghapus transaksi: ' + err.message);
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  // Perhitungan Ringkasan Kas
   const totalMasuk = transaksi
     .filter((t) => t.tipe === 'masuk')
     .reduce((acc, curr) => acc + curr.nominal, 0);
@@ -85,54 +152,6 @@ export default function KeuanganComponent() {
 
   const saldoBersih = totalMasuk - totalKeluar;
 
-
-  const handleAddTransaksi = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formKas.keterangan || !formKas.nominal) return;
-
-    const nominalNum = Number(formKas.nominal.replace(/[^0-9]/g, ''));
-    const newKas: TransaksiKas = {
-      id: Date.now(),
-      tanggal: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-      keterangan: formKas.keterangan,
-      kategori: formKas.kategori,
-      tipe: formKas.tipe,
-      nominal: nominalNum,
-    };
-
-    setTransaksiCustom([newKas, ...transaksiCustom]);
-    setFormKas({ keterangan: '', kategori: 'Bahan Baku & Kain', tipe: 'keluar', nominal: '' });
-    setShowModal(false);
-
-    try {
-      await supabase.from('cash_flow').insert([
-        {
-          keterangan: formKas.keterangan,
-          kategori: formKas.kategori,
-          tipe: formKas.tipe === 'masuk' ? 'pemasukan' : 'pengeluaran',
-          nominal: nominalNum,
-        },
-      ]);
-    } catch (err) {
-      console.error('Error insert cash_flow to Supabase:', err);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (deleteTargetId !== null) {
-      const targetId = deleteTargetId;
-      setTransaksiCustom((prev) => prev.filter((t) => t.id !== targetId));
-      setDeleteTargetId(null);
-
-      try {
-        await supabase.from('cash_flow').delete().eq('id', targetId);
-      } catch (err) {
-        console.error('Error delete cash_flow from Supabase:', err);
-      }
-    }
-  };
-
-
   const filteredTransaksi = transaksi.filter((t) => {
     if (filterTipe === 'semua') return true;
     return t.tipe === filterTipe;
@@ -140,6 +159,7 @@ export default function KeuanganComponent() {
 
   return (
     <div className="space-y-4 sm:space-y-6 w-full">
+      {/* KARTU RINGKASAN KAS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs flex items-center justify-between">
           <div className="min-w-0">
@@ -186,15 +206,24 @@ export default function KeuanganComponent() {
         </div>
       </div>
 
+      {/* FILTER & TOMBOL AKSI */}
       <div className="bg-white border border-neutral-200 p-3.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 shadow-xs">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          <button
+            onClick={fetchCashFlowFromSupabase}
+            className="p-2 border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-700 transition"
+            title="Refresh Data Kas"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+
           {(['semua', 'masuk', 'keluar'] as const).map((tipe) => (
             <button
               key={tipe}
               onClick={() => setFilterTipe(tipe)}
               className={`text-[10px] sm:text-[11px] font-bold uppercase px-3 sm:px-4 py-2 border transition-all whitespace-nowrap ${
                 filterTipe === tipe
-                  ? 'bg-neutral-950 text-white border-neutral-950'
+                  ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs'
                   : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
               }`}
             >
@@ -205,17 +234,23 @@ export default function KeuanganComponent() {
 
         <button
           onClick={() => setShowModal(true)}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-neutral-950 hover:bg-neutral-800 text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition shrink-0"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition shrink-0 active:scale-95"
         >
           <Plus className="w-4 h-4" />
           <span>Catat Kas Baru</span>
         </button>
       </div>
 
+      {/* TAMPILAN MOBILE */}
       <div className="block md:hidden space-y-3">
-        {filteredTransaksi.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-white border border-neutral-200 p-8 text-center text-neutral-500 flex flex-col items-center justify-center gap-2 shadow-xs">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-xs font-semibold">Mengambil Buku Kas...</span>
+          </div>
+        ) : filteredTransaksi.length === 0 ? (
           <div className="bg-white border border-neutral-200 p-6 text-center text-neutral-400 text-xs shadow-xs">
-            Belum ada catatan mutasi kas.
+            Belum ada catatan mutasi kas di database.
           </div>
         ) : (
           filteredTransaksi.map((item) => (
@@ -246,23 +281,22 @@ export default function KeuanganComponent() {
                 </div>
               </div>
 
-              {typeof item.id === 'number' && (
-                <div className="pt-2 border-t border-neutral-100 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTargetId(item.id)}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Hapus Catatan</span>
-                  </button>
-                </div>
-              )}
+              <div className="pt-2 border-t border-neutral-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(item)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Catatan</span>
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
 
+      {/* TAMPILAN DESKTOP TABLE */}
       <div className="hidden md:block bg-white border border-neutral-200 overflow-x-auto shadow-xs">
         <table className="w-full text-left text-xs min-w-[640px]">
           <thead className="bg-neutral-100/70 border-b border-neutral-200 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
@@ -276,10 +310,17 @@ export default function KeuanganComponent() {
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 font-medium">
-            {filteredTransaksi.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-neutral-500">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-neutral-800" />
+                  <span>Mengambil data kas dari Supabase...</span>
+                </td>
+              </tr>
+            ) : filteredTransaksi.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-neutral-400 text-xs">
-                  Belum ada catatan mutasi kas.
+                  Belum ada catatan mutasi kas di database.
                 </td>
               </tr>
             ) : (
@@ -308,17 +349,13 @@ export default function KeuanganComponent() {
                     {item.tipe === 'masuk' ? '+' : '-'} Rp {item.nominal.toLocaleString('id-ID')}
                   </td>
                   <td className="p-4 text-center whitespace-nowrap">
-                    {typeof item.id === 'number' ? (
-                      <button
-                        onClick={() => setDeleteTargetId(item.id)}
-                        className="p-1 text-neutral-400 hover:text-rose-600 transition rounded"
-                        title="Hapus Catatan"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <span className="text-[10px] text-neutral-300 uppercase font-bold">Otomatis</span>
-                    )}
+                    <button
+                      onClick={() => setDeleteTarget(item)}
+                      className="p-1.5 text-neutral-400 hover:text-rose-600 transition rounded"
+                      title="Hapus Catatan"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -327,17 +364,15 @@ export default function KeuanganComponent() {
         </table>
       </div>
 
+      {/* MODAL CATAT KAS BARU */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div
-            className="fixed inset-0"
-            onClick={() => setShowModal(false)}
-          />
+          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
 
           <div className="relative z-10 w-full max-w-md bg-white border border-neutral-200 shadow-2xl p-5 sm:p-7 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5 sm:pb-3">
               <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
-                Catat Transaksi Kas
+                Catat Transaksi Kas ke Supabase
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900">
                 <X className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -412,7 +447,7 @@ export default function KeuanganComponent() {
                   placeholder="Contoh: 350000"
                   value={formKas.nominal}
                   onChange={(e) => setFormKas({ ...formKas, nominal: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white font-bold"
                 />
               </div>
 
@@ -436,25 +471,26 @@ export default function KeuanganComponent() {
         </div>
       )}
 
-      {deleteTargetId !== null && (
+      {/* MODAL KONFIRMASI HAPUS */}
+      {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0"
-            onClick={() => setDeleteTargetId(null)}
-          />
+          <div className="fixed inset-0" onClick={() => setDeleteTarget(null)} />
           <div className="relative z-10 bg-white p-5 sm:p-6 max-w-sm w-full space-y-4 text-center shadow-2xl border border-neutral-200">
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
             <div className="space-y-1.5">
               <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
                 Hapus Catatan Kas?
               </h3>
               <p className="text-[11px] sm:text-xs text-neutral-600 leading-relaxed">
-                Catatan mutasi kas ini akan dihapus dari buku kas.
+                Catatan mutasi <strong className="text-neutral-900">"{deleteTarget.keterangan}"</strong> akan dihapus permanen dari tabel database Supabase.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">
               <button
                 type="button"
-                onClick={() => setDeleteTargetId(null)}
+                onClick={() => setDeleteTarget(null)}
                 className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-[11px] sm:text-xs font-bold uppercase py-2 transition"
               >
                 Batal
@@ -464,7 +500,7 @@ export default function KeuanganComponent() {
                 onClick={confirmDelete}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white text-[11px] sm:text-xs font-bold uppercase py-2 transition shadow-xs"
               >
-                Hapus
+                Ya, Hapus
               </button>
             </div>
           </div>

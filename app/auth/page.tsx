@@ -4,12 +4,18 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Lock, Phone } from 'lucide-react';
+import { ArrowLeft, User, Mail, Lock, Phone, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../penyimpanan/authcontext';
+import { supabase } from '../penyimpanan/supabase';
 import Footer from '../Footer';
 
 export default function AuthPage() {
   const [isLoginMode, setIsLoginMode] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
   const router = useRouter();
   const { login } = useAuth();
 
@@ -20,18 +26,106 @@ export default function AuthPage() {
     password: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleToggleMode = (loginMode: boolean) => {
+    setIsLoginMode(loginMode);
+    setErrorMsg('');
+    setSuccessMsg('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login({
-      name: formData.name || formData.email.split('@')[0],
-      email: formData.email,
-      phone: formData.phone,
-    });
-    router.push('/profile');
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsLoading(true);
+
+    try {
+      if (isLoginMode) {
+        // 1. PROSES MASUK / LOGIN DENGAN SUPABASE AUTH
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: formData.email.trim(),
+          password: formData.password,
+        });
+
+        if (authError || !authData.user) {
+          throw new Error(authError?.message || 'Email atau kata sandi yang Anda masukkan salah.');
+        }
+
+        // Ambil data profil pelanggan dari tabel profiles
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('nama, no_hp, email, alamat')
+          .eq('id', authData.user.id)
+          .single();
+
+        login({
+          name: profile?.nama || formData.email.split('@')[0],
+          email: authData.user.email || formData.email,
+          phone: profile?.no_hp || '',
+        });
+
+        router.push('/profile');
+      } else {
+        // 2. PROSES DAFTAR AKUN BARU KE SUPABASE AUTH
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email.trim(),
+          password: formData.password,
+          options: {
+            data: {
+              nama: formData.name.trim(),
+              no_hp: formData.phone.trim(),
+            },
+          },
+        });
+
+        if (signUpError || !signUpData.user) {
+          throw new Error(signUpError?.message || 'Pendaftaran akun gagal. Silakan coba lagi.');
+        }
+
+        // Simpan / Sinkronkan data ke tabel profiles
+        const formattedPhone = formData.phone.trim().startsWith('0')
+          ? '62' + formData.phone.trim().slice(1)
+          : formData.phone.trim();
+
+        await supabase.from('profiles').upsert([
+          {
+            id: signUpData.user.id,
+            email: formData.email.trim(),
+            nama: formData.name.trim(),
+            no_hp: formattedPhone,
+            role: 'customer',
+          },
+        ]);
+
+        login({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          phone: formattedPhone,
+        });
+
+        setSuccessMsg('Akun berhasil dibuat! Mengalihkan ke halaman profil...');
+        setTimeout(() => {
+          router.push('/profile');
+        }, 1200);
+      }
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      let pesan = err.message || 'Terjadi kesalahan pada sistem autentikasi.';
+      if (pesan.includes('User already registered')) {
+        pesan = 'Email ini sudah terdaftar. Silakan pilih tab "Masuk Akun".';
+      } else if (pesan.includes('Password should be at least')) {
+        pesan = 'Kata sandi minimal harus terdiri dari 6 karakter.';
+      } else if (pesan.includes('Invalid login credentials')) {
+        pesan = 'Email atau kata sandi tidak sesuai.';
+      }
+      setErrorMsg(pesan);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
+      {/* HEADER */}
       <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
@@ -65,8 +159,10 @@ export default function AuthPage() {
         </div>
       </header>
 
+      {/* FORM AUTHENTICATION CONTAINER */}
       <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="w-full max-w-md bg-white border border-neutral-200 p-6 sm:p-8 shadow-xs">
+          
           <div className="flex flex-col items-center justify-center text-center mb-5 sm:mb-6 space-y-1">
             <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0 mb-1">
               <Image
@@ -87,24 +183,40 @@ export default function AuthPage() {
             </div>
           </div>
 
+          {/* TAB PILIHAN MODE DAFTAR / MASUK */}
           <div className="flex border-b border-neutral-200 mb-5 sm:mb-6 text-[11px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-bold">
             <button
-              onClick={() => setIsLoginMode(false)}
+              type="button"
+              onClick={() => handleToggleMode(false)}
               className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
-                !isLoginMode ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400 hover:text-neutral-700'
+                !isLoginMode ? 'border-neutral-950 text-neutral-950 font-black' : 'border-transparent text-neutral-400 hover:text-neutral-700'
               }`}
             >
               Daftar Baru
             </button>
             <button
-              onClick={() => setIsLoginMode(true)}
+              type="button"
+              onClick={() => handleToggleMode(true)}
               className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
-                isLoginMode ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400 hover:text-neutral-700'
+                isLoginMode ? 'border-neutral-950 text-neutral-950 font-black' : 'border-transparent text-neutral-400 hover:text-neutral-700'
               }`}
             >
               Masuk Akun
             </button>
           </div>
+
+          {/* NOTIFIKASI ERROR / SUKSES */}
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium leading-relaxed">
+              {errorMsg}
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium leading-relaxed">
+              {successMsg}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             {!isLoginMode && (
@@ -168,22 +280,30 @@ export default function AuthPage() {
               </label>
               <div className="relative">
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-10 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white font-mono"
                 />
-                <Lock className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 sm:top-3 text-neutral-400 hover:text-neutral-700"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] py-3 sm:py-3.5 transition shadow-xs mt-2"
+              disabled={isLoading}
+              className="w-full bg-neutral-950 hover:bg-black disabled:bg-neutral-400 text-white text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] py-3 sm:py-3.5 transition shadow-xs mt-2 flex items-center justify-center gap-2 cursor-pointer"
             >
-              {isLoginMode ? 'Masuk Sekarang' : 'Daftar Akun'}
+              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{isLoginMode ? 'Masuk Sekarang' : 'Daftar Akun'}</span>
             </button>
           </form>
         </div>

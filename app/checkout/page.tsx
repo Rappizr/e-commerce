@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, User, Check, Plus, BookmarkCheck, ChevronDown, Loader2, Trash2, Minus } from 'lucide-react';
+import { ArrowLeft, User, Check, Plus, ChevronDown, Loader2, Trash2, Minus } from 'lucide-react';
 import Footer from '../Footer';
 import { useKeranjang } from '../penyimpanan/KeranjangContext';
 import PembayaranComponent from './component/pembayaran';
@@ -29,6 +29,7 @@ export default function CheckoutPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [createdInvoiceNo, setCreatedInvoiceNo] = useState('');
   const [finalAmount, setFinalAmount] = useState(0);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   // Form Field Penerima
   const [nama, setNama] = useState('');
@@ -50,7 +51,7 @@ export default function CheckoutPage() {
   const [isLoadingShipping, setIsLoadingShipping] = useState(false);
   const [showCourierDropdown, setShowCourierDropdown] = useState(false);
 
-  const { cartItems = [], subtotal = 0, updateQty, hapusItem, kosongkanKeranjang } = useKeranjang() as any;
+  const { cartItems = [], subtotal = 0, updateQty, hapusItem, kosongkanKeranjang } = (useKeranjang() as any) || {};
   
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const courierDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +115,7 @@ export default function CheckoutPage() {
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        console.error('Gagal mengambil tarif:', err);
+        console.error('Gagal mengambil tarif ongkir:', err);
       }
     } finally {
       setIsLoadingShipping(false);
@@ -171,7 +172,7 @@ export default function CheckoutPage() {
     fetchRates(city.city_id);
   };
 
-  // Submit pesanan langsung ke Supabase (orders & order_items)
+  // Submit pesanan langsung ke Supabase
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nama.trim() || !whatsapp.trim() || !selectedCityId || !alamat.trim()) {
@@ -189,7 +190,10 @@ export default function CheckoutPage() {
       return;
     }
 
-    const calculatedTotal = subtotal + selectedCourier.price;
+    setIsSubmittingOrder(true);
+
+    const calculatedShipping = selectedCourier.price || 0;
+    const calculatedTotal = subtotal + calculatedShipping;
     const inv = `ORD-${Date.now()}`;
     const formattedWa = whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp;
 
@@ -205,7 +209,7 @@ export default function CheckoutPage() {
             alamat_lengkap: `${alamat.trim()} (${searchCityInput})`,
             status: 'Menunggu Pembayaran',
             subtotal: subtotal,
-            ongkir: selectedCourier.price,
+            ongkir: calculatedShipping,
             total: calculatedTotal,
             total_harga: calculatedTotal,
             bank_asal: selectedBank.toUpperCase(),
@@ -242,7 +246,9 @@ export default function CheckoutPage() {
 
     } catch (err: any) {
       console.error('Gagal membuat pesanan ke database:', err);
-      alert('Terjadi kesalahan saat menyimpan pesanan. Silakan coba lagi.');
+      alert('Terjadi kesalahan saat menyimpan pesanan: ' + (err.message || 'Silakan coba lagi.'));
+    } finally {
+      setIsSubmittingOrder(false);
     }
   };
 
@@ -259,6 +265,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
+      {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
@@ -286,6 +293,7 @@ export default function CheckoutPage() {
         </div>
       </header>
 
+      {/* FORM CHECKOUT */}
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-12 py-8 sm:py-12">
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif uppercase tracking-tight mb-6 sm:mb-8 text-neutral-900">
           PEMBAYARAN & CHECKOUT
@@ -552,14 +560,15 @@ export default function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={!selectedCourier || isLoadingShipping}
-                className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition ${
-                  !selectedCourier || isLoadingShipping 
+                disabled={!selectedCourier || isLoadingShipping || isSubmittingOrder}
+                className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 ${
+                  !selectedCourier || isLoadingShipping || isSubmittingOrder
                     ? 'bg-neutral-400 cursor-not-allowed' 
-                    : 'bg-neutral-950 hover:bg-black'
+                    : 'bg-neutral-950 hover:bg-black cursor-pointer'
                 }`}
               >
-                BAYAR SEKARANG
+                {isSubmittingOrder && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>{isSubmittingOrder ? 'MEMPROSES PESANAN...' : 'BAYAR SEKARANG'}</span>
               </button>
             </div>
           </div>
