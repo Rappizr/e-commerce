@@ -58,8 +58,11 @@ export default function CheckoutPage() {
   const cityDropdownRef = useRef<HTMLDivElement | null>(null);
   const shippingAbortControllerRef = useRef<AbortController | null>(null);
 
+  const totalWeight = cartItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
+  const totalWeightKg = totalWeight > 0 ? Math.max(1, Math.ceil(totalWeight / 1000)) : 1;
+  const packingFee = cartItems.length > 0 ? totalWeightKg * 3000 : 0;
   const shippingFee = selectedCourier ? selectedCourier.price : 0;
-  const total = subtotal + shippingFee;
+  const total = subtotal + shippingFee + packingFee;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -193,7 +196,9 @@ export default function CheckoutPage() {
     setIsSubmittingOrder(true);
 
     const calculatedShipping = selectedCourier.price || 0;
-    const calculatedTotal = subtotal + calculatedShipping;
+    const calculatedPacking = packingFee;
+    const calculatedTotalOngkir = calculatedShipping + calculatedPacking;
+    const calculatedTotal = subtotal + calculatedTotalOngkir;
     const inv = `ORD-${Date.now()}`;
     const formattedWa = whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp;
 
@@ -209,7 +214,7 @@ export default function CheckoutPage() {
             alamat_lengkap: `${alamat.trim()} (${searchCityInput})`,
             status: 'Menunggu Pembayaran',
             subtotal: subtotal,
-            ongkir: calculatedShipping,
+            ongkir: calculatedTotalOngkir,
             total: calculatedTotal,
             total_harga: calculatedTotal,
             bank_asal: selectedBank.toUpperCase(),
@@ -546,9 +551,20 @@ export default function CheckoutPage() {
                     <span className="font-semibold text-neutral-900">Rp {subtotal.toLocaleString('id-ID')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Biaya Pengiriman</span>
+                    <span>Ongkos Kirim ({selectedCourier ? selectedCourier.courier_name : "Kurir"})</span>
                     <span className="font-semibold text-neutral-900">
-                      {isLoadingShipping ? 'Menghitung...' : `Rp ${shippingFee.toLocaleString('id-ID')}`}
+                      {isLoadingShipping ? "Menghitung..." : (selectedCourier ? "Rp " + shippingFee.toLocaleString("id-ID") : "Pilih Kurir")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5">
+                      <span>Biaya Packing</span>
+                      <span className="text-[10px] text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded font-mono">
+                        {totalWeightKg} kg (Rp 3.000/kg)
+                      </span>
+                    </div>
+                    <span className="font-semibold text-neutral-900">
+                      Rp {packingFee.toLocaleString("id-ID")}
                     </span>
                   </div>
                   <div className="border-t border-neutral-100 pt-3 flex justify-between text-sm font-bold text-neutral-900">
