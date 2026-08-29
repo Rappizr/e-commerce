@@ -31,7 +31,7 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
         if (onLoginSuccess) { onLoginSuccess(); } else { window.location.href = '/admin'; }
         return;
       }
-      // 1. Autentikasi akun ke Supabase Auth
+      // 1. Autentikasi akun ke Katalog Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
@@ -107,7 +107,7 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
               Autentikasi Admin
             </h1>
             <p className="text-[11px] text-neutral-500">
-              Masuk dengan akun admin terdaftar di database Supabase.
+              Masuk dengan akun admin terdaftar di sistem toko.
             </p>
           </div>
 

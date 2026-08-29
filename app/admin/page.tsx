@@ -32,7 +32,7 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // 1. Verifikasi sesi aman langsung ke Supabase Auth & Tabel Profiles
+  // 1. Verifikasi sesi aman langsung ke Katalog Auth & Tabel Profiles
   const checkAdminAuth = async () => {
     try {
       if (typeof window !== "undefined" && localStorage.getItem("almaco_admin_auth") === "true") {
@@ -106,7 +106,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-[#F4F3EE] flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-neutral-900" />
         <div className="text-xs font-bold uppercase tracking-widest text-neutral-500">
-          Memeriksa Hak Akses Admin...
+          Memuat Dashboard Admin...
         </div>
       </div>
     );

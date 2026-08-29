@@ -30,7 +30,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
   const [activePoint, setActivePoint] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // State Statistik dari Supabase
+  // State Statistik dari Katalog
   const [totalPendapatan, setTotalPendapatan] = useState(0);
   const [perluVerifikasiCount, setPerluVerifikasiCount] = useState(0);
   const [totalPesananCount, setTotalPesananCount] = useState(0);

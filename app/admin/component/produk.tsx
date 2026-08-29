@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { 
   Plus, 
-  Trash2, 
+  Trash2,
+  Pencil, 
   AlertTriangle, 
   X, 
   Check, 
@@ -114,6 +115,8 @@ export default function ProdukComponent() {
   }, []);
 
   const [deleteTarget, setDeleteTarget] = useState<ProdukItem | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingItem, setEditingItem] = useState<ProdukItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -141,7 +144,27 @@ export default function ProdukComponent() {
 
   const ukuranTersedia = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'All Size'];
 
+    const handleOpenEdit = (item: ProdukItem) => {
+    setIsEditMode(true);
+    setEditingItem(item);
+    setFormProduk({
+      nama: item.nama,
+      kategori: item.kategori,
+      harga: String(item.harga),
+      stok: String(item.stok),
+      berat: item.berat ? String(item.berat) : "",
+      deskripsi: item.deskripsi,
+      rincianText: (item.rincian || []).join("\n"),
+      warnaList: item.warna || [],
+      ukuranPilihan: item.ukuran || [],
+      gambarList: item.gambarList || [],
+    });
+    setShowAddModal(true);
+  };
+
   const resetForm = () => {
+    setIsEditMode(false);
+    setEditingItem(null);
     setFormProduk({
       nama: '',
       kategori: '',
@@ -381,7 +404,7 @@ export default function ProdukComponent() {
       setTimeout(() => setToastMessage(null), 3500);
     } catch (e: any) {
       console.error('Error insert product to Supabase:', e);
-      alert('Gagal menyimpan produk ke database Supabase: ' + e.message);
+      alert('Gagal menyimpan produk: ' + e.message);
     }
   };
 
@@ -398,7 +421,7 @@ export default function ProdukComponent() {
 
       if (error) throw error;
     } catch (err) {
-      console.error('Gagal update stok di Supabase:', err);
+      console.error('Gagal update stok:', err);
     }
   };
 
@@ -441,7 +464,7 @@ export default function ProdukComponent() {
             Katalog Produk & Galeri
           </h2>
           <p className="text-[10px] sm:text-xs text-neutral-500">
-            Kelola data busana, foto galeri, pilihan warna, ukuran, rincian bahan, berat per pcs, serta stok langsung di Database.
+            Kelola data busana, foto galeri, pilihan warna, ukuran, rincian bahan, berat per pcs, dan stok busana toko.
           </p>
         </div>
         <button
@@ -460,7 +483,7 @@ export default function ProdukComponent() {
       {isLoading ? (
         <div className="bg-white border border-neutral-200 p-12 text-center text-neutral-400 flex flex-col items-center justify-center gap-2">
           <Loader2 className="w-6 h-6 animate-spin text-neutral-700" />
-          <span className="text-xs uppercase tracking-wider font-semibold">Mengambil data dari Supabase...</span>
+          <span className="text-xs uppercase tracking-wider font-semibold">Memuat katalog produk...</span>
         </div>
       ) : produk.length === 0 ? (
         <div className="bg-white border border-neutral-200 p-8 sm:p-14 text-center text-neutral-400 space-y-3 shadow-xs">
@@ -470,7 +493,7 @@ export default function ProdukComponent() {
           <div className="space-y-1">
             <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-800">Katalog Busana Masih Kosong</p>
             <p className="text-[10px] sm:text-xs text-neutral-500 max-w-sm mx-auto">
-              Belum ada produk di database Supabase. Mulai tambahkan pakaian sekarang.
+              Belum ada produk di katalog. Mulai tambahkan pakaian sekarang.
             </p>
           </div>
           <button
@@ -549,7 +572,7 @@ export default function ProdukComponent() {
               <div>
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1.5">
                   <PackagePlus className="w-4 h-4 text-neutral-900" />
-                  <span>Tambah Produk Baru ke Supabase</span>
+                  <span>{isEditMode ? "Edit Data Produk" : "Tambah Produk Baru"}</span>
                 </h3>
               </div>
               <button onClick={() => setShowAddModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900 transition">

@@ -77,7 +77,7 @@ export default function KeuanganComponent() {
     fetchCashFlowFromSupabase();
   }, []);
 
-  // 2. Tambah catatan transaksi kas manual ke Supabase
+  // 2. Tambah catatan transaksi kas manual ke Katalog
   const handleAddTransaksi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKas.keterangan.trim() || !formKas.nominal) return;
@@ -123,7 +123,7 @@ export default function KeuanganComponent() {
     }
   };
 
-  // 3. Hapus catatan transaksi kas langsung dari Supabase
+  // 3. Hapus catatan transaksi kas langsung dari Katalog
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
@@ -314,7 +314,7 @@ export default function KeuanganComponent() {
               <tr>
                 <td colSpan={6} className="p-8 text-center text-neutral-500">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-neutral-800" />
-                  <span>Mengambil data kas dari Supabase...</span>
+                  <span>Mengambil data kas dari Katalog...</span>
                 </td>
               </tr>
             ) : filteredTransaksi.length === 0 ? (
@@ -372,7 +372,7 @@ export default function KeuanganComponent() {
           <div className="relative z-10 w-full max-w-md bg-white border border-neutral-200 shadow-2xl p-5 sm:p-7 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5 sm:pb-3">
               <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
-                Catat Transaksi Kas ke Supabase
+                Catat Transaksi Kas ke Katalog
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900">
                 <X className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -484,7 +484,7 @@ export default function KeuanganComponent() {
                 Hapus Catatan Kas?
               </h3>
               <p className="text-[11px] sm:text-xs text-neutral-600 leading-relaxed">
-                Catatan mutasi <strong className="text-neutral-900">"{deleteTarget.keterangan}"</strong> akan dihapus permanen dari tabel database Supabase.
+                Catatan mutasi <strong className="text-neutral-900">"{deleteTarget.keterangan}"</strong> akan dihapus permanen dari tabel sistem toko.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">

@@ -125,7 +125,7 @@ export default function TestimoniComponent() {
     }
   };
 
-  // 2. Simpan foto testimoni langsung ke database Supabase
+  // 2. Simpan foto testimoni langsung ke sistem toko
   const handleSaveFoto = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!previewFoto) return;
@@ -171,7 +171,7 @@ export default function TestimoniComponent() {
     }
   };
 
-  // 3. Toggle status Tayang / Draft di database Supabase
+  // 3. Toggle status Tayang / Draft di sistem toko
   const toggleTayang = async (id: number) => {
     const target = fotoTestimoni.find((t) => t.id === id);
     if (!target) return;
@@ -193,7 +193,7 @@ export default function TestimoniComponent() {
     }
   };
 
-  // 4. Hapus foto testimoni langsung dari database Supabase
+  // 4. Hapus foto testimoni langsung dari sistem toko
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
@@ -235,7 +235,7 @@ export default function TestimoniComponent() {
             Galeri Foto Testimoni ({fotoTestimoni.length})
           </h2>
           <p className="text-[10px] sm:text-[11px] text-neutral-500 mt-0.5">
-            Kelola foto kepuasan pelanggan dan tangkapan layar chat langsung di database Supabase.
+            Kelola foto kepuasan pelanggan dan tangkapan layar chat langsung di sistem toko.
           </p>
         </div>
 
@@ -261,7 +261,7 @@ export default function TestimoniComponent() {
           </div>
           <div className="space-y-1">
             <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-800">Belum Ada Foto Testimoni</p>
-            <p className="text-[10px] sm:text-[11px] text-neutral-400">Belum ada ulasan yang diunggah ke database Supabase.</p>
+            <p className="text-[10px] sm:text-[11px] text-neutral-400">Belum ada ulasan yang diunggah ke sistem toko.</p>
           </div>
           <button
             onClick={() => setShowUploadModal(true)}
@@ -436,7 +436,7 @@ export default function TestimoniComponent() {
                 Hapus Foto Testimoni?
               </h3>
               <p className="text-xs text-neutral-500 leading-relaxed">
-                Foto testimoni ini akan dihapus secara permanen dari tabel database Supabase.
+                Foto testimoni ini akan dihapus secara permanen dari tabel sistem toko.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">

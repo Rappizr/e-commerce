@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -10,7 +10,9 @@ import {
   Loader2, 
   RefreshCw, 
   X,
-  PackageCheck
+  PackageCheck,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
 
@@ -59,7 +61,20 @@ export default function PesananComponent() {
     actionLabel: '',
   });
 
-  const fetchOrdersFromSupabase = async () => {
+  // State Modal Konfirmasi Hapus Pesanan
+  const [deleteModal, setDeleteModal] = useState<{
+    show: boolean;
+    orderId: number | null;
+    invoiceNo: string;
+    isDeleting: boolean;
+  }>({
+    show: false,
+    orderId: null,
+    invoiceNo: '',
+    isDeleting: false,
+  });
+
+  const fetchOrders = async () => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -91,14 +106,14 @@ export default function PesananComponent() {
         setOrders(data as OrderRecord[]);
       }
     } catch (err) {
-      console.error('Fetch Supabase error:', err);
+      console.error('Fetch orders error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchOrdersFromSupabase();
+    fetchOrders();
   }, []);
 
   const openStatusModal = (orderId: number, invoiceNo: string, targetStatus: string, actionLabel: string) => {
@@ -126,9 +141,29 @@ export default function PesananComponent() {
         );
       }
     } catch (err) {
-      console.error('Gagal update status di Supabase:', err);
+      console.error('Gagal update status pesanan:', err);
     } finally {
       setStatusModal({ show: false, orderId: null, invoiceNo: '', targetStatus: '', actionLabel: '' });
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.orderId) return;
+    setDeleteModal((prev) => ({ ...prev, isDeleting: true }));
+
+    try {
+      // 1. Hapus rincian item terlebih dahulu
+      await supabase.from('order_items').delete().eq('order_id', deleteModal.orderId);
+      // 2. Hapus data pesanan utama
+      const { error } = await supabase.from('orders').delete().eq('id', deleteModal.orderId);
+
+      if (!error) {
+        setOrders((prev) => prev.filter((o) => o.id !== deleteModal.orderId));
+      }
+    } catch (err) {
+      console.error('Gagal menghapus pesanan:', err);
+    } finally {
+      setDeleteModal({ show: false, orderId: null, invoiceNo: '', isDeleting: false });
     }
   };
 
@@ -138,89 +173,92 @@ export default function PesananComponent() {
 
     const itemsSummary = (item.order_items || [])
       .map((i) => `• ${i.nama_produk} (${i.ukuran || 'All Size'}, ${i.warna || 'Default'}) x${i.qty}`)
-      .join('\n');
+      .join('%0A');
 
-    const text = [
-      `Assalamu'alaikum *${item.nama_pembeli}*`,
-      `Terima kasih telah berbelanja di *ALMACO FASHION*.`,
+    const message = [
+      `Halo Kak *${item.nama_pembeli}*,`,
+      `Terima kasih telah berbelanja di *ALMACO Official*.`,
       ``,
-      `Rincian Pesanan *(${item.invoice_no})*:`,
+      `Berikut adalah rincian pesanan Anda:`,
+      `📄 No. Invoice: *${item.invoice_no}*`,
       itemsSummary,
-      `• Total Tagihan: *Rp ${Number(item.total).toLocaleString('id-ID')}*`,
-      `• Status: *${item.status}*`,
+      `💰 Total Tagihan: *Rp ${Number(item.total).toLocaleString('id-ID')}*`,
+      `📌 Status: *${item.status}*`,
       ``,
-      `Alamat Pengiriman:`,
-      `${item.alamat_lengkap}`,
-      ``,
-      `Terima kasih! 🙏`,
-    ].join('\n');
+      `Ada yang bisa kami bantu terkait pesanan ini Kak? Terima kasih.`
+    ].join('%0A');
 
-    return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
+    return `https://wa.me/${phone}?text=${message}`;
   };
 
-  const filtered = orders.filter((o) => {
-    let matchStatus = false;
-    if (filterStatus === 'Semua') {
-      matchStatus = true;
-    } else if (filterStatus === 'Menunggu Verifikasi') {
-      matchStatus = o.status === 'Menunggu Verifikasi' || o.status === 'Menunggu Pembayaran';
-    } else {
-      matchStatus = (o.status || '').toLowerCase() === filterStatus.toLowerCase();
-    }
-
+  const filtered = orders.filter((item) => {
+    const matchStatus = filterStatus === 'Semua' || item.status === filterStatus;
+    const q = search.toLowerCase();
     const matchSearch =
-      (o.invoice_no || '').toLowerCase().includes(search.toLowerCase()) ||
-      (o.nama_pembeli || '').toLowerCase().includes(search.toLowerCase());
-
+      item.invoice_no?.toLowerCase().includes(q) ||
+      item.nama_pembeli?.toLowerCase().includes(q) ||
+      item.no_hp?.toLowerCase().includes(q);
     return matchStatus && matchSearch;
   });
 
   return (
     <div className="space-y-4 w-full">
-      {/* FILTER & SEARCH */}
-      <div className="bg-white border border-neutral-200 p-3.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 shadow-xs">
-        <div className="relative w-full sm:w-80">
-          <input
-            type="text"
-            placeholder="Cari Invoice / Nama Pembeli..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-neutral-50 border border-neutral-300 pl-9 pr-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
-          />
-          <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* HEADER & FILTER */}
+      <div className="bg-white border border-neutral-200 p-4 space-y-3 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
+              Daftar Pesanan Pelanggan
+            </h2>
+            <p className="text-[10px] sm:text-xs text-neutral-500">
+              Kelola status transaksi, update pengiriman, kontak pembeli WhatsApp, serta hapus pesanan.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+            <button
+              onClick={fetchOrders}
+              className="p-2 border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-700 transition"
+              title="Segarkan Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
+            {['Semua', 'Menunggu Verifikasi', 'Diproses', 'Dikirim', 'Selesai'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilterStatus(st)}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition border ${
+                  filterStatus === st
+                    ? 'bg-neutral-950 text-white border-neutral-950'
+                    : 'bg-neutral-50 text-neutral-600 border-neutral-200 hover:bg-neutral-100'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          <button
-            onClick={fetchOrdersFromSupabase}
-            className="p-2 border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-700 transition"
-            title="Refresh Data dari Database"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-
-          {['Semua', 'Menunggu Verifikasi', 'Diproses', 'Dikirim', 'Selesai'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`text-[10px] sm:text-[11px] font-bold uppercase px-3 py-1.5 border transition-all whitespace-nowrap ${
-                filterStatus === st
-                  ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs'
-                  : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
+        {/* SEARCH BOX */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Cari Invoice, Nama Pembeli, atau No. WhatsApp..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-neutral-50 border border-neutral-200 pl-8 pr-3 py-2 text-xs text-neutral-800 placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-900"
+          />
+          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
         </div>
       </div>
 
-      {/* TAMPILAN MOBILE */}
+      {/* TAMPILAN MOBILE CARDS */}
       <div className="block md:hidden space-y-3">
         {isLoading ? (
           <div className="bg-white border border-neutral-200 p-8 text-center text-neutral-500 flex flex-col items-center justify-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span className="text-xs font-semibold">Mengambil data Supabase...</span>
+            <Loader2 className="w-5 h-5 animate-spin text-neutral-800" />
+            <span className="text-xs font-semibold">Memuat daftar pesanan...</span>
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-white border border-neutral-200 p-6 text-center text-neutral-400 text-xs shadow-xs">
@@ -236,17 +274,27 @@ export default function PesananComponent() {
                     {new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
-                <span className={`inline-block px-2 py-0.5 text-[9px] font-bold uppercase border ${
-                  item.status === 'Menunggu Verifikasi' || item.status === 'Menunggu Pembayaran'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : item.status === 'Diproses'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : item.status === 'Dikirim'
-                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                }`}>
-                  {item.status}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-block px-2 py-0.5 text-[9px] font-bold uppercase border ${
+                    item.status === 'Menunggu Verifikasi' || item.status === 'Menunggu Pembayaran'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : item.status === 'Diproses'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : item.status === 'Dikirim'
+                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {item.status}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModal({ show: true, orderId: item.id, invoiceNo: item.invoice_no, isDeleting: false })}
+                    className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition"
+                    title="Hapus Pesanan"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1 text-xs">
@@ -329,7 +377,7 @@ export default function PesananComponent() {
               <th className="p-4">Rincian Item & Alamat</th>
               <th className="p-4">Total</th>
               <th className="p-4">Status</th>
-              <th className="p-4 text-center">Aksi Status</th>
+              <th className="p-4 text-center">Aksi Status & Kelola</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 font-medium">
@@ -337,7 +385,7 @@ export default function PesananComponent() {
               <tr>
                 <td colSpan={6} className="p-8 text-center text-neutral-500">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-neutral-800" />
-                  <span>Mengambil data dari database Supabase...</span>
+                  <span>Memuat daftar pesanan...</span>
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
@@ -401,38 +449,50 @@ export default function PesananComponent() {
                   </td>
 
                   <td className="p-4 text-center whitespace-nowrap">
-                    {(item.status === 'Menunggu Verifikasi' || item.status === 'Menunggu Pembayaran') && (
+                    <div className="flex items-center justify-center gap-1.5">
+                      {(item.status === 'Menunggu Verifikasi' || item.status === 'Menunggu Pembayaran') && (
+                        <button
+                          type="button"
+                          onClick={() => openStatusModal(item.id, item.invoice_no, 'Diproses', 'Verifikasi Pembayaran')}
+                          className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800 transition shadow-xs"
+                        >
+                          Verifikasi
+                        </button>
+                      )}
+                      {item.status === 'Diproses' && (
+                        <button
+                          type="button"
+                          onClick={() => openStatusModal(item.id, item.invoice_no, 'Dikirim', 'Kirim Pesanan')}
+                          className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800 inline-flex items-center gap-1 transition shadow-xs"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>Kirim</span>
+                        </button>
+                      )}
+                      {item.status === 'Dikirim' && (
+                        <button
+                          type="button"
+                          onClick={() => openStatusModal(item.id, item.invoice_no, 'Selesai', 'Tandai Selesai')}
+                          className="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold uppercase hover:bg-emerald-800 inline-flex items-center gap-1 transition shadow-xs"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Selesai</span>
+                        </button>
+                      )}
+                      {item.status === 'Selesai' && (
+                        <span className="text-[10px] font-bold text-neutral-400 uppercase">Tuntas</span>
+                      )}
+
+                      {/* TOMBOL HAPUS PESANAN */}
                       <button
                         type="button"
-                        onClick={() => openStatusModal(item.id, item.invoice_no, 'Diproses', 'Verifikasi Pembayaran')}
-                        className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800 transition shadow-xs"
+                        onClick={() => setDeleteModal({ show: true, orderId: item.id, invoiceNo: item.invoice_no, isDeleting: false })}
+                        className="p-1.5 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 border border-neutral-200 hover:border-rose-200 rounded transition"
+                        title="Hapus Pesanan"
                       >
-                        Verifikasi
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
-                    {item.status === 'Diproses' && (
-                      <button
-                        type="button"
-                        onClick={() => openStatusModal(item.id, item.invoice_no, 'Dikirim', 'Kirim Pesanan')}
-                        className="px-3 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase hover:bg-neutral-800 inline-flex items-center gap-1 transition shadow-xs"
-                      >
-                        <Truck className="w-3 h-3" />
-                        <span>Kirim</span>
-                      </button>
-                    )}
-                    {item.status === 'Dikirim' && (
-                      <button
-                        type="button"
-                        onClick={() => openStatusModal(item.id, item.invoice_no, 'Selesai', 'Tandai Selesai')}
-                        className="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold uppercase hover:bg-emerald-800 inline-flex items-center gap-1 transition shadow-xs"
-                      >
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Selesai</span>
-                      </button>
-                    )}
-                    {item.status === 'Selesai' && (
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase">Tuntas</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -441,7 +501,7 @@ export default function PesananComponent() {
         </table>
       </div>
 
-      {/* MODAL POPUP UPDATE STATUS DI TENGAH */}
+      {/* MODAL POPUP UPDATE STATUS */}
       {statusModal.show && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div
@@ -450,49 +510,98 @@ export default function PesananComponent() {
           />
           
           <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
-            {/* LOGO & BRANDING */}
             <div className="inline-flex items-center gap-2.5 mx-auto">
               <div className="relative w-8 h-8 shrink-0">
                 <Image src="/logo.png" alt="Almaco Logo" fill className="object-contain" />
               </div>
               <div className="text-left leading-tight">
                 <div className="text-base uppercase tracking-tight text-neutral-950">
-                  <span className="font-black">ALMACO</span>
-                  <span className="font-light text-neutral-500">FASHION</span>
+                  <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
                 </div>
-                <span className="text-[8px] text-neutral-400 font-medium tracking-wide block">
-                  Fashionable • Syari • Berkualitas
+                <span className="text-[9px] text-neutral-400 font-medium tracking-wide block">
+                  Official Store
                 </span>
               </div>
             </div>
 
-            <div className="w-10 h-10 rounded-full bg-neutral-100 text-neutral-900 border border-neutral-200 flex items-center justify-center mx-auto mt-1">
-              <PackageCheck className="w-5 h-5" />
+            <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto text-neutral-900">
+              <PackageCheck className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
               <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-950">
-                Ubah Status Pesanan
+                {statusModal.actionLabel}
               </h3>
               <p className="text-xs text-neutral-500 leading-relaxed">
-                Apakah Anda yakin ingin mengubah status pesanan <strong className="text-neutral-900 font-mono">{statusModal.invoiceNo}</strong> menjadi <strong className="text-neutral-950 uppercase">{statusModal.targetStatus}</strong>?
+                Ubah status pesanan <strong className="font-mono text-neutral-900">{statusModal.invoiceNo}</strong> menjadi <strong className="text-neutral-900">"{statusModal.targetStatus}"</strong>?
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setStatusModal({ show: false, orderId: null, invoiceNo: '', targetStatus: '', actionLabel: '' })}
-                className="w-full py-2.5 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-700 hover:text-neutral-950 text-xs font-bold uppercase tracking-wider transition"
+                className="w-full py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold uppercase tracking-wider transition"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleConfirmStatusUpdate}
-                className="w-full py-2.5 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+                className="w-full py-2.5 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition shadow-md"
               >
-                Ya, Lanjutkan
+                Konfirmasi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL POPUP HAPUS PESANAN */}
+      {deleteModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0"
+            onClick={() => !deleteModal.isDeleting && setDeleteModal({ show: false, orderId: null, invoiceNo: '', isDeleting: false })}
+          />
+          
+          <div className="relative z-10 w-full max-w-sm bg-white border border-rose-200 shadow-2xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto border border-rose-200">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-950">
+                Hapus Pesanan
+              </h3>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                Apakah Anda yakin ingin menghapus data pesanan <strong className="font-mono text-neutral-900">{deleteModal.invoiceNo}</strong> secara permanen?
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                disabled={deleteModal.isDeleting}
+                onClick={() => setDeleteModal({ show: false, orderId: null, invoiceNo: '', isDeleting: false })}
+                className="w-full py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold uppercase tracking-wider transition disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deleteModal.isDeleting}
+                onClick={handleConfirmDelete}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition shadow-md flex items-center justify-center gap-1.5 disabled:opacity-60"
+              >
+                {deleteModal.isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <span>Hapus Pesanan</span>
+                )}
               </button>
             </div>
           </div>
