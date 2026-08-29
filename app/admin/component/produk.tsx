@@ -549,13 +549,27 @@ export default function ProdukComponent() {
                   </button>
                 </div>
 
-                <button 
-                  onClick={() => setDeleteTarget(item)} 
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span className="hidden xs:inline">Hapus</span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(item)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral-950 text-white hover:bg-black text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
+                    title="Edit Produk"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(item)}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
+                    title="Hapus Produk"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span className="hidden xs:inline">Hapus</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
