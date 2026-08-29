@@ -7,7 +7,9 @@ const KOMERCE_API_KEY = process.env.RAJAONGKIR_API_KEY || 'C7JHXYk16893a0f7daa08
 // 1. GET: Pencarian Kecamatan / Kota Tujuan
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const query = (searchParams.get('q') || '').trim();
+  const rawQuery = (searchParams.get("q") || "").trim();
+  const toTitleCase = (str: string) => str.replace(/\b\w/g, (char) => char.toUpperCase());
+  const query = toTitleCase(rawQuery);
 
   if (!query || query.length < 3) {
     return NextResponse.json({ results: [] });
