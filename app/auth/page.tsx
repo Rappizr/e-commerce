@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Lock, Phone, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../penyimpanan/authcontext';
 import { supabase } from '../penyimpanan/supabase';
 import Footer from '../Footer';
@@ -39,18 +39,23 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
+      const cleanEmail = formData.email.trim().toLowerCase();
+      const cleanPhone = formData.phone.trim();
+      const formattedPhone = cleanPhone.startsWith('0')
+        ? '62' + cleanPhone.slice(1)
+        : cleanPhone;
+
       if (isLoginMode) {
-        // 1. PROSES MASUK / LOGIN DENGAN SUPABASE AUTH
+        // 1. PROSES MASUK (LOGIN)
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: formData.email.trim(),
+          email: cleanEmail,
           password: formData.password,
         });
 
         if (authError || !authData.user) {
-          throw new Error(authError?.message || 'Email atau kata sandi yang Anda masukkan salah.');
+          throw new Error(authError?.message || 'Email atau kata sandi tidak sesuai.');
         }
 
-        // Ambil data profil pelanggan dari tabel profiles
         const { data: profile } = await supabase
           .from('profiles')
           .select('nama, no_hp, email, alamat')
@@ -58,65 +63,77 @@ export default function AuthPage() {
           .single();
 
         login({
-          name: profile?.nama || formData.email.split('@')[0],
-          email: authData.user.email || formData.email,
+          id: authData.user.id,
+          name: profile?.nama || cleanEmail.split('@')[0],
+          email: authData.user.email || cleanEmail,
           phone: profile?.no_hp || '',
         });
 
         router.push('/profile');
       } else {
-        // 2. PROSES DAFTAR AKUN BARU KE SUPABASE AUTH
+        // 2. PROSES DAFTAR (SIGN UP)
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: formData.email.trim(),
+          email: cleanEmail,
           password: formData.password,
           options: {
             data: {
               nama: formData.name.trim(),
-              no_hp: formData.phone.trim(),
+              no_hp: formattedPhone,
             },
           },
         });
 
-        if (signUpError || !signUpData.user) {
-          throw new Error(signUpError?.message || 'Pendaftaran akun gagal. Silakan coba lagi.');
+        if (signUpError) {
+          throw signUpError;
+        }
+
+        if (!signUpData.user) {
+          throw new Error('Pendaftaran akun gagal. Silakan coba lagi.');
         }
 
         // Simpan / Sinkronkan data ke tabel profiles
-        const formattedPhone = formData.phone.trim().startsWith('0')
-          ? '62' + formData.phone.trim().slice(1)
-          : formData.phone.trim();
-
-        await supabase.from('profiles').upsert([
+        const { error: profileError } = await supabase.from('profiles').upsert([
           {
             id: signUpData.user.id,
-            email: formData.email.trim(),
+            email: cleanEmail,
             nama: formData.name.trim(),
             no_hp: formattedPhone,
             role: 'customer',
           },
         ]);
 
+        if (profileError) {
+          console.error('Gagal menyimpan baris profile:', profileError);
+        }
+
         login({
+          id: signUpData.user.id,
           name: formData.name.trim(),
-          email: formData.email.trim(),
+          email: cleanEmail,
           phone: formattedPhone,
         });
 
-        setSuccessMsg('Akun berhasil dibuat! Mengalihkan ke halaman profil...');
+        setSuccessMsg('Akun berhasil didaftarkan! Mengalihkan...');
         setTimeout(() => {
           router.push('/profile');
-        }, 1200);
+        }, 1000);
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      let pesan = err.message || 'Terjadi kesalahan pada sistem autentikasi.';
-      if (pesan.includes('User already registered')) {
+      console.error('Auth submit error:', err);
+      let pesan = err.message || 'Terjadi kendala pada sistem autentikasi.';
+
+      if (pesan.includes('Signups not allowed') || pesan.includes('signups are disabled')) {
+        pesan = 'Pendaftaran akun baru saat ini dinonaktifkan di dashboard Supabase. Aktifkan opsi "Allow new users to sign up" pada menu Auth Providers.';
+      } else if (pesan.includes('rate limit')) {
+        pesan = 'Terlalu banyak percobaan. Harap tunggu beberapa saat lagi.';
+      } else if (pesan.includes('User already registered')) {
         pesan = 'Email ini sudah terdaftar. Silakan pilih tab "Masuk Akun".';
       } else if (pesan.includes('Password should be at least')) {
         pesan = 'Kata sandi minimal harus terdiri dari 6 karakter.';
       } else if (pesan.includes('Invalid login credentials')) {
-        pesan = 'Email atau kata sandi tidak sesuai.';
+        pesan = 'Email atau kata sandi tidak cocok.';
       }
+
       setErrorMsg(pesan);
     } finally {
       setIsLoading(false);
@@ -125,11 +142,11 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
-      {/* HEADER */}
-      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
-            <div className="relative w-9 h-9 sm:w-12 sm:h-12 shrink-0">
+      {/* NAVBAR */}
+      <header className="sticky top-0 z-50 w-full bg-white border-b border-neutral-200/80">
+        <div className="w-full max-w-[1500px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -138,11 +155,12 @@ export default function AuthPage() {
                 className="object-contain"
               />
             </div>
-            <div className="leading-none truncate">
-              <div className="text-lg sm:text-2xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
+            <div className="leading-tight truncate">
+              <div className="text-base sm:text-lg tracking-tight uppercase">
+                <span className="font-extrabold text-neutral-950">ALMACO</span>
+                <span className="font-light text-neutral-400">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1 truncate">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-normal tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -150,16 +168,15 @@ export default function AuthPage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-xs shrink-0"
+            className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-medium tracking-[0.2em] uppercase text-neutral-900 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-4 sm:px-5 py-2 sm:py-2.5 transition-colors duration-200 shadow-xs"
           >
-            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Kembali ke Beranda</span>
-            <span className="xs:hidden">Kembali</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>BELANJA</span>
           </Link>
         </div>
       </header>
 
-      {/* FORM AUTHENTICATION CONTAINER */}
+      {/* FORM AUTHENTICATION */}
       <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="w-full max-w-md bg-white border border-neutral-200 p-6 sm:p-8 shadow-xs">
           
@@ -183,8 +200,8 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {/* TAB PILIHAN MODE DAFTAR / MASUK */}
-          <div className="flex border-b border-neutral-200 mb-5 sm:mb-6 text-[11px] sm:text-xs uppercase tracking-wider sm:tracking-widest font-bold">
+          {/* TAB MODE */}
+          <div className="flex border-b border-neutral-200 mb-5 sm:mb-6 text-[11px] sm:text-xs uppercase tracking-wider font-bold">
             <button
               type="button"
               onClick={() => handleToggleMode(false)}
@@ -205,7 +222,6 @@ export default function AuthPage() {
             </button>
           </div>
 
-          {/* NOTIFIKASI ERROR / SUKSES */}
           {errorMsg && (
             <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium leading-relaxed">
               {errorMsg}

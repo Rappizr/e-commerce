@@ -513,6 +513,54 @@ export default function Beranda() {
         )}
       </section>
 
+            {/* TESTIMONI */}
+      {testimoniList.length > 0 && (
+        <>
+          <div className="w-full bg-neutral-900 text-white py-2.5 overflow-hidden border-y border-neutral-800">
+            <div className="animate-marquee flex items-center">
+              {deliveryTicker.concat(deliveryTicker).map((item: string, idx: number) => (
+                <span
+                  key={idx}
+                  className="text-[10px] sm:text-xs font-bold tracking-[0.25em] uppercase text-neutral-400 mx-4 select-none whitespace-nowrap"
+                >
+                  ✦ {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <section id="testimoni" className="bg-[#EFECE6] py-8 sm:py-14 border-b border-neutral-200 overflow-hidden w-full">
+            <div className="w-full px-4 sm:px-8 mb-4 sm:mb-8 text-center">
+              <p className="text-[9px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
+                BUKTI PENGIRIMAN ASLI
+              </p>
+              <h2 className="text-xl sm:text-3xl font-serif uppercase tracking-tight">
+                TESTIMONI PELANGGAN
+              </h2>
+            </div>
+
+            <div className="w-full overflow-hidden">
+              <div className="animate-marquee-slow flex items-center">
+                {testimoniList.concat(testimoniList).map((item: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="w-[140px] sm:w-[240px] aspect-[3/4] relative bg-neutral-200 mx-2 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
+                  >
+                    <Image
+                      src={item.foto_url}
+                      alt={`Testimoni ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 640px) 140px, 240px"
+                      className="object-cover object-center"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
       {/* LOKASI BUTIK */}
       <section id="lokasi" className="w-full bg-[#F9F8F6] border-t border-neutral-200 py-8 sm:py-14">
         <div className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12">
@@ -599,53 +647,7 @@ export default function Beranda() {
         </div>
       </section>
 
-      {/* TESTIMONI */}
-      {testimoniList.length > 0 && (
-        <>
-          <div className="w-full bg-neutral-900 text-white py-2.5 overflow-hidden border-y border-neutral-800">
-            <div className="animate-marquee flex items-center">
-              {deliveryTicker.concat(deliveryTicker).map((item: string, idx: number) => (
-                <span
-                  key={idx}
-                  className="text-[10px] sm:text-xs font-bold tracking-[0.25em] uppercase text-neutral-400 mx-4 select-none whitespace-nowrap"
-                >
-                  ✦ {item}
-                </span>
-              ))}
-            </div>
-          </div>
 
-          <section id="testimoni" className="bg-[#EFECE6] py-8 sm:py-14 border-b border-neutral-200 overflow-hidden w-full">
-            <div className="w-full px-4 sm:px-8 mb-4 sm:mb-8 text-center">
-              <p className="text-[9px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
-                BUKTI PENGIRIMAN ASLI
-              </p>
-              <h2 className="text-xl sm:text-3xl font-serif uppercase tracking-tight">
-                TESTIMONI PELANGGAN
-              </h2>
-            </div>
-
-            <div className="w-full overflow-hidden">
-              <div className="animate-marquee-slow flex items-center">
-                {testimoniList.concat(testimoniList).map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="w-[140px] sm:w-[240px] aspect-[3/4] relative bg-neutral-200 mx-2 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
-                  >
-                    <Image
-                      src={item.foto_url}
-                      alt={`Testimoni ${idx + 1}`}
-                      fill
-                      sizes="(max-width: 640px) 140px, 240px"
-                      className="object-cover object-center"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        </>
-      )}
 
       {/* FOOTER */}
       <Footer />
