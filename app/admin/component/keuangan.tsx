@@ -16,13 +16,15 @@ import {
 import { supabase } from '../../penyimpanan/supabase';
 
 interface TransaksiKas {
-  id: number;
+  id: string | number;
   tanggal: string;
   keterangan: string;
   kategori: string;
   tipe: 'masuk' | 'keluar';
   nominal: number;
-  order_id?: number | null;
+  order_id?: number | string | null;
+  isOrder?: boolean;
+  rawDate?: string;
 }
 
 export default function KeuanganComponent() {
@@ -43,29 +45,37 @@ export default function KeuanganComponent() {
   const fetchCashFlowFromSupabase = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('cash_flow')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: cashData } = await supabase.from('cash_flow').select('*').order('created_at', { ascending: false });
+      const manualItems: TransaksiKas[] = (cashData || []).map((c: any) => ({
+        id: c.id,
+        tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
+        keterangan: c.keterangan || 'Catatan Kas',
+        kategori: c.kategori || 'Kas Umum',
+        tipe: (c.tipe || '').toLowerCase().includes('masuk') ? 'masuk' : 'keluar',
+        nominal: Number(c.nominal || 0),
+        order_id: c.order_id || null,
+        isOrder: false,
+        rawDate: c.created_at || c.tanggal || new Date().toISOString(),
+      }));
 
-      if (!error && data) {
-        const mapped: TransaksiKas[] = data.map((c: any) => {
-          const rawTipe = (c.tipe || '').toLowerCase();
-          const normalizedTipe: 'masuk' | 'keluar' = 
-            rawTipe === 'pemasukan' || rawTipe === 'masuk' ? 'masuk' : 'keluar';
+      const { data: ordersData } = await supabase.from('orders').select('id, invoice_no, nama_pembeli, status, total, total_harga, created_at').order('created_at', { ascending: false });
+      const paidStatuses = ['selesai', 'diproses', 'dikirim'];
+      const paidOrders = (ordersData || []).filter((ord: any) => paidStatuses.includes((ord.status || '').toLowerCase()));
+      const recordedOrderIds = new Set(manualItems.filter(m => m.order_id).map(m => String(m.order_id)));
+      const orderIncomeItems: TransaksiKas[] = paidOrders.filter((ord: any) => !recordedOrderIds.has(String(ord.id))).map((ord: any) => ({
+        id: 'ord-' + ord.id,
+        tanggal: ord.created_at ? new Date(ord.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini',
+        keterangan: 'Pesanan ' + (ord.invoice_no || '') + ' - ' + (ord.nama_pembeli || 'Pelanggan'),
+        kategori: 'Penjualan Produk',
+        tipe: 'masuk',
+        nominal: Number(ord.total || ord.total_harga || 0),
+        order_id: ord.id,
+        isOrder: true,
+        rawDate: ord.created_at || new Date().toISOString(),
+      }));
 
-          return {
-            id: c.id,
-            tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
-            keterangan: c.keterangan || 'Catatan Kas',
-            kategori: c.kategori || 'Kas Umum',
-            tipe: normalizedTipe,
-            nominal: Number(c.nominal || 0),
-            order_id: c.order_id || null,
-          };
-        });
-        setTransaksi(mapped);
-      }
+      const combined = [...manualItems, ...orderIncomeItems].sort((a, b) => new Date(b.rawDate || '').getTime() - new Date(a.rawDate || '').getTime());
+      setTransaksi(combined);
     } catch (e) {
       console.error('Fetch Supabase Cash Flow Error:', e);
     } finally {
@@ -126,6 +136,11 @@ export default function KeuanganComponent() {
   // 3. Hapus catatan transaksi kas langsung dari Katalog
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    if (deleteTarget.isOrder) {
+      alert('Pesanan online otomatis tersinkron dengan menu Pesanan. Untuk mengelola, buka menu Pesanan.');
+      setDeleteTarget(null);
+      return;
+    }
     const targetId = deleteTarget.id;
 
     try {
