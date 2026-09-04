@@ -93,7 +93,7 @@ export default function KeuanganComponent() {
     if (!formKas.keterangan.trim() || !formKas.nominal) return;
 
     const nominalNum = Number(formKas.nominal.replace(/[^0-9]/g, ''));
-    const tipePayload = formKas.tipe === 'masuk' ? 'Pemasukan' : 'Pengeluaran';
+    const tipePayload = formKas.tipe === 'masuk' ? 'Masuk' : 'Keluar';
     const tanggalHariIni = new Date().toISOString().split('T')[0];
 
     try {
