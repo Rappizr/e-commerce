@@ -13,7 +13,8 @@ import {
   PackagePlus, 
   Palette, 
   Loader2,
-  Scale 
+  Scale,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
 
@@ -144,17 +145,17 @@ export default function ProdukComponent() {
 
   const ukuranTersedia = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'All Size'];
 
-    const handleOpenEdit = (item: ProdukItem) => {
+  const handleOpenEdit = (item: ProdukItem) => {
     setIsEditMode(true);
     setEditingItem(item);
     setFormProduk({
       nama: item.nama,
       kategori: item.kategori,
-      harga: String(item.harga),
+      harga: item.harga ? item.harga.toLocaleString('id-ID') : '',
       stok: String(item.stok),
-      berat: item.berat ? String(item.berat) : "",
+      berat: item.berat ? String(item.berat) : '',
       deskripsi: item.deskripsi,
-      rincianText: (item.rincian || []).join("\n"),
+      rincianText: (item.rincian || []).join('\n'),
       warnaList: item.warna || [],
       ukuranPilihan: item.ukuran || [],
       gambarList: item.gambarList || [],
@@ -203,7 +204,6 @@ export default function ProdukComponent() {
     setNewKategoriInput('');
     setShowAddKategoriInput(false);
     setToastMessage(`Kategori "${trimmed}" berhasil ditambahkan!`);
-    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const confirmDeleteKategori = () => {
@@ -216,7 +216,6 @@ export default function ProdukComponent() {
     }
     setDeleteKategoriTarget(null);
     setToastMessage(`Kategori "${kat}" berhasil dihapus.`);
-    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleAddCustomColor = (e?: React.FormEvent) => {
@@ -274,8 +273,7 @@ export default function ProdukComponent() {
         gambarList: [...prev.gambarList, ...compressedList],
       }));
 
-      setToastMessage(`${files.length} foto berhasil ditambahkan!`);
-      setTimeout(() => setToastMessage(null), 2500);
+      setToastMessage(`${files.length} foto berhasil ditambahkan ke formulir.`);
     } catch (err) {
       console.error(err);
       setValidationModal({
@@ -326,7 +324,7 @@ export default function ProdukComponent() {
     });
   };
 
-  // 2. Tambah produk langsung ke Supabase
+  // 2. Tambah / Edit Produk ke Supabase
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -343,7 +341,7 @@ export default function ProdukComponent() {
       setValidationModal({
         show: true,
         title: 'Pilih Kategori Busana',
-        message: 'Silakan buat dan klik pilih salah satu Kategori Busana (misal: Daster, Gamis, Abaya) sebelum menyimpan produk.',
+        message: 'Silakan klik dan pilih salah satu Kategori Busana sebelum menyimpan produk.',
       });
       return;
     }
@@ -362,7 +360,7 @@ export default function ProdukComponent() {
       kategori: formProduk.kategori,
       harga: rawHarga,
       stok: Number(formProduk.stok) || 0,
-      berat: formProduk.berat ? Number(formProduk.berat) : null,
+      berat: formProduk.berat ? Number(formProduk.berat) : 350,
       deskripsi: formProduk.deskripsi.trim() || 'Busana modis berkualitas premium dari ALMACO FASHION.',
       rincian: parsedRincian.length > 0 ? parsedRincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
       warna: formProduk.warnaList.length > 0 ? formProduk.warnaList : ['Default'],
@@ -372,38 +370,63 @@ export default function ProdukComponent() {
     };
 
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert([payload])
-        .select()
-        .single();
+      if (isEditMode && editingItem) {
+        // UPDATE DATA PRODUK
+        const { error } = await supabase
+          .from('products')
+          .update(payload)
+          .eq('id', editingItem.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      if (data) {
-        const newInsertedItem: ProdukItem = {
-          id: data.id,
-          nama: data.nama,
-          kategori: data.kategori,
-          harga: Number(data.harga || 0),
-          stok: Number(data.stok || 0),
-          berat: Number(data.berat || 0),
-          deskripsi: data.deskripsi,
-          rincian: data.rincian || [],
-          warna: data.warna || [],
-          ukuran: data.ukuran || [],
-          gambarList: data.gambar_list || [],
-          gambarUtama: data.gambar_utama || '',
-        };
-        setProduk((prev) => [newInsertedItem, ...prev]);
+        setProduk((prev) =>
+          prev.map((item) =>
+            item.id === editingItem.id
+              ? {
+                  ...item,
+                  ...payload,
+                  id: editingItem.id,
+                  gambarList: finalList,
+                  gambarUtama: finalList[0],
+                }
+              : item
+          )
+        );
+        setToastMessage(`Produk "${payload.nama}" berhasil diperbarui!`);
+      } else {
+        // TAMBAH DATA PRODUK BARU
+        const { data, error } = await supabase
+          .from('products')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          const newInsertedItem: ProdukItem = {
+            id: data.id,
+            nama: data.nama,
+            kategori: data.kategori,
+            harga: Number(data.harga || 0),
+            stok: Number(data.stok || 0),
+            berat: Number(data.berat || 0),
+            deskripsi: data.deskripsi,
+            rincian: data.rincian || [],
+            warna: data.warna || [],
+            ukuran: data.ukuran || [],
+            gambarList: data.gambar_list || [],
+            gambarUtama: data.gambar_utama || '',
+          };
+          setProduk((prev) => [newInsertedItem, ...prev]);
+        }
+        setToastMessage(`Produk "${payload.nama}" berhasil diterbitkan ke katalog!`);
       }
 
       setShowAddModal(false);
       resetForm();
-      setToastMessage(`Produk "${payload.nama}" berhasil diterbitkan ke Database!`);
-      setTimeout(() => setToastMessage(null), 3500);
     } catch (e: any) {
-      console.error('Error insert product to Supabase:', e);
+      console.error('Error simpan produk:', e);
       alert('Gagal menyimpan produk: ' + e.message);
     }
   };
@@ -442,18 +465,44 @@ export default function ProdukComponent() {
       alert('Gagal menghapus produk: ' + e.message);
     } finally {
       setDeleteTarget(null);
-      setTimeout(() => setToastMessage(null), 3500);
     }
   };
 
   return (
     <div className="space-y-4 w-full relative">
+      
+      {/* MODAL SUKSES DI TENGAH LAYAR */}
       {toastMessage && (
-        <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-50 bg-neutral-950 text-white px-4 sm:px-5 py-3 sm:py-3.5 shadow-2xl flex items-center gap-2.5 sm:gap-3 border border-neutral-800 animate-in slide-in-from-bottom-4 fade-in duration-300 max-w-[90vw]">
-          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
-            <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={() => setToastMessage(null)}
+          />
+
+          <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200/90 shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+              <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-neutral-950">
+                Pembaruan Berhasil
+              </h3>
+              <p className="text-xs text-neutral-500 leading-relaxed max-w-[280px] mx-auto">
+                {toastMessage}
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-widest py-3 transition shadow-xs cursor-pointer active:scale-[0.99]"
+              >
+                Selesai
+              </button>
+            </div>
           </div>
-          <p className="text-[11px] sm:text-xs font-semibold tracking-wide truncate">{toastMessage}</p>
         </div>
       )}
 
@@ -472,7 +521,7 @@ export default function ProdukComponent() {
             resetForm();
             setShowAddModal(true);
           }}
-          className="inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-3.5 sm:px-4 py-2 sm:py-2.5 shadow-xs transition active:scale-95 shrink-0"
+          className="inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-3.5 sm:px-4 py-2 sm:py-2.5 shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span>Tambah Produk Baru</span>
@@ -501,7 +550,7 @@ export default function ProdukComponent() {
               resetForm();
               setShowAddModal(true);
             }}
-            className="inline-flex items-center gap-1.5 bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider px-4 sm:px-5 py-2 sm:py-2.5 hover:bg-black transition shadow-xs mt-2"
+            className="inline-flex items-center gap-1.5 bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider px-4 sm:px-5 py-2 sm:py-2.5 hover:bg-black transition shadow-xs mt-2 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Mulai Tambah Produk</span>
@@ -537,13 +586,13 @@ export default function ProdukComponent() {
                   <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">Stok:</span>
                   <button
                     onClick={() => handleUpdateStock(item.id, Math.max(0, item.stok - 1))}
-                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition"
+                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
                   >
                     -
                   </button>
                   <button
                     onClick={() => handleUpdateStock(item.id, item.stok + 1)}
-                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition"
+                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
                   >
                     +
                   </button>
@@ -566,7 +615,7 @@ export default function ProdukComponent() {
                     className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
                     title="Hapus Produk"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                     <span className="hidden xs:inline">Hapus</span>
                   </button>
                 </div>
@@ -576,20 +625,20 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PRODUK BARU */}
+      {/* MODAL TAMBAH & EDIT PRODUK */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div className="fixed inset-0" onClick={() => setShowAddModal(false)} />
-          <div className="relative z-10 bg-white border border-neutral-300 max-w-lg w-full rounded-none shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+          <div className="relative z-10 bg-white border border-neutral-300 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             
             <div className="p-3.5 sm:p-4 border-b border-neutral-200 flex items-center justify-between bg-white shrink-0">
               <div>
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1.5">
                   <PackagePlus className="w-4 h-4 text-neutral-900" />
-                  <span>{isEditMode ? "Edit Data Produk" : "Tambah Produk Baru"}</span>
+                  <span>{isEditMode ? 'Edit Data Produk' : 'Tambah Produk Baru'}</span>
                 </h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900 transition">
+              <button onClick={() => setShowAddModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900 transition cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -627,7 +676,7 @@ export default function ProdukComponent() {
                         <button
                           type="button"
                           onClick={() => handleSetPrimaryImage(idx)}
-                          className="absolute top-1 left-1 bg-white/90 text-neutral-900 text-[7px] font-bold uppercase px-1 py-0.2 opacity-0 group-hover:opacity-100 transition"
+                          className="absolute top-1 left-1 bg-white/90 text-neutral-900 text-[7px] font-bold uppercase px-1 py-0.2 opacity-0 group-hover:opacity-100 transition cursor-pointer"
                         >
                           Utama
                         </button>
@@ -635,7 +684,7 @@ export default function ProdukComponent() {
                       <button
                         type="button"
                         onClick={() => handleRemoveSingleImage(idx)}
-                        className="absolute top-1 right-1 bg-rose-600 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition"
+                        className="absolute top-1 right-1 bg-rose-600 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer"
                       >
                         <X className="w-2.5 h-2.5" />
                       </button>
@@ -721,10 +770,10 @@ export default function ProdukComponent() {
                   <button
                     type="button"
                     onClick={() => setShowAddKategoriInput(!showAddKategoriInput)}
-                    className="text-[10px] font-bold text-neutral-900 hover:underline inline-flex items-center gap-0.5"
+                    className="text-[10px] font-bold text-neutral-900 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>{showAddKategoriInput ? 'Tutup' : 'Kategori'}</span>
+                    <span>{showAddKategoriInput ? 'Tutup' : 'Kategori Baru'}</span>
                   </button>
                 </div>
 
@@ -740,7 +789,7 @@ export default function ProdukComponent() {
                     <button
                       type="button"
                       onClick={handleAddKategori}
-                      className="px-2.5 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase"
+                      className="px-2.5 py-1 bg-neutral-950 text-white text-[10px] font-bold uppercase cursor-pointer"
                     >
                       Simpan
                     </button>
@@ -782,7 +831,7 @@ export default function ProdukComponent() {
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
                     <Palette className="w-3.5 h-3.5 text-neutral-500" />
-                    <span>Variasi Warna ({formProduk.warnaList.length} Warna Terpilih)</span>
+                    <span>Variasi Warna ({formProduk.warnaList.length} Terpilih)</span>
                   </label>
                 </div>
 
@@ -797,7 +846,7 @@ export default function ProdukComponent() {
                         <button
                           type="button"
                           onClick={() => handleRemoveColor(warna)}
-                          className="text-neutral-400 hover:text-rose-600 p-0.5"
+                          className="text-neutral-400 hover:text-rose-600 p-0.5 cursor-pointer"
                         >
                           <X className="w-2.5 h-2.5" />
                         </button>
@@ -823,7 +872,7 @@ export default function ProdukComponent() {
                   <button
                     type="button"
                     onClick={() => handleAddCustomColor()}
-                    className="px-3 py-1.5 bg-neutral-900 hover:bg-black text-white text-[10px] font-bold uppercase tracking-wider transition shrink-0 flex items-center gap-1"
+                    className="px-3 py-1.5 bg-neutral-900 hover:bg-black text-white text-[10px] font-bold uppercase tracking-wider transition shrink-0 flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     <span>Tambah</span>
@@ -840,7 +889,7 @@ export default function ProdukComponent() {
                           key={warna}
                           type="button"
                           onClick={() => toggleWarnaPreset(warna)}
-                          className={`px-2 py-0.5 text-[9px] font-semibold border transition ${
+                          className={`px-2 py-0.5 text-[9px] font-semibold border transition cursor-pointer ${
                             isSelected
                               ? 'bg-neutral-950 text-white border-neutral-950'
                               : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
@@ -867,7 +916,7 @@ export default function ProdukComponent() {
                         key={sz}
                         type="button"
                         onClick={() => toggleUkuran(sz)}
-                        className={`px-2.5 py-1 text-[10px] font-bold border transition ${
+                        className={`px-2.5 py-1 text-[10px] font-bold border transition cursor-pointer ${
                           isChecked
                             ? 'bg-neutral-950 text-white border-neutral-950'
                             : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400'
@@ -908,22 +957,22 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* TOMBOL AKSI MODAL */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-200 sticky bottom-0 bg-white">
+              {/* TOMBOL AKSI MODAL FORM */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200 sticky bottom-0 bg-white">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-2 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase tracking-wider"
+                  className="px-4 py-2.5 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase tracking-wider hover:bg-neutral-100 transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isCompressing}
-                  className="px-4 py-2 bg-neutral-950 text-white text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-1"
+                  className="px-5 py-2.5 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Terbitkan</span>
+                  <span>{isEditMode ? 'Simpan Perubahan' : 'Terbitkan'}</span>
                 </button>
               </div>
             </form>
@@ -957,14 +1006,14 @@ export default function ProdukComponent() {
               <button
                 type="button"
                 onClick={() => setDeleteKategoriTarget(null)}
-                className="px-3 py-1.5 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase"
+                className="px-3.5 py-2 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={confirmDeleteKategori}
-                className="px-3.5 py-1.5 bg-rose-600 text-white text-xs font-bold uppercase"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase cursor-pointer"
               >
                 Ya, Hapus
               </button>
@@ -987,10 +1036,10 @@ export default function ProdukComponent() {
                   <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 truncate">
                     Konfirmasi Hapus Produk
                   </h3>
-                  <p className="text-[10px] sm:text-[11px] text-neutral-500 truncate">Tindakan ini menghapus data langsung dari database Supabase.</p>
+                  <p className="text-[10px] sm:text-[11px] text-neutral-500 truncate">Data akan dihapus permanen dari Supabase.</p>
                 </div>
               </div>
-              <button onClick={() => setDeleteTarget(null)} className="p-1 text-neutral-400 hover:text-neutral-900">
+              <button onClick={() => setDeleteTarget(null)} className="p-1 text-neutral-400 hover:text-neutral-900 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1008,19 +1057,19 @@ export default function ProdukComponent() {
             </div>
 
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Apakah Anda yakin ingin menghapus produk ini secara permanen dari database?
+              Apakah Anda yakin ingin menghapus produk ini secara permanen dari database etalase toko?
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="px-3 py-1.5 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase"
+                className="px-3.5 py-2 bg-white border border-neutral-300 text-neutral-700 text-xs font-bold uppercase cursor-pointer"
               >
                 Batal
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-4 py-1.5 bg-rose-600 text-white text-xs font-bold uppercase"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase cursor-pointer shadow-xs"
               >
                 Ya, Hapus Produk
               </button>
@@ -1046,7 +1095,7 @@ export default function ProdukComponent() {
               <button
                 type="button"
                 onClick={() => setValidationModal({ show: false, title: '', message: '' })}
-                className="text-neutral-400 hover:text-neutral-900 p-1"
+                className="text-neutral-400 hover:text-neutral-900 p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1060,7 +1109,7 @@ export default function ProdukComponent() {
               <button
                 type="button"
                 onClick={() => setValidationModal({ show: false, title: '', message: '' })}
-                className="w-full sm:w-auto px-5 py-2 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+                className="w-full sm:w-auto px-5 py-2.5 bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer"
               >
                 Paham & Mengerti
               </button>

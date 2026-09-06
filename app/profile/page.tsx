@@ -47,6 +47,10 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // State Modal Konfirmasi Logout
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   // Form State Biodata
   const [profileData, setProfileData] = useState({
     name: '',
@@ -105,7 +109,6 @@ export default function ProfilePage() {
             alamat: profile.alamat || '',
           });
 
-          // Inisialisasi daftar alamat dari kolom alamat utama jika ada
           if (profile.alamat) {
             setAddresses([
               {
@@ -188,7 +191,6 @@ export default function ProfilePage() {
 
     setAddresses(addedList);
 
-    // Update kolom alamat utama di tabel profiles jika diset default
     if (newAddress.isDefault || addresses.length === 0) {
       setProfileData((prev) => ({ ...prev, alamat: fullAddrString }));
       try {
@@ -284,11 +286,17 @@ export default function ProfilePage() {
     }
   };
 
-  // 6. Logout Akun
-  const handleLogout = async () => {
-    if (confirm('Apakah Anda yakin ingin keluar dari akun ini?')) {
+  // 6. Eksekusi Konfirmasi Logout
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
       await logout();
       router.push('/auth');
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setIsLoggingOut(false);
+      setShowLogoutModal(false);
     }
   };
 
@@ -304,10 +312,10 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
       {/* HEADER */}
-      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
+      <header className="sticky top-0 z-50 w-full bg-white border-b border-neutral-200/80">
+        <div className="w-full max-w-[1500px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -317,10 +325,11 @@ export default function ProfilePage() {
               />
             </div>
             <div className="leading-tight truncate">
-              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
+              <div className="text-base sm:text-lg tracking-tight uppercase">
+                <span className="font-extrabold text-neutral-950">ALMACO</span>
+                <span className="font-light text-neutral-400">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-normal tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -328,11 +337,10 @@ export default function ProfilePage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
+            className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-medium tracking-[0.2em] uppercase text-neutral-900 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-4 sm:px-5 py-2 sm:py-2.5 transition-colors duration-200 shadow-xs"
           >
-            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Kembali ke Beranda</span>
-            <span className="xs:hidden">Beranda</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>BELANJA</span>
           </Link>
         </div>
       </header>
@@ -376,8 +384,8 @@ export default function ProfilePage() {
 
           <button 
             type="button"
-            onClick={handleLogout}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-neutral-300 hover:border-rose-600 hover:bg-rose-50 hover:text-rose-600 bg-white px-4 py-2.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-700 transition-colors shrink-0 cursor-pointer"
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-rose-300 hover:border-rose-600 hover:bg-rose-50 text-rose-700 bg-white px-4 py-2.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-colors shrink-0 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Keluar Akun</span>
@@ -791,6 +799,54 @@ export default function ProfilePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI LOGOUT ELEGAN DI TENGAH */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => !isLoggingOut && setShowLogoutModal(false)}
+          />
+
+          <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200/90 shadow-2xl p-6 sm:p-7 space-y-5 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center mx-auto">
+              <LogOut className="w-5 h-5 ml-0.5" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-neutral-950">
+                Konfirmasi Keluar Akun
+              </h3>
+              <p className="text-xs text-neutral-500 leading-relaxed max-w-xs mx-auto">
+                Apakah Anda yakin ingin keluar dari akun ini? Anda perlu masuk kembali untuk mengakses riwayat dan alamat belanja.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={() => setShowLogoutModal(false)}
+                className="w-full bg-white hover:bg-neutral-100 border border-neutral-300 text-neutral-800 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={handleConfirmLogout}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:bg-rose-400"
+              >
+                {isLoggingOut ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <span>Ya, Keluar</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

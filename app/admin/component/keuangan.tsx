@@ -11,9 +11,14 @@ import {
   DollarSign,
   Loader2,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2,
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
+import ExportExcelModal from './exportexcel';
+import ExportPDFModal from './exportpdf';
 
 interface TransaksiKas {
   id: string | number;
@@ -33,6 +38,11 @@ export default function KeuanganComponent() {
   const [filterTipe, setFilterTipe] = useState<'semua' | 'masuk' | 'keluar'>('semua');
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TransaksiKas | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // State Panggilan Modal
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [showPDFModal, setShowPDFModal] = useState(false);
 
   const [formKas, setFormKas] = useState({
     keterangan: '',
@@ -41,11 +51,15 @@ export default function KeuanganComponent() {
     nominal: '',
   });
 
-  // 1. Ambil data mutasi kas langsung dari tabel cash_flow Supabase
+  // 1. Ambil data mutasi kas dari tabel cash_flow & orders Supabase
   const fetchCashFlowFromSupabase = async () => {
     setIsLoading(true);
     try {
-      const { data: cashData } = await supabase.from('cash_flow').select('*').order('created_at', { ascending: false });
+      const { data: cashData } = await supabase
+        .from('cash_flow')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       const manualItems: TransaksiKas[] = (cashData || []).map((c: any) => ({
         id: c.id,
         tanggal: c.tanggal || (c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini'),
@@ -58,10 +72,15 @@ export default function KeuanganComponent() {
         rawDate: c.created_at || c.tanggal || new Date().toISOString(),
       }));
 
-      const { data: ordersData } = await supabase.from('orders').select('id, invoice_no, nama_pembeli, status, total, total_harga, created_at').order('created_at', { ascending: false });
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('id, invoice_no, nama_pembeli, status, total, total_harga, created_at')
+        .order('created_at', { ascending: false });
+
       const paidStatuses = ['selesai', 'diproses', 'dikirim'];
       const paidOrders = (ordersData || []).filter((ord: any) => paidStatuses.includes((ord.status || '').toLowerCase()));
       const recordedOrderIds = new Set(manualItems.filter(m => m.order_id).map(m => String(m.order_id)));
+
       const orderIncomeItems: TransaksiKas[] = paidOrders.filter((ord: any) => !recordedOrderIds.has(String(ord.id))).map((ord: any) => ({
         id: 'ord-' + ord.id,
         tanggal: ord.created_at ? new Date(ord.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Hari Ini',
@@ -74,7 +93,9 @@ export default function KeuanganComponent() {
         rawDate: ord.created_at || new Date().toISOString(),
       }));
 
-      const combined = [...manualItems, ...orderIncomeItems].sort((a, b) => new Date(b.rawDate || '').getTime() - new Date(a.rawDate || '').getTime());
+      const combined = [...manualItems, ...orderIncomeItems].sort(
+        (a, b) => new Date(b.rawDate || '').getTime() - new Date(a.rawDate || '').getTime()
+      );
       setTransaksi(combined);
     } catch (e) {
       console.error('Fetch Supabase Cash Flow Error:', e);
@@ -87,7 +108,16 @@ export default function KeuanganComponent() {
     fetchCashFlowFromSupabase();
   }, []);
 
-  // 2. Tambah catatan transaksi kas manual ke Katalog
+  const handleNominalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/[^0-9]/g, '');
+    if (!rawVal) {
+      setFormKas((prev) => ({ ...prev, nominal: '' }));
+      return;
+    }
+    const formatted = Number(rawVal).toLocaleString('id-ID');
+    setFormKas((prev) => ({ ...prev, nominal: formatted }));
+  };
+
   const handleAddTransaksi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKas.keterangan.trim() || !formKas.nominal) return;
@@ -121,23 +151,24 @@ export default function KeuanganComponent() {
           kategori: data.kategori,
           tipe: formKas.tipe,
           nominal: nominalNum,
+          rawDate: new Date().toISOString(),
         };
         setTransaksi((prev) => [newKasItem, ...prev]);
       }
 
       setFormKas({ keterangan: '', kategori: 'Bahan Baku & Kain', tipe: 'keluar', nominal: '' });
       setShowModal(false);
+      setToastMessage('Transaksi kas berhasil dicatat ke buku keuangan toko.');
     } catch (err: any) {
       console.error('Error insert cash_flow to Supabase:', err);
       alert('Gagal mencatat kas: ' + err.message);
     }
   };
 
-  // 3. Hapus catatan transaksi kas langsung dari Katalog
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     if (deleteTarget.isOrder) {
-      alert('Pesanan online otomatis tersinkron dengan menu Pesanan. Untuk mengelola, buka menu Pesanan.');
+      alert('Pesanan online otomatis tersinkron dengan menu Pesanan.');
       setDeleteTarget(null);
       return;
     }
@@ -148,6 +179,7 @@ export default function KeuanganComponent() {
       if (error) throw error;
 
       setTransaksi((prev) => prev.filter((t) => t.id !== targetId));
+      setToastMessage('Catatan mutasi kas berhasil dihapus.');
     } catch (err: any) {
       console.error('Error delete cash_flow from Supabase:', err);
       alert('Gagal menghapus transaksi: ' + err.message);
@@ -156,7 +188,6 @@ export default function KeuanganComponent() {
     }
   };
 
-  // Perhitungan Ringkasan Kas
   const totalMasuk = transaksi
     .filter((t) => t.tipe === 'masuk')
     .reduce((acc, curr) => acc + curr.nominal, 0);
@@ -173,8 +204,43 @@ export default function KeuanganComponent() {
   });
 
   return (
-    <div className="space-y-4 sm:space-y-6 w-full">
-      {/* KARTU RINGKASAN KAS */}
+    <div className="space-y-4 sm:space-y-6 w-full relative">
+      {/* TOAST SUKSES */}
+      {toastMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={() => setToastMessage(null)}
+          />
+
+          <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200 shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+              <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-sm sm:text-base font-bold uppercase tracking-wider text-neutral-950">
+                Operasi Berhasil
+              </h3>
+              <p className="text-xs text-neutral-500 leading-relaxed max-w-[280px] mx-auto">
+                {toastMessage}
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-widest py-3 transition shadow-xs cursor-pointer active:scale-[0.99]"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RINGKASAN KAS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs flex items-center justify-between">
           <div className="min-w-0">
@@ -222,11 +288,11 @@ export default function KeuanganComponent() {
       </div>
 
       {/* FILTER & TOMBOL AKSI */}
-      <div className="bg-white border border-neutral-200 p-3.5 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 shadow-xs">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+      <div className="bg-white border border-neutral-200 p-3.5 sm:p-4 flex flex-col lg:flex-row items-center justify-between gap-3 sm:gap-4 shadow-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0">
           <button
             onClick={fetchCashFlowFromSupabase}
-            className="p-2 border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-700 transition"
+            className="p-2 border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-700 transition cursor-pointer"
             title="Refresh Data Kas"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -236,7 +302,7 @@ export default function KeuanganComponent() {
             <button
               key={tipe}
               onClick={() => setFilterTipe(tipe)}
-              className={`text-[10px] sm:text-[11px] font-bold uppercase px-3 sm:px-4 py-2 border transition-all whitespace-nowrap ${
+              className={`text-[10px] sm:text-[11px] font-bold uppercase px-3 sm:px-4 py-2 border transition-all whitespace-nowrap cursor-pointer ${
                 filterTipe === tipe
                   ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs'
                   : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
@@ -247,13 +313,36 @@ export default function KeuanganComponent() {
           ))}
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition shrink-0 active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Catat Kas Baru</span>
-        </button>
+        {/* TOMBOL BUKA MODAL EXCEL & PDF */}
+        <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+          <button
+            type="button"
+            onClick={() => setShowExcelModal(true)}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-3.5 py-2.5 shadow-xs transition cursor-pointer"
+            title="Buka Modal Ekspor Excel"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPDFModal(true)}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-3.5 py-2.5 shadow-xs transition cursor-pointer"
+            title="Buka Modal Cetak PDF"
+          >
+            <Printer className="w-3.5 h-3.5 text-rose-600" />
+            <span>Cetak PDF</span>
+          </button>
+
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 bg-neutral-950 hover:bg-black text-white text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Catat Kas Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* TAMPILAN MOBILE */}
@@ -300,7 +389,7 @@ export default function KeuanganComponent() {
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(item)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Hapus Catatan</span>
@@ -311,7 +400,7 @@ export default function KeuanganComponent() {
         )}
       </div>
 
-      {/* TAMPILAN DESKTOP TABLE */}
+      {/* TAMPILAN DESKTOP */}
       <div className="hidden md:block bg-white border border-neutral-200 overflow-x-auto shadow-xs">
         <table className="w-full text-left text-xs min-w-[640px]">
           <thead className="bg-neutral-100/70 border-b border-neutral-200 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
@@ -329,7 +418,7 @@ export default function KeuanganComponent() {
               <tr>
                 <td colSpan={6} className="p-8 text-center text-neutral-500">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-neutral-800" />
-                  <span>Mengambil data kas dari Katalog...</span>
+                  <span>Mengambil data kas dari database...</span>
                 </td>
               </tr>
             ) : filteredTransaksi.length === 0 ? (
@@ -366,7 +455,7 @@ export default function KeuanganComponent() {
                   <td className="p-4 text-center whitespace-nowrap">
                     <button
                       onClick={() => setDeleteTarget(item)}
-                      className="p-1.5 text-neutral-400 hover:text-rose-600 transition rounded"
+                      className="p-1.5 text-neutral-400 hover:text-rose-600 transition rounded cursor-pointer"
                       title="Hapus Catatan"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -379,7 +468,7 @@ export default function KeuanganComponent() {
         </table>
       </div>
 
-      {/* MODAL CATAT KAS BARU */}
+      {/* MODAL TAMBAH KAS */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div className="fixed inset-0" onClick={() => setShowModal(false)} />
@@ -387,9 +476,9 @@ export default function KeuanganComponent() {
           <div className="relative z-10 w-full max-w-md bg-white border border-neutral-200 shadow-2xl p-5 sm:p-7 space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2.5 sm:pb-3">
               <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
-                Catat Transaksi Kas ke Katalog
+                Catat Transaksi Kas Baru
               </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900">
+              <button onClick={() => setShowModal(false)} className="p-1 text-neutral-400 hover:text-neutral-900 cursor-pointer">
                 <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
@@ -399,7 +488,7 @@ export default function KeuanganComponent() {
                 <button
                   type="button"
                   onClick={() => setFormKas({ ...formKas, tipe: 'keluar' })}
-                  className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition ${
+                  className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition cursor-pointer ${
                     formKas.tipe === 'keluar'
                       ? 'bg-rose-50 border-rose-500 text-rose-700 font-black'
                       : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'
@@ -410,7 +499,7 @@ export default function KeuanganComponent() {
                 <button
                   type="button"
                   onClick={() => setFormKas({ ...formKas, tipe: 'masuk' })}
-                  className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition ${
+                  className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition cursor-pointer ${
                     formKas.tipe === 'masuk'
                       ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-black'
                       : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50'
@@ -456,27 +545,32 @@ export default function KeuanganComponent() {
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-600">
                   Nominal (Rp) <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  required
-                  placeholder="Contoh: 350000"
-                  value={formKas.nominal}
-                  onChange={(e) => setFormKas({ ...formKas, nominal: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white font-bold"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-neutral-500 pointer-events-none">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: 350.000"
+                    value={formKas.nominal}
+                    onChange={handleNominalChange}
+                    className="w-full bg-neutral-50 border border-neutral-300 pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white font-bold"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2 sm:py-2.5 transition text-center"
+                  className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2 sm:py-2.5 transition text-center cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2 sm:py-2.5 transition text-center shadow-xs"
+                  className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2 sm:py-2.5 transition text-center shadow-xs cursor-pointer"
                 >
                   Simpan Catatan
                 </button>
@@ -486,11 +580,11 @@ export default function KeuanganComponent() {
         </div>
       )}
 
-      {/* MODAL KONFIRMASI HAPUS */}
+      {/* MODAL HAPUS */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="fixed inset-0" onClick={() => setDeleteTarget(null)} />
-          <div className="relative z-10 bg-white p-5 sm:p-6 max-w-sm w-full space-y-4 text-center shadow-2xl border border-neutral-200">
+          <div className="relative z-10 bg-white p-5 sm:p-6 max-w-sm w-full space-y-4 text-center shadow-2xl border border-neutral-200 animate-in zoom-in-95 duration-200">
             <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-5 h-5" />
             </div>
@@ -499,21 +593,21 @@ export default function KeuanganComponent() {
                 Hapus Catatan Kas?
               </h3>
               <p className="text-[11px] sm:text-xs text-neutral-600 leading-relaxed">
-                Catatan mutasi <strong className="text-neutral-900">"{deleteTarget.keterangan}"</strong> akan dihapus permanen dari tabel sistem toko.
+                Catatan mutasi <strong className="text-neutral-900">"{deleteTarget.keterangan}"</strong> akan dihapus permanen dari buku kas toko.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-100">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-[11px] sm:text-xs font-bold uppercase py-2 transition"
+                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-[11px] sm:text-xs font-bold uppercase py-2 transition cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="w-full bg-rose-600 hover:bg-rose-700 text-white text-[11px] sm:text-xs font-bold uppercase py-2 transition shadow-xs"
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white text-[11px] sm:text-xs font-bold uppercase py-2 transition shadow-xs cursor-pointer"
               >
                 Ya, Hapus
               </button>
@@ -521,6 +615,29 @@ export default function KeuanganComponent() {
           </div>
         </div>
       )}
+
+      {/* PEMANGGILAN COMPONENT MODAL EKSPOR EXCEL & PDF */}
+      <ExportExcelModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        data={filteredTransaksi}
+        filterTipe={filterTipe}
+        totalMasuk={totalMasuk}
+        totalKeluar={totalKeluar}
+        saldoBersih={saldoBersih}
+        onSuccess={(msg) => setToastMessage(msg)}
+      />
+
+      <ExportPDFModal
+        isOpen={showPDFModal}
+        onClose={() => setShowPDFModal(false)}
+        data={filteredTransaksi}
+        filterTipe={filterTipe}
+        totalMasuk={totalMasuk}
+        totalKeluar={totalKeluar}
+        saldoBersih={saldoBersih}
+        onSuccess={(msg) => setToastMessage(msg)}
+      />
     </div>
   );
 }

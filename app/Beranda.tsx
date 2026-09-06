@@ -26,12 +26,19 @@ import { useAuth } from './penyimpanan/authcontext';
 import Footer from './Footer';
 import { supabase } from './penyimpanan/supabase';
 
+interface ToastItem {
+  id: string | number;
+  title: string;
+  price: number;
+  image: string;
+}
+
 export default function Beranda() {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('default');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [addedProductToast, setAddedProductToast] = useState<ToastItem | null>(null);
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>(['Semua']);
@@ -45,7 +52,7 @@ export default function Beranda() {
     ? totalCount 
     : cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
 
-  // Ambil produk dan testimoni langsung dari Supabase
+  // Ambil data produk dan testimoni langsung dari Supabase
   const fetchDataFromSupabase = async () => {
     setIsLoading(true);
     try {
@@ -77,7 +84,7 @@ export default function Beranda() {
         }
       }
 
-      // 2. Fetch Testimonials yang statusnya Tayang
+      // 2. Fetch Testimonials
       const { data: testData, error: testErr } = await supabase
         .from('testimonials')
         .select('*')
@@ -98,11 +105,19 @@ export default function Beranda() {
     fetchDataFromSupabase();
   }, []);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
+  const triggerToast = (item: any) => {
+    setAddedProductToast({
+      id: item.id,
+      title: item.nama,
+      price: item.harga,
+      image: item.gambarUtama,
+    });
+
+    const timer = setTimeout(() => {
+      setAddedProductToast(null);
+    }, 4500);
+
+    return () => clearTimeout(timer);
   };
 
   const handleQuickAdd = (e: React.MouseEvent, item: any) => {
@@ -126,7 +141,7 @@ export default function Beranda() {
       }, 1);
     }
 
-    showToast(item.nama);
+    triggerToast(item);
   };
 
   const noWhatsapp = '628883199088';
@@ -175,27 +190,78 @@ export default function Beranda() {
         }
       `}</style>
 
-      {/* TOAST NOTIFIKASI */}
-      {toastMessage && (
-        <div className="fixed top-4 sm:top-8 inset-x-0 z-50 flex justify-center px-3 sm:px-4 pointer-events-none animate-in fade-in slide-in-from-top-6 duration-300">
-          <div className="bg-neutral-950/95 backdrop-blur-md text-white px-3.5 sm:px-6 py-2.5 sm:py-3 border border-neutral-800 shadow-2xl flex items-center gap-2.5 sm:gap-4 max-w-sm sm:max-w-md w-full sm:w-auto rounded-full pointer-events-auto">
-            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
-              <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[3]" />
-            </div>
-            <div className="text-[11px] sm:text-xs truncate flex-1 min-w-0">
-              <span className="font-bold text-white block truncate">{toastMessage}</span>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400">Masuk keranjang belanja</span>
-            </div>
-            <Link 
-              href="/keranjang"
-              className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-400 hover:text-white flex items-center gap-1 pl-2 border-l border-neutral-800 shrink-0"
-            >
-              <span>Lihat</span>
-              <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-            </Link>
-          </div>
+{/* MODAL DIALOG TENGAH LAYAR */}
+{addedProductToast && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    {/* Backdrop Blur Gelap */}
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={() => setAddedProductToast(null)}
+    />
+
+    {/* Kartu Dialog Modal */}
+    <div className="relative z-10 w-full max-w-[400px] bg-white border border-neutral-200/90 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
+      {/* Header Status & Tombol Close */}
+      <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+        <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+          <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+            <Check className="w-3 h-3 stroke-[3]" />
+          </span>
+          <span>Berhasil Masuk Keranjang</span>
         </div>
-      )}
+        <button 
+          onClick={() => setAddedProductToast(null)}
+          className="text-neutral-400 hover:text-neutral-900 p-1 transition-colors cursor-pointer"
+          aria-label="Tutup notifikasi"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Rincian Produk & Thumbnail */}
+      <div className="flex items-center gap-3.5 bg-neutral-50/60 p-2.5 border border-neutral-200/70">
+        <div className="relative w-14 h-18 bg-neutral-200 border border-neutral-200 shrink-0 overflow-hidden">
+          <Image
+            src={addedProductToast.image}
+            alt={addedProductToast.title}
+            fill
+            className="object-cover"
+          />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide truncate">
+            {addedProductToast.title}
+          </h4>
+          <p className="text-xs font-bold text-neutral-900 font-mono">
+            Rp {addedProductToast.price.toLocaleString('id-ID')}
+          </p>
+          <span className="text-[10px] text-neutral-400 uppercase tracking-widest block">
+            Jumlah: 1 pcs
+          </span>
+        </div>
+      </div>
+
+      {/* Tombol Aksi */}
+      <div className="grid grid-cols-2 gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={() => setAddedProductToast(null)}
+          className="w-full bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center cursor-pointer"
+        >
+          Lanjut Belanja
+        </button>
+        <Link
+          href="/keranjang"
+          onClick={() => setAddedProductToast(null)}
+          className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors flex items-center justify-center gap-1.5 text-center shadow-xs cursor-pointer"
+        >
+          <span>Lihat Tas</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
@@ -513,54 +579,6 @@ export default function Beranda() {
         )}
       </section>
 
-            {/* TESTIMONI */}
-      {testimoniList.length > 0 && (
-        <>
-          <div className="w-full bg-neutral-900 text-white py-2.5 overflow-hidden border-y border-neutral-800">
-            <div className="animate-marquee flex items-center">
-              {deliveryTicker.concat(deliveryTicker).map((item: string, idx: number) => (
-                <span
-                  key={idx}
-                  className="text-[10px] sm:text-xs font-bold tracking-[0.25em] uppercase text-neutral-400 mx-4 select-none whitespace-nowrap"
-                >
-                  ✦ {item}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <section id="testimoni" className="bg-[#EFECE6] py-8 sm:py-14 border-b border-neutral-200 overflow-hidden w-full">
-            <div className="w-full px-4 sm:px-8 mb-4 sm:mb-8 text-center">
-              <p className="text-[9px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
-                BUKTI PENGIRIMAN ASLI
-              </p>
-              <h2 className="text-xl sm:text-3xl font-serif uppercase tracking-tight">
-                TESTIMONI PELANGGAN
-              </h2>
-            </div>
-
-            <div className="w-full overflow-hidden">
-              <div className="animate-marquee-slow flex items-center">
-                {testimoniList.concat(testimoniList).map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="w-[140px] sm:w-[240px] aspect-[3/4] relative bg-neutral-200 mx-2 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
-                  >
-                    <Image
-                      src={item.foto_url}
-                      alt={`Testimoni ${idx + 1}`}
-                      fill
-                      sizes="(max-width: 640px) 140px, 240px"
-                      className="object-cover object-center"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        </>
-      )}
-
       {/* LOKASI BUTIK */}
       <section id="lokasi" className="w-full bg-[#F9F8F6] border-t border-neutral-200 py-8 sm:py-14">
         <div className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12">
@@ -647,7 +665,53 @@ export default function Beranda() {
         </div>
       </section>
 
+      {/* TESTIMONI */}
+      {testimoniList.length > 0 && (
+        <>
+          <div className="w-full bg-neutral-900 text-white py-2.5 overflow-hidden border-y border-neutral-800">
+            <div className="animate-marquee flex items-center">
+              {deliveryTicker.concat(deliveryTicker).map((item: string, idx: number) => (
+                <span
+                  key={idx}
+                  className="text-[10px] sm:text-xs font-bold tracking-[0.25em] uppercase text-neutral-400 mx-4 select-none whitespace-nowrap"
+                >
+                  ✦ {item}
+                </span>
+              ))}
+            </div>
+          </div>
 
+          <section id="testimoni" className="bg-[#EFECE6] py-8 sm:py-14 border-b border-neutral-200 overflow-hidden w-full">
+            <div className="w-full px-4 sm:px-8 mb-4 sm:mb-8 text-center">
+              <p className="text-[9px] sm:text-xs uppercase tracking-widest text-neutral-400 mb-1 font-bold">
+                BUKTI PENGIRIMAN ASLI
+              </p>
+              <h2 className="text-xl sm:text-3xl font-serif uppercase tracking-tight">
+                TESTIMONI PELANGGAN
+              </h2>
+            </div>
+
+            <div className="w-full overflow-hidden">
+              <div className="animate-marquee-slow flex items-center">
+                {testimoniList.concat(testimoniList).map((item: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="w-[140px] sm:w-[240px] aspect-[3/4] relative bg-neutral-200 mx-2 shrink-0 overflow-hidden border border-neutral-200 shadow-xs"
+                  >
+                    <Image
+                      src={item.foto_url}
+                      alt={`Testimoni ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 640px) 140px, 240px"
+                      className="object-cover object-center"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
 
       {/* FOOTER */}
       <Footer />
