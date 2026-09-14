@@ -32,7 +32,7 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // 1. Verifikasi sesi aman langsung ke Katalog Auth & Tabel Profiles
+  // 1. Verifikasi sesi aman ke tabel users / profiles
   const checkAdminAuth = async () => {
     try {
       if (typeof window !== "undefined" && localStorage.getItem("almaco_admin_auth") === "true") {
@@ -46,14 +46,24 @@ export default function AdminPage() {
         return;
       }
 
-      // Pastikan akun memiliki role admin di database
-      const { data: profile, error } = await supabase
-        .from('profiles')
+      // Cek tabel users terlebih dahulu
+      let { data: userProfile, error } = await supabase
+        .from('users')
         .select('role')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (!error && profile?.role === 'admin') {
+      // Fallback cek ke profiles jika di users tidak ditemukan
+      if (!userProfile && error) {
+        const { data: altProfile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        userProfile = altProfile;
+      }
+
+      if (userProfile?.role === 'admin') {
         setIsAuthenticated(true);
       } else {
         await supabase.auth.signOut();
@@ -68,7 +78,6 @@ export default function AdminPage() {
   useEffect(() => {
     checkAdminAuth();
 
-    // Listener jika status login/logout berubah secara real-time
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setIsAuthenticated(false);
@@ -82,7 +91,7 @@ export default function AdminPage() {
     };
   }, []);
 
-  // 2. Logout resmi dari sesi Supabase
+  // 2. Logout sesi
   const handleConfirmLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -145,7 +154,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1.5 text-neutral-400 hover:text-neutral-900 rounded-md"
+              className="md:hidden p-1.5 text-neutral-400 hover:text-neutral-900 rounded-md cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -154,7 +163,7 @@ export default function AdminPage() {
           <nav className="p-3 space-y-1">
             <button
               onClick={() => handleSelectMenu('dashboard')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'dashboard' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -164,7 +173,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => handleSelectMenu('pesanan')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'pesanan' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -174,7 +183,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => handleSelectMenu('pembayaran')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'pembayaran' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -184,7 +193,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => handleSelectMenu('keuangan')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'keuangan' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -194,7 +203,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => handleSelectMenu('produk')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'produk' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -204,7 +213,7 @@ export default function AdminPage() {
 
             <button
               onClick={() => handleSelectMenu('testimoni')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold transition-all cursor-pointer ${
                 activeMenu === 'testimoni' ? 'bg-neutral-950 text-white shadow-xs' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'
               }`}
             >
@@ -241,14 +250,14 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 text-neutral-800 border border-neutral-200 hover:bg-neutral-50 shrink-0"
+              className="md:hidden p-2 text-neutral-800 border border-neutral-200 hover:bg-neutral-50 shrink-0 cursor-pointer"
               aria-label="Buka Menu"
             >
               <Menu className="w-4 h-4" />
             </button>
             <h1 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900 truncate">
               {activeMenu === 'dashboard' && 'Ringkasan Statistik Toko'}
-              {activeMenu === 'pesanan' && 'Kelola Daftar Pesanan'}
+              {activeMenu === 'pesanan' && 'Kelola Daftar Pesanan & Pengiriman'}
               {activeMenu === 'pembayaran' && 'Verifikasi Bukti Transfer'}
               {activeMenu === 'keuangan' && 'Buku Kas & Laporan Keuangan'}
               {activeMenu === 'produk' && 'Kelola Katalog Produk'}
@@ -317,14 +326,14 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={() => setShowLogoutModal(false)}
-                className="w-full py-2.5 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-700 hover:text-neutral-950 text-xs font-bold uppercase tracking-wider transition"
+                className="w-full py-2.5 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-700 hover:text-neutral-950 text-xs font-bold uppercase tracking-wider transition cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleConfirmLogout}
-                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition shadow-sm"
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer"
               >
                 Ya, Keluar
               </button>

@@ -68,7 +68,7 @@ export default function Footer() {
             <div className="space-y-1.5 text-xs text-neutral-600 pt-1 sm:pt-2">
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-neutral-500 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">Pengiriman dari: <strong>Dusun Jai, RT 02/RW 02, Desa Mergayu, Kec. Bandung, Kab. Tulungagung</strong></span>
+                <span className="leading-relaxed">Pengiriman dari: <strong>Dusun Jati, RT 02/RW 02, Desa Mergayu, Kec. Bandung, Kab. Tulungagung</strong></span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-neutral-500 shrink-0" />

@@ -91,7 +91,7 @@ export default function CheckoutPage() {
     setShippingOptions([]);
     setSelectedCourier(null);
 
-    const totalWeight = cartItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
+    const calculatedWeight = cartItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
 
     try {
       const res = await fetch('/api/rajaongkir', {
@@ -99,7 +99,7 @@ export default function CheckoutPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           destination_city_id: destinationCityId,
-          weight: totalWeight,
+          weight: calculatedWeight,
         }),
         signal: controller.signal,
       });
@@ -202,6 +202,35 @@ export default function CheckoutPage() {
     const inv = `ORD-${Date.now()}`;
     const formattedWa = whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp;
 
+    // Normalisasi nama kurir dari objek RajaOngkir
+    const rawCompany = (
+      selectedCourier.courier_name ||
+      selectedCourier.company ||
+      (selectedCourier as any).code ||
+      'POS INDONESIA'
+    ).trim().toUpperCase();
+
+    let namaKurirBersih = rawCompany;
+    if (rawCompany.includes('POS')) {
+      namaKurirBersih = 'POS INDONESIA';
+    } else if (rawCompany.includes('SICEPAT')) {
+      namaKurirBersih = 'SICEPAT';
+    } else if (rawCompany.includes('JNE')) {
+      namaKurirBersih = 'JNE';
+    } else if (rawCompany.includes('J&T') || rawCompany.includes('JNT')) {
+      namaKurirBersih = 'J&T EXPRESS';
+    } else if (rawCompany.includes('TIKI')) {
+      namaKurirBersih = 'TIKI';
+    }
+
+    const serviceName = (
+      selectedCourier.courier_service_name || 
+      (selectedCourier as any).service || 
+      ''
+    ).trim().toUpperCase();
+
+    const kurirFinalSimpan = serviceName ? `${namaKurirBersih} - ${serviceName}` : namaKurirBersih;
+
     try {
       // 1. Simpan ke tabel orders
       const { data: orderData, error: orderError } = await supabase
@@ -217,6 +246,7 @@ export default function CheckoutPage() {
             ongkir: calculatedTotalOngkir,
             total: calculatedTotal,
             total_harga: calculatedTotal,
+            kurir: kurirFinalSimpan,
             bank_asal: selectedBank.toUpperCase(),
             catatan: catatan.trim() || null,
           }
@@ -263,7 +293,7 @@ export default function CheckoutPage() {
         totalAmount={finalAmount} 
         invoiceId={createdInvoiceNo}
         namaPenerima={nama}
-        ekspedisi={selectedCourier ? `${selectedCourier.courier_name} (${selectedCourier.courier_service_name})` : undefined}
+        ekspedisi={selectedCourier ? `${selectedCourier.courier_name || selectedCourier.company} (${selectedCourier.courier_service_name})` : undefined}
       />
     );
   }
@@ -420,7 +450,7 @@ export default function CheckoutPage() {
                     ) : selectedCourier ? (
                       <>
                         <span className="truncate uppercase tracking-wide">
-                          {selectedCourier.courier_name} {selectedCourier.courier_service_name} ({selectedCourier.duration})
+                          {selectedCourier.courier_name || selectedCourier.company} {selectedCourier.courier_service_name} ({selectedCourier.duration})
                         </span>
                         <ChevronDown className="w-4 h-4 shrink-0" />
                       </>
@@ -442,13 +472,13 @@ export default function CheckoutPage() {
                             setShowCourierDropdown(false);
                           }}
                           className={`px-4 py-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
-                            selectedCourier?.courier_name === opt.courier_name && selectedCourier?.courier_service_name === opt.courier_service_name
+                            (selectedCourier?.courier_name || selectedCourier?.company) === (opt.courier_name || opt.company) && selectedCourier?.courier_service_name === opt.courier_service_name
                               ? 'bg-neutral-100 font-bold text-neutral-950' 
                               : 'hover:bg-neutral-50 text-neutral-800'
                           }`}
                         >
                           <div>
-                            <p className="uppercase">{opt.courier_name} {opt.courier_service_name} ({opt.duration})</p>
+                            <p className="uppercase">{opt.courier_name || opt.company} {opt.courier_service_name} ({opt.duration})</p>
                           </div>
                           <span className="font-bold shrink-0 ml-2 text-neutral-950">
                             Rp {opt.price.toLocaleString('id-ID')}
@@ -551,7 +581,7 @@ export default function CheckoutPage() {
                     <span className="font-semibold text-neutral-900">Rp {subtotal.toLocaleString('id-ID')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Ongkos Kirim ({selectedCourier ? selectedCourier.courier_name : "Kurir"})</span>
+                    <span>Ongkos Kirim ({selectedCourier ? (selectedCourier.courier_name || selectedCourier.company).toUpperCase() : "Kurir"})</span>
                     <span className="font-semibold text-neutral-900">
                       {isLoadingShipping ? "Menghitung..." : (selectedCourier ? "Rp " + shippingFee.toLocaleString("id-ID") : "Pilih Kurir")}
                     </span>

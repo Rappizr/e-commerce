@@ -618,7 +618,7 @@ export default function Beranda() {
                       <div>
                         <strong className="block text-[9px] sm:text-[10px] text-neutral-900 uppercase font-bold">Alamat:</strong>
                         <p className="text-neutral-500 leading-tight text-[9px] sm:text-[11px]">
-                          Dusun Jai, RT 02 / RW 02, Mergayu, Bandung, Tulungagung
+                          Dusun Jati, RT 02 / RW 02, Mergayu, Bandung, Tulungagung
                         </p>
                       </div>
                     </div>

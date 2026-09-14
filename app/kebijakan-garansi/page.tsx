@@ -23,10 +23,10 @@ export default function KebijakanGaransiPage() {
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
-      <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0">
-            <div className="relative w-8 h-8 sm:w-12 sm:h-12 shrink-0">
+      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
+        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -35,12 +35,11 @@ export default function KebijakanGaransiPage() {
                 className="object-contain"
               />
             </div>
-            <div className="leading-none truncate">
-              <div className="text-base sm:text-2xl uppercase tracking-tight text-neutral-950 truncate">
-                <span className="font-black">ALMACO</span>
-                <span className="font-light text-neutral-600">FASHION</span>
+            <div className="leading-tight truncate">
+              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
+                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
               </div>
-              <span className="text-[8px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block mt-0.5 sm:mt-1 truncate">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -48,11 +47,10 @@ export default function KebijakanGaransiPage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-2.5 sm:px-4 py-2 sm:py-2.5 transition-all duration-200 shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Kembali Ke Beranda</span>
-            <span className="xs:hidden">Beranda</span>
+            <span>Kembali</span>
           </Link>
         </div>
       </header>

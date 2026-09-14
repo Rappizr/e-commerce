@@ -312,10 +312,10 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
       {/* HEADER */}
-      <header className="sticky top-0 z-50 w-full bg-white border-b border-neutral-200/80">
-        <div className="w-full max-w-[1500px] mx-auto px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
+        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
-            <div className="relative w-7 h-7 sm:w-8 sm:h-8 shrink-0">
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -325,11 +325,10 @@ export default function ProfilePage() {
               />
             </div>
             <div className="leading-tight truncate">
-              <div className="text-base sm:text-lg tracking-tight uppercase">
-                <span className="font-extrabold text-neutral-950">ALMACO</span>
-                <span className="font-light text-neutral-400">FASHION</span>
+              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
+                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-normal tracking-wide block truncate">
+              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -337,10 +336,10 @@ export default function ProfilePage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-medium tracking-[0.2em] uppercase text-neutral-900 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-4 sm:px-5 py-2 sm:py-2.5 transition-colors duration-200 shadow-xs"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>BELANJA</span>
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Kembali</span>
           </Link>
         </div>
       </header>

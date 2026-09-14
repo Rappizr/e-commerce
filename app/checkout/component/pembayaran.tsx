@@ -10,7 +10,9 @@ import {
   ShoppingBag, 
   Clock, 
   FileCheck,
-  Loader2
+  Loader2,
+  Truck,
+  User
 } from 'lucide-react';
 import Footer from '../../Footer';
 import { supabase } from '../../penyimpanan/supabase';
@@ -25,10 +27,14 @@ interface PembayaranProps {
 export default function PembayaranComponent({
   totalAmount = 0,
   invoiceId,
+  namaPenerima,
+  ekspedisi,
 }: PembayaranProps) {
   const [copiedRek, setCopiedRek] = useState(false);
   const [copiedNominal, setCopiedNominal] = useState(false);
   const [liveAmount, setLiveAmount] = useState<number>(totalAmount);
+  const [liveKurir, setLiveKurir] = useState<string>(ekspedisi || '');
+  const [livePenerima, setLivePenerima] = useState<string>(namaPenerima || '');
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
 
   // Ambil data pesanan langsung dari tabel orders Supabase jika invoiceId tersedia
@@ -40,7 +46,7 @@ export default function PembayaranComponent({
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('total, total_harga')
+          .select('total, total_harga, kurir, nama_pembeli')
           .eq('invoice_no', invoiceId)
           .single();
 
@@ -48,6 +54,12 @@ export default function PembayaranComponent({
           const nominalDb = Number(data.total || data.total_harga || 0);
           if (nominalDb > 0) {
             setLiveAmount(nominalDb);
+          }
+          if (data.kurir) {
+            setLiveKurir(data.kurir);
+          }
+          if (data.nama_pembeli) {
+            setLivePenerima(data.nama_pembeli);
           }
         }
       } catch (err) {
@@ -61,7 +73,7 @@ export default function PembayaranComponent({
   }, [invoiceId]);
 
   const paymentDetails = {
-    invoiceNo: invoiceId || 'ORD-' + Math.floor(100000 + Math.random() * 900000),
+    invoiceNo: invoiceId || 'MEMUAT INVOICE...',
     bank: 'BANK BCA',
     noRek: '0481980827',
     atasNama: 'TITIN PRAMUDYA WATI',
@@ -118,7 +130,7 @@ export default function PembayaranComponent({
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        {/* LOGO BRANDING TANPA BACKGROUND */}
+        {/* LOGO BRANDING */}
         <div className="text-center space-y-2 mb-6 sm:mb-8">
           <div className="inline-flex items-center gap-3 sm:gap-3.5 mx-auto mb-3">
             <div className="relative w-10 h-10 sm:w-12 sm:h-12 shrink-0">
@@ -163,6 +175,30 @@ export default function PembayaranComponent({
               Menunggu Transfer
             </span>
           </div>
+
+          {/* DETAIL RINGKAS PENERIMA & EKSPEDISI RAJAONGKIR */}
+          {(livePenerima || liveKurir) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 bg-neutral-50 border border-neutral-200 text-xs">
+              {livePenerima && (
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-neutral-500 shrink-0" />
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-neutral-400 block">Penerima</span>
+                    <span className="font-semibold text-neutral-900 truncate block">{livePenerima}</span>
+                  </div>
+                </div>
+              )}
+              {liveKurir && (
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-neutral-500 shrink-0" />
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-neutral-400 block">Ekspedisi Pilihan</span>
+                    <span className="font-semibold text-neutral-900 uppercase truncate block">{liveKurir}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* NOMINAL TRANSFER DARI DATABASE */}
           <div className="border border-neutral-200 bg-neutral-50/60 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
