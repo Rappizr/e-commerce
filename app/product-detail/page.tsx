@@ -4,7 +4,20 @@ import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Check, X, ShoppingBag, ChevronLeft, ChevronRight, Images, ZoomIn, Loader2 } from "lucide-react";
+import { 
+  ArrowLeft, 
+  Check, 
+  X, 
+  ShoppingBag, 
+  ChevronLeft, 
+  ChevronRight, 
+  Images, 
+  ZoomIn, 
+  Loader2, 
+  Plus, 
+  Minus, 
+  Sparkles 
+} from "lucide-react";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
@@ -68,6 +81,9 @@ function ProductDetailContent() {
   const [galleryModalOpen, setGalleryModalOpen] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // State jumlah kuantitas yang ingin dibeli
+  const [quantity, setQuantity] = useState(1);
+
   const { tambahKeKeranjang } = useKeranjang();
 
   useEffect(() => {
@@ -105,6 +121,9 @@ function ProductDetailContent() {
             stok: typeof data.stok === "number" ? data.stok : 0,
             weight: Number(data.berat || 350),
             desc: data.deskripsi || "Busana modis berkualitas premium dari ALMACO FASHION.",
+            is_grosir: Boolean(data.is_grosir),
+            min_grosir: data.min_grosir ? Number(data.min_grosir) : null,
+            harga_grosir: data.harga_grosir ? Number(data.harga_grosir) : null,
             images: imgList,
             warna: warnaArr,
             ukuran: ukuranArr,
@@ -114,6 +133,13 @@ function ProductDetailContent() {
           setProduct(mapped);
           setSelectedColor(warnaArr[0]);
           setSelectedSize(ukuranArr[0]);
+
+          // Jika barang grosir, set kuantitas awal langsung ke batas minimal grosir
+          if (mapped.is_grosir && mapped.min_grosir) {
+            setQuantity(mapped.min_grosir);
+          } else {
+            setQuantity(1);
+          }
         }
       } catch (e) {
         console.error("Fetch Supabase Product Error:", e);
@@ -153,6 +179,17 @@ function ProductDetailContent() {
   const sisaStok = product.stok;
   const rawWarnaList: string[] = product.warna;
 
+  // Logika Perhitungan Harga Grosir vs Ecer
+  const isQualifiedGrosir = Boolean(
+    product.is_grosir && 
+    product.min_grosir && 
+    product.harga_grosir && 
+    quantity >= product.min_grosir
+  );
+
+  const activeUnitPrice = isQualifiedGrosir ? product.harga_grosir : product.rawPrice;
+  const subtotalPrice = activeUnitPrice * quantity;
+
   const toggleAccordion = (section: string) => {
     setOpenAccordion(openAccordion === section ? null : section);
   };
@@ -171,15 +208,20 @@ function ProductDetailContent() {
   };
 
   const handleAddToCart = () => {
-    tambahKeKeranjang({
-      id: product.id,
-      title: product.title,
-      price: product.rawPrice,
-      size: selectedSize,
-      color: selectedColor,
-      weight: product.weight,
-      image: allImages[0],
-    });
+    if (quantity <= 0 || sisaStok <= 0) return;
+
+    tambahKeKeranjang(
+      {
+        id: product.id,
+        title: product.title,
+        price: activeUnitPrice, // Mengirimkan harga aktif (harga ecer atau harga grosir)
+        size: selectedSize,
+        color: selectedColor,
+        weight: product.weight,
+        image: allImages[0],
+      },
+      quantity // Mengirim jumlah kuantitas yang dipilih
+    );
 
     setShowCenterModal(true);
   };
@@ -213,7 +255,7 @@ function ProductDetailContent() {
                   Produk Ditambahkan!
                 </h3>
                 <p className="text-[10px] text-neutral-400 uppercase tracking-wider">
-                  Berhasil masuk ke keranjang belanja
+                  {quantity} Pcs Berhasil Masuk Ke Keranjang
                 </p>
               </div>
             </div>
@@ -227,7 +269,7 @@ function ProductDetailContent() {
                   className="object-cover"
                 />
               </div>
-              <div className="space-y-0.5 min-w-0">
+              <div className="space-y-0.5 min-w-0 flex-1">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-900 truncate">
                   {product.title}
                 </h4>
@@ -235,21 +277,26 @@ function ProductDetailContent() {
                   Ukuran: <strong className="text-neutral-800">{selectedSize}</strong> | Warna: <strong className="text-neutral-800">{selectedColor}</strong>
                 </p>
                 <p className="text-xs font-bold text-neutral-900">
-                  {product.price}
+                  {quantity} pcs × Rp {activeUnitPrice.toLocaleString("id-ID")}
+                </p>
+                <p className="text-[11px] font-black text-amber-900 font-mono">
+                  Subtotal: Rp {subtotalPrice.toLocaleString("id-ID")}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <button
+              <Link
+                href="/"
                 onClick={() => setShowCenterModal(false)}
-                className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center"
+                className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center block"
               >
                 Lanjut Belanja
-              </button>
+              </Link>
 
               <Link
                 href="/keranjang"
+                onClick={() => setShowCenterModal(false)}
                 className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center flex items-center justify-center gap-1 shadow-sm"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
@@ -320,12 +367,11 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* GRID PRODUK RAMPING */}
+      {/* GRID DETAIL PRODUK */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
         
         {/* KOLOM FOTO */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
-          {/* FOTO UTAMA */}
           <div 
             onClick={() => openLightbox(selectedImageIndex)}
             className="relative w-full aspect-[3/4] max-h-[500px] bg-neutral-100 border border-neutral-200 overflow-hidden group cursor-pointer"
@@ -342,6 +388,13 @@ function ProductDetailContent() {
               {product.category}
             </div>
 
+            {product.is_grosir && (
+              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                <span>Grosir Min. {product.min_grosir} Pcs</span>
+              </div>
+            )}
+
             <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <div className="bg-neutral-950/90 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 flex items-center gap-1.5 shadow-lg">
                 <ZoomIn className="w-3.5 h-3.5" />
@@ -350,7 +403,6 @@ function ProductDetailContent() {
             </div>
           </div>
 
-          {/* 3 THUMBNAIL DENGAN FITUR LIHAT LAINNYA */}
           {allImages.length > 1 && (
             <div className="grid grid-cols-3 gap-2">
               {allImages.slice(0, 3).map((img: string, idx: number) => {
@@ -405,12 +457,69 @@ function ProductDetailContent() {
               {product.title}
             </h1>
 
-            <div className="pt-0.5">
-              <span className="text-lg sm:text-xl text-neutral-950 font-bold tracking-tight">
-                {product.price}
+            {/* TAMPILAN HARGA REAL-TIME */}
+            <div className="pt-1 flex items-baseline gap-2">
+              <span className="text-xl sm:text-2xl text-neutral-950 font-black tracking-tight font-mono">
+                Rp {activeUnitPrice.toLocaleString("id-ID")}
               </span>
+              <span className="text-xs text-neutral-500 font-medium">/ pcs</span>
+
+              {isQualifiedGrosir && (
+                <span className="ml-2 text-xs text-neutral-400 line-through">
+                  Rp {product.rawPrice.toLocaleString("id-ID")}
+                </span>
+              )}
             </div>
           </div>
+
+          {/* KOTAK PROMO / INFO KHUSUS GROSIR JIKA PRODUK INI MEMILIKI OPSI GROSIR */}
+          {product.is_grosir && product.harga_grosir && (
+            <div className="p-3 bg-[#FAF8F5] border border-amber-300/80 rounded-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-amber-950 text-white text-[8.5px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                    <span>Harga Paket Grosir</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-amber-950">
+                    Rp {product.harga_grosir.toLocaleString("id-ID")} / pcs
+                  </span>
+                </div>
+                <span className="text-[10px] text-neutral-500 font-semibold">
+                  Min. {product.min_grosir} pcs
+                </span>
+              </div>
+
+              {/* Tombol Pintasan Cepat */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setQuantity(1)}
+                  className={`flex-1 py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider border transition ${
+                    quantity < (product.min_grosir || 3)
+                      ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
+                      : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500"
+                  }`}
+                >
+                  Beli Ecer (1 Pcs)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuantity(product.min_grosir || 3)}
+                  className={`flex-1 py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider border transition flex items-center justify-center gap-1 ${
+                    quantity >= (product.min_grosir || 3)
+                      ? "bg-amber-900 text-white border-amber-900 shadow-2xs"
+                      : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+                  }`}
+                >
+                  <span>Paket Grosir ({product.min_grosir} Pcs)</span>
+                  <span className="text-[8px] bg-white text-amber-950 px-1 py-0.2 rounded-xs font-black">
+                    HEMAT
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <p className="text-xs text-neutral-600 leading-relaxed">
             {product.desc}
@@ -500,19 +609,63 @@ function ProductDetailContent() {
             </div>
           )}
 
+          {/* ATUR JUMLAH PEMBELIAN (QUANTITY COUNTER) */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
+              Jumlah Pembelian
+            </label>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center border border-neutral-300 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  max={sisaStok}
+                  value={quantity}
+                  onChange={(e) => {
+                    const val = Math.max(1, Math.min(sisaStok, Number(e.target.value) || 1));
+                    setQuantity(val);
+                  }}
+                  className="w-12 h-9 text-center text-xs font-bold font-mono text-neutral-900 focus:outline-none border-x border-neutral-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => setQuantity((prev) => Math.min(sisaStok, prev + 1))}
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="text-[11px] text-neutral-500">
+                Total: <strong className="text-neutral-950 font-mono text-xs font-bold">Rp {subtotalPrice.toLocaleString("id-ID")}</strong>
+              </div>
+            </div>
+          </div>
+
           {/* TOMBOL BELI */}
           <div className="pt-2">
             <button
               onClick={handleAddToCart}
               disabled={sisaStok <= 0}
-              className={`w-full text-xs tracking-[0.15em] font-bold uppercase py-3 transition active:scale-[0.99] shadow-sm flex items-center justify-center gap-2 ${
+              className={`w-full text-xs tracking-[0.15em] font-bold uppercase py-3.5 transition active:scale-[0.99] shadow-sm flex items-center justify-center gap-2 ${
                 sisaStok > 0
                   ? "bg-neutral-900 hover:bg-black text-white cursor-pointer"
                   : "bg-neutral-300 text-neutral-500 cursor-not-allowed"
               }`}
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>{sisaStok > 0 ? "TAMBAH KE KERANJANG" : "STOK HABIS"}</span>
+              <span>
+                {sisaStok > 0 
+                  ? `+ KERANJANG (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})` 
+                  : "STOK HABIS"}
+              </span>
             </button>
           </div>
 
@@ -546,7 +699,8 @@ function ProductDetailContent() {
               {openAccordion === "shipping" && (
                 <div className="mt-2 text-neutral-600 space-y-1 pl-1 leading-relaxed">
                   <p>• Pengiriman langsung dari Dusun Jai, Mergayu, Bandung, Tulungagung</p>
-                  <p>• Ekspedisi resmi: JNE, POS, TIKI, J&T</p>
+                  <p>• Ekspedisi reguler: JNE, POS, TIKI, J&T</p>
+                  <p>• Ekspedisi kargo (&ge;10 kg): JNE JTR, SiCepat GOKIL, J&T Cargo</p>
                   <p>• Garansi ganti baru 100% jika terdapat cacat produksi</p>
                 </div>
               )}

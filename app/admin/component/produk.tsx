@@ -14,7 +14,8 @@ import {
   Palette, 
   Loader2,
   Scale,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
 
@@ -26,6 +27,9 @@ export interface ProdukItem {
   stok: number;
   berat: number;
   deskripsi: string;
+  is_grosir?: boolean;
+  min_grosir?: number | null;
+  harga_grosir?: number | null;
   rincian: string[];
   warna: string[];
   ukuran: string[];
@@ -96,6 +100,9 @@ export default function ProdukComponent() {
           stok: Number(p.stok || 0),
           berat: Number(p.berat || 0),
           deskripsi: p.deskripsi || '',
+          is_grosir: Boolean(p.is_grosir),
+          min_grosir: p.min_grosir ? Number(p.min_grosir) : null,
+          harga_grosir: p.harga_grosir ? Number(p.harga_grosir) : null,
           rincian: Array.isArray(p.rincian) ? p.rincian : [],
           warna: Array.isArray(p.warna) ? p.warna : [],
           ukuran: Array.isArray(p.ukuran) ? p.ukuran : [],
@@ -130,6 +137,7 @@ export default function ProdukComponent() {
   const [inputWarnaBaru, setInputWarnaBaru] = useState('');
   const warnaSaran = ['Hitam', 'Putih', 'Cokelat Karamel', 'Mocca', 'Sage Green', 'Navy', 'Maroon', 'Dusty Pink', 'Abu Misty', 'Lilac'];
 
+  // Form state dengan field grosir
   const [formProduk, setFormProduk] = useState({
     nama: '',
     kategori: '',
@@ -138,6 +146,9 @@ export default function ProdukComponent() {
     berat: '',
     deskripsi: '',
     rincianText: '',
+    is_grosir: false,
+    min_grosir: '',
+    harga_grosir: '',
     warnaList: [] as string[],
     ukuranPilihan: [] as string[],
     gambarList: [] as string[],
@@ -156,6 +167,9 @@ export default function ProdukComponent() {
       berat: item.berat ? String(item.berat) : '',
       deskripsi: item.deskripsi,
       rincianText: (item.rincian || []).join('\n'),
+      is_grosir: Boolean(item.is_grosir),
+      min_grosir: item.min_grosir ? String(item.min_grosir) : '',
+      harga_grosir: item.harga_grosir ? item.harga_grosir.toLocaleString('id-ID') : '',
       warnaList: item.warna || [],
       ukuranPilihan: item.ukuran || [],
       gambarList: item.gambarList || [],
@@ -174,6 +188,9 @@ export default function ProdukComponent() {
       berat: '',
       deskripsi: '',
       rincianText: '',
+      is_grosir: false,
+      min_grosir: '',
+      harga_grosir: '',
       warnaList: [],
       ukuranPilihan: [],
       gambarList: [],
@@ -314,6 +331,15 @@ export default function ProdukComponent() {
     setFormProduk((prev) => ({ ...prev, harga: Number(val).toLocaleString('id-ID') }));
   };
 
+  const handleHargaGrosirChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (!val) {
+      setFormProduk((prev) => ({ ...prev, harga_grosir: '' }));
+      return;
+    }
+    setFormProduk((prev) => ({ ...prev, harga_grosir: Number(val).toLocaleString('id-ID') }));
+  };
+
   const toggleUkuran = (size: string) => {
     setFormProduk((prev) => {
       const exists = prev.ukuranPilihan.includes(size);
@@ -346,7 +372,20 @@ export default function ProdukComponent() {
       return;
     }
 
+    if (formProduk.is_grosir && (!formProduk.min_grosir || !formProduk.harga_grosir)) {
+      setValidationModal({
+        show: true,
+        title: 'Pengaturan Grosir Belum Lengkap',
+        message: 'Karena opsi Grosir diaktifkan, mohon isi Minimal Pembelian dan Harga Grosir Per Pcs.',
+      });
+      return;
+    }
+
     const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, ''));
+    const rawHargaGrosir = formProduk.is_grosir && formProduk.harga_grosir
+      ? Number(formProduk.harga_grosir.replace(/[^0-9]/g, ''))
+      : null;
+
     const parsedRincian = formProduk.rincianText
       .split('\n')
       .map((r) => r.trim())
@@ -362,6 +401,9 @@ export default function ProdukComponent() {
       stok: Number(formProduk.stok) || 0,
       berat: formProduk.berat ? Number(formProduk.berat) : 350,
       deskripsi: formProduk.deskripsi.trim() || 'Busana modis berkualitas premium dari ALMACO FASHION.',
+      is_grosir: formProduk.is_grosir,
+      min_grosir: formProduk.is_grosir && formProduk.min_grosir ? Number(formProduk.min_grosir) : null,
+      harga_grosir: rawHargaGrosir,
       rincian: parsedRincian.length > 0 ? parsedRincian : ['Bahan premium super adem & lembut', 'Jahitan rapi kelas butik'],
       warna: formProduk.warnaList.length > 0 ? formProduk.warnaList : ['Default'],
       ukuran: formProduk.ukuranPilihan.length > 0 ? formProduk.ukuranPilihan : ['All Size'],
@@ -412,6 +454,9 @@ export default function ProdukComponent() {
             stok: Number(data.stok || 0),
             berat: Number(data.berat || 0),
             deskripsi: data.deskripsi,
+            is_grosir: Boolean(data.is_grosir),
+            min_grosir: data.min_grosir ? Number(data.min_grosir) : null,
+            harga_grosir: data.harga_grosir ? Number(data.harga_grosir) : null,
             rincian: data.rincian || [],
             warna: data.warna || [],
             ukuran: data.ukuran || [],
@@ -513,7 +558,7 @@ export default function ProdukComponent() {
             Katalog Produk & Galeri
           </h2>
           <p className="text-[10px] sm:text-xs text-neutral-500">
-            Kelola data busana, foto galeri, pilihan warna, ukuran, rincian bahan, berat per pcs, dan stok busana toko.
+            Kelola data busana, foto galeri, paket grosir/ecer, pilihan warna, ukuran, rincian bahan, berat per pcs, dan stok.
           </p>
         </div>
         <button
@@ -562,9 +607,19 @@ export default function ProdukComponent() {
             <div key={item.id} className="bg-white border border-neutral-200 overflow-hidden flex flex-col justify-between shadow-xs group hover:border-neutral-400 transition-all duration-200">
               <div className="relative aspect-[4/3] w-full bg-neutral-100 overflow-hidden">
                 <Image src={item.gambarUtama} alt={item.nama} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                
                 <span className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-white/95 px-1.5 sm:px-2 py-0.5 border border-neutral-200 text-neutral-900 shadow-xs">
                   {item.kategori}
                 </span>
+
+                {/* BADGE PENANDA GROSIR DI ADMIN */}
+                {item.is_grosir && (
+                  <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[7.5px] sm:text-[8px] font-bold uppercase tracking-wider bg-amber-900 text-amber-100 px-1.5 py-0.5 shadow-xs flex items-center gap-0.5">
+                    <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                    <span>Grosir Min {item.min_grosir}</span>
+                  </span>
+                )}
+
                 <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider bg-neutral-950/80 text-white px-1.5 py-0.5 backdrop-blur-xs">
                   {item.gambarList?.length || 1} Foto
                 </span>
@@ -574,13 +629,23 @@ export default function ProdukComponent() {
                 <p className="text-[9px] sm:text-[11px] text-neutral-500 line-clamp-1">
                   {item.ukuran.join(', ')} • {item.warna.length} Warna {item.berat ? `• ${item.berat} gr` : ''}
                 </p>
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pt-1 gap-1">
+
+                <div className="flex flex-col pt-1">
                   <span className="font-bold text-neutral-950 text-xs">Rp {item.harga.toLocaleString('id-ID')}</span>
-                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 border self-start sm:self-auto ${item.stok > 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
+                  {item.is_grosir && item.harga_grosir && (
+                    <span className="text-[9.5px] text-amber-800 font-bold font-mono">
+                      Grosir: Rp {item.harga_grosir.toLocaleString('id-ID')} / pcs
+                    </span>
+                  )}
+                </div>
+
+                <div className="pt-1 flex items-center justify-between">
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 border ${item.stok > 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
                     Stok: {item.stok}
                   </span>
                 </div>
               </div>
+
               <div className="p-2 sm:p-3 bg-neutral-50 border-t border-neutral-200 flex items-center justify-between gap-1">
                 <div className="flex items-center gap-1">
                   <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">Stok:</span>
@@ -714,11 +779,11 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* 3 KOLOM: HARGA, STOK, BERAT */}
+              {/* 3 KOLOM: HARGA ECER, STOK, BERAT */}
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="space-y-1">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                    Harga (Rp) <span className="text-red-500">*</span>
+                    Harga Ecer (Rp) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -759,6 +824,61 @@ export default function ProdukComponent() {
                     className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-neutral-950 font-bold"
                   />
                 </div>
+              </div>
+
+              {/* PENGATURAN GROSIR BARU */}
+              <div className="p-3 bg-amber-50/60 border border-amber-200/90 rounded-xs space-y-2.5">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={formProduk.is_grosir}
+                    onChange={(e) =>
+                      setFormProduk((prev) => ({
+                        ...prev,
+                        is_grosir: e.target.checked,
+                        min_grosir: e.target.checked ? (prev.min_grosir || '3') : '',
+                        harga_grosir: e.target.checked ? prev.harga_grosir : '',
+                      }))
+                    }
+                    className="w-4 h-4 accent-neutral-950 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1">
+                    <span>Aktifkan Harga Grosir / Seri</span>
+                  </span>
+                </label>
+
+                {formProduk.is_grosir && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-200/50">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
+                        Min. Pembelian Seri (Pcs) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        placeholder="Contoh: 3 atau 5"
+                        value={formProduk.min_grosir}
+                        onChange={(e) => setFormProduk({ ...formProduk, min_grosir: e.target.value })}
+                        className="w-full bg-white border border-neutral-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-950"
+                        required={formProduk.is_grosir}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
+                        Harga Grosir / Pcs (Rp) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: 55.000"
+                        value={formProduk.harga_grosir}
+                        onChange={handleHargaGrosirChange}
+                        className="w-full bg-white border border-neutral-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-950"
+                        required={formProduk.is_grosir}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* KATEGORI */}

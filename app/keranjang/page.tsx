@@ -109,71 +109,88 @@ export default function KeranjangPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
             {/* KOLOM KIRI: DAFTAR PRODUK */}
             <div className="lg:col-span-8 space-y-3.5 sm:space-y-4">
-              {cartItems.map((item: any) => (
-                <div
-                  key={`${item.id}-${item.size}-${item.color}`}
-                  className="bg-white border border-neutral-200 p-3.5 sm:p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between shadow-xs"
-                >
-                  <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto min-w-0">
-                    <div className="relative w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 shrink-0 overflow-hidden border border-neutral-200">
-                      <Image 
-                        src={item.image || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'} 
-                        alt={item.title} 
-                        fill 
-                        className="object-cover" 
-                      />
-                    </div>
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900 line-clamp-1">
-                        {item.title}
-                      </h3>
-                      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-wider">
-                        Ukuran: <strong className="text-neutral-800">{item.size || 'All Size'}</strong> | Warna: <strong className="text-neutral-800">{item.color || 'Default'}</strong>
-                      </p>
-                      <p className="text-xs font-bold text-neutral-950 pt-0.5">
-                        Rp {Number(item.price).toLocaleString('id-ID')}
-                      </p>
-                    </div>
-                  </div>
+              {cartItems.map((item: any) => {
+                const itemUnitWeight = Number(item.weight) || 350;
+                const itemTotalWeight = itemUnitWeight * item.qty;
 
-                  <div className="flex items-center justify-between w-full sm:w-auto gap-4 sm:gap-6 border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-100">
-                    {/* KONTROL KUANTITAS */}
-                    <div className="flex items-center border border-neutral-300 rounded bg-white">
+                return (
+                  <div
+                    key={`${item.id}-${item.size}-${item.color}`}
+                    className="bg-white border border-neutral-200 p-3.5 sm:p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between shadow-xs"
+                  >
+                    <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto min-w-0">
+                      <div className="relative w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 shrink-0 overflow-hidden border border-neutral-200">
+                        <Image 
+                          src={item.image || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop'} 
+                          alt={item.title} 
+                          fill 
+                          className="object-cover" 
+                        />
+                      </div>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900 line-clamp-1">
+                          {item.title}
+                        </h3>
+                        <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-wider">
+                          Ukuran: <strong className="text-neutral-800">{item.size || 'All Size'}</strong> | Warna: <strong className="text-neutral-800">{item.color || 'Default'}</strong>
+                        </p>
+
+                        {/* INFORMASI BERAT PER ITEM & TOTAL BERAT BARANG */}
+                        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-neutral-600">
+                          <Scale className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                          <span>
+                            Berat: <strong className="text-neutral-900 font-mono">{itemUnitWeight} gr</strong> / pcs
+                            {item.qty > 1 && (
+                              <span className="text-neutral-500 font-mono"> (Total: {itemTotalWeight} gr)</span>
+                            )}
+                          </span>
+                        </div>
+
+                        <p className="text-xs font-bold text-neutral-950 pt-0.5">
+                          Rp {Number(item.price).toLocaleString('id-ID')} <span className="text-[10px] text-neutral-400 font-normal">/ pcs</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between w-full sm:w-auto gap-4 sm:gap-6 border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-100">
+                      {/* KONTROL KUANTITAS */}
+                      <div className="flex items-center border border-neutral-300 rounded bg-white">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.id, item.size, item.color, item.qty, -1)}
+                          className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-8 text-center text-xs font-bold text-neutral-800">
+                          {item.qty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(item.id, item.size, item.color, item.qty, 1)}
+                          className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <p className="text-xs sm:text-sm font-bold text-neutral-950 min-w-20 text-right">
+                        Rp {(item.price * item.qty).toLocaleString('id-ID')}
+                      </p>
+
                       <button
                         type="button"
-                        onClick={() => handleUpdateQty(item.id, item.size, item.color, item.qty, -1)}
-                        className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300"
+                        onClick={() => handleDelete(item.id, item.size, item.color)}
+                        className="text-neutral-400 hover:text-rose-600 transition p-1"
+                        aria-label="Hapus Barang"
+                        title="Hapus dari keranjang"
                       >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-8 text-center text-xs font-bold text-neutral-800">
-                        {item.qty}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateQty(item.id, item.size, item.color, item.qty, 1)}
-                        className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300"
-                      >
-                        <Plus className="w-3 h-3" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-
-                    <p className="text-xs sm:text-sm font-bold text-neutral-950 min-w-20 text-right">
-                      Rp {(item.price * item.qty).toLocaleString('id-ID')}
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(item.id, item.size, item.color)}
-                      className="text-neutral-400 hover:text-rose-600 transition p-1"
-                      aria-label="Hapus Barang"
-                      title="Hapus dari keranjang"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* KOLOM KANAN: RINGKASAN BELANJA */}
@@ -192,9 +209,9 @@ export default function KeranjangPage() {
                 <div className="flex justify-between items-center">
                   <span className="flex items-center gap-1 text-[11px]">
                     <Scale className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Total Berat</span>
+                    <span>Total Berat Keseluruhan</span>
                   </span>
-                  <span className="font-semibold text-neutral-900">
+                  <span className="font-semibold text-neutral-900 font-mono">
                     {totalWeight} Gram
                   </span>
                 </div>

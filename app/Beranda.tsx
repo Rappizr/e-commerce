@@ -19,7 +19,8 @@ import {
   Clock,
   Building2,
   ExternalLink,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { useKeranjang } from './penyimpanan/KeranjangContext';
 import { useAuth } from './penyimpanan/authcontext';
@@ -39,6 +40,9 @@ export default function Beranda() {
   const [sortOption, setSortOption] = useState('default');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [addedProductToast, setAddedProductToast] = useState<ToastItem | null>(null);
+
+  // State dropdown untuk expand koleksi grosir
+  const [showAllGrosir, setShowAllGrosir] = useState(false);
 
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>(['Semua']);
@@ -71,6 +75,9 @@ export default function Beranda() {
           stok: Number(p.stok || 0),
           berat: Number(p.berat || 350),
           deskripsi: p.deskripsi,
+          is_grosir: Boolean(p.is_grosir),
+          min_grosir: Number(p.min_grosir || 3),
+          harga_grosir: p.harga_grosir ? Number(p.harga_grosir) : null,
           gambarUtama: p.gambar_utama || (Array.isArray(p.gambar_list) && p.gambar_list[0]) || 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop',
           gambarList: Array.isArray(p.gambar_list) ? p.gambar_list : [],
           warna: Array.isArray(p.warna) && p.warna.length > 0 ? p.warna : ['Default'],
@@ -152,6 +159,10 @@ export default function Beranda() {
   const brandTicker = Array(12).fill('ALMACO FASHION');
   const deliveryTicker = Array(12).fill('TESTIMONI PENGIRIMAN');
 
+  // Filter produk grosir murni dari database
+  const grosirProducts = products.filter((p) => p.is_grosir === true);
+  const displayedGrosir = showAllGrosir ? grosirProducts : grosirProducts.slice(0, 3);
+
   const filteredProducts = products.filter((p) => {
     const matchCategory = selectedCategory === 'Semua' || p.kategori?.toLowerCase() === selectedCategory.toLowerCase();
     const query = searchQuery.trim().toLowerCase();
@@ -190,78 +201,73 @@ export default function Beranda() {
         }
       `}</style>
 
-{/* MODAL DIALOG TENGAH LAYAR */}
-{addedProductToast && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    {/* Backdrop Blur Gelap */}
-    <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
-      onClick={() => setAddedProductToast(null)}
-    />
-
-    {/* Kartu Dialog Modal */}
-    <div className="relative z-10 w-full max-w-[400px] bg-white border border-neutral-200/90 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
-      {/* Header Status & Tombol Close */}
-      <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-        <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
-          <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-            <Check className="w-3 h-3 stroke-[3]" />
-          </span>
-          <span>Berhasil Masuk Keranjang</span>
-        </div>
-        <button 
-          onClick={() => setAddedProductToast(null)}
-          className="text-neutral-400 hover:text-neutral-900 p-1 transition-colors cursor-pointer"
-          aria-label="Tutup notifikasi"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Rincian Produk & Thumbnail */}
-      <div className="flex items-center gap-3.5 bg-neutral-50/60 p-2.5 border border-neutral-200/70">
-        <div className="relative w-14 h-18 bg-neutral-200 border border-neutral-200 shrink-0 overflow-hidden">
-          <Image
-            src={addedProductToast.image}
-            alt={addedProductToast.title}
-            fill
-            className="object-cover"
+      {/* MODAL DIALOG TENGAH LAYAR */}
+      {addedProductToast && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={() => setAddedProductToast(null)}
           />
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide truncate">
-            {addedProductToast.title}
-          </h4>
-          <p className="text-xs font-bold text-neutral-900 font-mono">
-            Rp {addedProductToast.price.toLocaleString('id-ID')}
-          </p>
-          <span className="text-[10px] text-neutral-400 uppercase tracking-widest block">
-            Jumlah: 1 pcs
-          </span>
-        </div>
-      </div>
 
-      {/* Tombol Aksi */}
-      <div className="grid grid-cols-2 gap-2.5 pt-1">
-        <button
-          type="button"
-          onClick={() => setAddedProductToast(null)}
-          className="w-full bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center cursor-pointer"
-        >
-          Lanjut Belanja
-        </button>
-        <Link
-          href="/keranjang"
-          onClick={() => setAddedProductToast(null)}
-          className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors flex items-center justify-center gap-1.5 text-center shadow-xs cursor-pointer"
-        >
-          <span>Lihat Tas</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-    </div>
-  </div>
-)}
+          <div className="relative z-10 w-full max-w-[400px] bg-white border border-neutral-200/90 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+                  <Check className="w-3 h-3 stroke-[3]" />
+                </span>
+                <span>Berhasil Masuk Keranjang</span>
+              </div>
+              <button 
+                onClick={() => setAddedProductToast(null)}
+                className="text-neutral-400 hover:text-neutral-900 p-1 transition-colors cursor-pointer"
+                aria-label="Tutup notifikasi"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3.5 bg-neutral-50/60 p-2.5 border border-neutral-200/70">
+              <div className="relative w-14 h-18 bg-neutral-200 border border-neutral-200 shrink-0 overflow-hidden">
+                <Image
+                  src={addedProductToast.image}
+                  alt={addedProductToast.title}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h4 className="text-xs font-bold text-neutral-950 uppercase tracking-wide truncate">
+                  {addedProductToast.title}
+                </h4>
+                <p className="text-xs font-bold text-neutral-900 font-mono">
+                  Rp {addedProductToast.price.toLocaleString('id-ID')}
+                </p>
+                <span className="text-[10px] text-neutral-400 uppercase tracking-widest block">
+                  Jumlah: 1 pcs
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setAddedProductToast(null)}
+                className="w-full bg-white hover:bg-neutral-100 text-neutral-800 border border-neutral-300 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center cursor-pointer"
+              >
+                Lanjut Belanja
+              </button>
+              <Link
+                href="/keranjang"
+                onClick={() => setAddedProductToast(null)}
+                className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors flex items-center justify-center gap-1.5 text-center shadow-xs cursor-pointer"
+              >
+                <span>Lihat Tas</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
@@ -308,6 +314,12 @@ export default function Beranda() {
               <Link href="/" className="hover:text-neutral-950 transition-colors py-1">
                 Beranda
               </Link>
+              {grosirProducts.length > 0 && (
+                <Link href="/#grosir-section" className="text-amber-800 hover:text-amber-950 transition-colors py-1 flex items-center gap-1">
+                  <span>Grosir</span>
+                  <span className="bg-amber-100 text-amber-900 text-[9px] px-1.5 py-0.2 rounded-xs font-black">HOT</span>
+                </Link>
+              )}
               <Link href="/#lokasi" className="hover:text-neutral-950 transition-colors py-1">
                 Lokasi Butik
               </Link>
@@ -390,6 +402,15 @@ export default function Beranda() {
             >
               Beranda
             </Link>
+            {grosirProducts.length > 0 && (
+              <Link
+                href="/#grosir-section"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block py-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 border-b border-neutral-100"
+              >
+                Paket Grosir (Min. Seri)
+              </Link>
+            )}
             <Link
               href="/#lokasi"
               onClick={() => setMobileMenuOpen(false)}
@@ -449,7 +470,102 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* DAFTAR KATALOG PRODUK */}
+      {/* SEKSI KHUSUS GROSIR (OTOMATIS TAMPIL JIKA ADA PRODUK GROSIR DI DATABASE) */}
+      {grosirProducts.length > 0 && (
+        <section id="grosir-section" className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12 pt-6 sm:pt-10">
+          <div className="bg-[#FAF8F5] border border-amber-200/90 p-4 sm:p-6 shadow-xs relative">
+            {/* Header Seksi Grosir */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3 sm:pb-4 mb-4 sm:mb-6">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="bg-neutral-950 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs flex items-center gap-1 shadow-xs">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Paket Grosir & Reseller</span>
+                  </span>
+                  <span className="text-[10px] text-amber-900 font-semibold">
+                    ★ Khusus Pembelian Seri
+                  </span>
+                </div>
+                <h3 className="text-sm sm:text-base font-serif font-bold uppercase tracking-tight text-neutral-950">
+                  Katalog Busana Harga Grosir
+                </h3>
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-neutral-500 font-medium">
+                Menampilkan {displayedGrosir.length} dari {grosirProducts.length} Produk Grosir
+              </span>
+            </div>
+
+            {/* Grid 3 Foto Per Baris */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-6">
+              {displayedGrosir.map((item) => (
+                <div
+                  key={`grosir-${item.id}`}
+                  className="group bg-white border border-neutral-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition-all duration-300"
+                >
+                  <Link href={`/product-detail?id=${item.id}`} className="block relative">
+                    <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
+                      <Image
+                        src={item.gambarUtama}
+                        alt={item.nama}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
+                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <span className="absolute top-2 left-2 text-[8.5px] sm:text-[9.5px] uppercase font-black tracking-wider bg-neutral-950 text-white px-2.5 py-1 shadow-sm">
+                        Grosir Min. {item.min_grosir} Pcs
+                      </span>
+                    </div>
+
+                    <div className="p-3 sm:p-4 space-y-1.5">
+                      <span className="text-[9px] uppercase tracking-widest text-neutral-400 font-semibold block">
+                        {item.kategori}
+                      </span>
+                      <h4 className="text-xs sm:text-sm font-semibold text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
+                        {item.nama}
+                      </h4>
+                      
+                      <div className="pt-1 flex flex-col">
+                        <span className="text-[10px] text-neutral-400 line-through">
+                          Ecer: Rp {item.harga.toLocaleString('id-ID')}
+                        </span>
+                        <span className="text-xs sm:text-sm font-bold text-amber-900 font-mono tracking-tight">
+                          Grosir: Rp {Number(item.harga_grosir || item.harga).toLocaleString('id-ID')} <span className="text-[10px] font-normal text-neutral-500">/ pcs</span>
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+
+                  <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+                    <Link
+                      href={`/product-detail?id=${item.id}`}
+                      className="w-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider py-2 bg-neutral-950 hover:bg-neutral-800 text-white transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Lihat Seri Grosir</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tombol Dropdown / Expand Jika Ada Lebih dari 3 Foto */}
+            {grosirProducts.length > 3 && (
+              <div className="mt-6 pt-4 border-t border-amber-200/60 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAllGrosir(!showAllGrosir)}
+                  className="inline-flex items-center gap-2 bg-white border border-neutral-300 hover:border-neutral-950 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-neutral-900 transition-all shadow-xs cursor-pointer active:scale-95"
+                >
+                  <span>{showAllGrosir ? 'Sembunyikan Sebagian' : `Klik Lainnya (${grosirProducts.length - 3} Produk Grosir)`}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showAllGrosir ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* DAFTAR KATALOG PRODUK UTAMA */}
       <section className="w-full px-3.5 sm:px-8 lg:px-12 py-6 sm:py-10 flex-1">
         <div className="flex flex-row items-center justify-between border-b border-neutral-200 pb-3 sm:pb-4 mb-5 sm:mb-8 gap-2 sm:gap-4">
           <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial">
