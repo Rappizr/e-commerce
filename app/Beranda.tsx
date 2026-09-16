@@ -19,8 +19,7 @@ import {
   Clock,
   Building2,
   ExternalLink,
-  Loader2,
-  Sparkles
+  Loader2
 } from 'lucide-react';
 import { useKeranjang } from './penyimpanan/KeranjangContext';
 import { useAuth } from './penyimpanan/authcontext';
@@ -40,8 +39,6 @@ export default function Beranda() {
   const [sortOption, setSortOption] = useState('default');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [addedProductToast, setAddedProductToast] = useState<ToastItem | null>(null);
-
-  // State dropdown untuk expand koleksi grosir
   const [showAllGrosir, setShowAllGrosir] = useState(false);
 
   const [products, setProducts] = useState<any[]>([]);
@@ -56,50 +53,46 @@ export default function Beranda() {
     ? totalCount 
     : cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
 
-  // Ambil data produk dan testimoni langsung dari Supabase
   const fetchDataFromSupabase = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch Products
-      const { data: prodData, error: prodErr } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [prodRes, testRes] = await Promise.all([
+        supabase
+          .from('products')
+          .select('id, nama, kategori, harga, stok, berat, gambar_utama, is_grosir, min_grosir, harga_grosir')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('testimonials')
+          .select('id, foto_url')
+          .eq('tayang', true)
+          .order('created_at', { ascending: false })
+      ]);
 
-      if (!prodErr && prodData) {
-        const mapped = prodData.map((p: any) => ({
+      if (!prodRes.error && prodRes.data) {
+        const mapped = prodRes.data.map((p: any) => ({
           id: p.id,
           nama: p.nama,
           kategori: p.kategori,
           harga: Number(p.harga || 0),
           stok: Number(p.stok || 0),
           berat: Number(p.berat || 350),
-          deskripsi: p.deskripsi,
           is_grosir: Boolean(p.is_grosir),
           min_grosir: Number(p.min_grosir || 3),
           harga_grosir: p.harga_grosir ? Number(p.harga_grosir) : null,
-          gambarUtama: p.gambar_utama || (Array.isArray(p.gambar_list) && p.gambar_list[0]) || 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop',
-          gambarList: Array.isArray(p.gambar_list) ? p.gambar_list : [],
-          warna: Array.isArray(p.warna) && p.warna.length > 0 ? p.warna : ['Default'],
-          ukuran: Array.isArray(p.ukuran) && p.ukuran.length > 0 ? p.ukuran : ['All Size'],
+          gambarUtama: p.gambar_utama || 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop',
+          warna: ['Default'],
+          ukuran: ['All Size'],
         }));
         setProducts(mapped);
 
-        const extractedCats = Array.from(new Set(prodData.map((p: any) => p.kategori))).filter(Boolean);
+        const extractedCats = Array.from(new Set(prodRes.data.map((p: any) => p.kategori))).filter(Boolean);
         if (extractedCats.length > 0) {
           setCategories(['Semua', ...(extractedCats as string[])]);
         }
       }
 
-      // 2. Fetch Testimonials
-      const { data: testData, error: testErr } = await supabase
-        .from('testimonials')
-        .select('*')
-        .eq('tayang', true)
-        .order('created_at', { ascending: false });
-
-      if (!testErr && testData) {
-        setTestimoniList(testData);
+      if (!testRes.error && testRes.data) {
+        setTestimoniList(testRes.data);
       }
     } catch (e) {
       console.error('Fetch Supabase Beranda Error:', e);
@@ -159,7 +152,6 @@ export default function Beranda() {
   const brandTicker = Array(12).fill('ALMACO FASHION');
   const deliveryTicker = Array(12).fill('TESTIMONI PENGIRIMAN');
 
-  // Filter produk grosir murni dari database
   const grosirProducts = products.filter((p) => p.is_grosir === true);
   const displayedGrosir = showAllGrosir ? grosirProducts : grosirProducts.slice(0, 3);
 
@@ -201,7 +193,6 @@ export default function Beranda() {
         }
       `}</style>
 
-      {/* MODAL DIALOG TENGAH LAYAR */}
       {addedProductToast && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 
@@ -269,7 +260,6 @@ export default function Beranda() {
         </div>
       )}
 
-      {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-3.5 sm:px-8 lg:px-12 h-14 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="flex items-center gap-1.5 sm:gap-2 transition-opacity hover:opacity-85 min-w-0">
@@ -315,9 +305,9 @@ export default function Beranda() {
                 Beranda
               </Link>
               {grosirProducts.length > 0 && (
-                <Link href="/#grosir-section" className="text-amber-800 hover:text-amber-950 transition-colors py-1 flex items-center gap-1">
+                <Link href="/#grosir-section" className="text-neutral-900 hover:text-black transition-colors py-1 flex items-center gap-1.5">
                   <span>Grosir</span>
-                  <span className="bg-amber-100 text-amber-900 text-[9px] px-1.5 py-0.2 rounded-xs font-black">HOT</span>
+                  <span className="bg-neutral-950 text-white text-[9px] px-1.5 py-0.2 rounded-xs font-bold tracking-wider">SERI</span>
                 </Link>
               )}
               <Link href="/#lokasi" className="hover:text-neutral-950 transition-colors py-1">
@@ -406,7 +396,7 @@ export default function Beranda() {
               <Link
                 href="/#grosir-section"
                 onClick={() => setMobileMenuOpen(false)}
-                className="block py-1.5 text-xs font-bold uppercase tracking-wider text-amber-800 border-b border-neutral-100"
+                className="block py-1.5 text-xs font-bold uppercase tracking-wider text-neutral-900 border-b border-neutral-100"
               >
                 Paket Grosir (Min. Seri)
               </Link>
@@ -436,7 +426,6 @@ export default function Beranda() {
         )}
       </header>
 
-      {/* HERO BANNER */}
       <section className="relative h-[32vh] sm:h-[45vh] w-full flex items-center justify-start overflow-hidden">
         <Image
           src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=2000&auto=format&fit=crop"
@@ -456,7 +445,6 @@ export default function Beranda() {
         </div>
       </section>
 
-      {/* RUNNING TEXT */}
       <div className="w-full bg-neutral-100/90 border-y border-neutral-200 py-2 sm:py-3 overflow-hidden">
         <div className="animate-marquee flex items-center">
           {brandTicker.concat(brandTicker).map((brand, idx) => (
@@ -470,20 +458,18 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* SEKSI KHUSUS GROSIR (OTOMATIS TAMPIL JIKA ADA PRODUK GROSIR DI DATABASE) */}
       {grosirProducts.length > 0 && (
         <section id="grosir-section" className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12 pt-6 sm:pt-10">
-          <div className="bg-[#FAF8F5] border border-amber-200/90 p-4 sm:p-6 shadow-xs relative">
-            {/* Header Seksi Grosir */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3 sm:pb-4 mb-4 sm:mb-6">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="bg-neutral-950 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-xs flex items-center gap-1 shadow-xs">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>Paket Grosir & Reseller</span>
+          <div className="bg-white border border-neutral-200 p-4 sm:p-6 shadow-xs relative">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200 pb-3 sm:pb-4 mb-4 sm:mb-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-[10px] sm:text-[11px] uppercase tracking-wider">
+                  <span className="bg-neutral-950 text-white text-[9px] font-bold px-2 py-0.5 tracking-widest">
+                    GROSIR
                   </span>
-                  <span className="text-[10px] text-amber-900 font-semibold">
-                    ★ Khusus Pembelian Seri
+                  <span className="text-neutral-400">•</span>
+                  <span className="text-neutral-600 font-semibold">
+                    Khusus Pembelian Seri
                   </span>
                 </div>
                 <h3 className="text-sm sm:text-base font-serif font-bold uppercase tracking-tight text-neutral-950">
@@ -495,7 +481,6 @@ export default function Beranda() {
               </span>
             </div>
 
-            {/* Grid 3 Foto Per Baris */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-6">
               {displayedGrosir.map((item) => (
                 <div
@@ -511,7 +496,7 @@ export default function Beranda() {
                         sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
                         className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                       />
-                      <span className="absolute top-2 left-2 text-[8.5px] sm:text-[9.5px] uppercase font-black tracking-wider bg-neutral-950 text-white px-2.5 py-1 shadow-sm">
+                      <span className="absolute top-2 left-2 text-[8.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-neutral-950 text-white px-2.5 py-1 shadow-sm">
                         Grosir Min. {item.min_grosir} Pcs
                       </span>
                     </div>
@@ -528,7 +513,7 @@ export default function Beranda() {
                         <span className="text-[10px] text-neutral-400 line-through">
                           Ecer: Rp {item.harga.toLocaleString('id-ID')}
                         </span>
-                        <span className="text-xs sm:text-sm font-bold text-amber-900 font-mono tracking-tight">
+                        <span className="text-xs sm:text-sm font-bold text-neutral-950 font-mono tracking-tight">
                           Grosir: Rp {Number(item.harga_grosir || item.harga).toLocaleString('id-ID')} <span className="text-[10px] font-normal text-neutral-500">/ pcs</span>
                         </span>
                       </div>
@@ -548,9 +533,8 @@ export default function Beranda() {
               ))}
             </div>
 
-            {/* Tombol Dropdown / Expand Jika Ada Lebih dari 3 Foto */}
             {grosirProducts.length > 3 && (
-              <div className="mt-6 pt-4 border-t border-amber-200/60 text-center">
+              <div className="mt-6 pt-4 border-t border-neutral-200 text-center">
                 <button
                   type="button"
                   onClick={() => setShowAllGrosir(!showAllGrosir)}
@@ -565,7 +549,6 @@ export default function Beranda() {
         </section>
       )}
 
-      {/* DAFTAR KATALOG PRODUK UTAMA */}
       <section className="w-full px-3.5 sm:px-8 lg:px-12 py-6 sm:py-10 flex-1">
         <div className="flex flex-row items-center justify-between border-b border-neutral-200 pb-3 sm:pb-4 mb-5 sm:mb-8 gap-2 sm:gap-4">
           <div className="flex items-center gap-1.5 sm:gap-3 flex-1 sm:flex-initial">
@@ -695,7 +678,6 @@ export default function Beranda() {
         )}
       </section>
 
-      {/* LOKASI BUTIK */}
       <section id="lokasi" className="w-full bg-[#F9F8F6] border-t border-neutral-200 py-8 sm:py-14">
         <div className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12">
           <div className="text-center max-w-xl mx-auto space-y-1 mb-6 sm:mb-8">
@@ -781,7 +763,6 @@ export default function Beranda() {
         </div>
       </section>
 
-      {/* TESTIMONI */}
       {testimoniList.length > 0 && (
         <>
           <div className="w-full bg-neutral-900 text-white py-2.5 overflow-hidden border-y border-neutral-800">
@@ -829,10 +810,8 @@ export default function Beranda() {
         </>
       )}
 
-      {/* FOOTER */}
       <Footer />
 
-      {/* FLOATING WHATSAPP BUTTON */}
       <a
         href={waUrl}
         target="_blank"

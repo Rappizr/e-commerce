@@ -15,57 +15,12 @@ import {
   ZoomIn, 
   Loader2, 
   Plus, 
-  Minus, 
-  Sparkles 
+  Minus,
+  CheckCircle2
 } from "lucide-react";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
-
-const colorMap: Record<string, string> = {
-  hitam: "#181818",
-  black: "#181818",
-  putih: "#FFFFFF",
-  white: "#FFFFFF",
-  "cokelat karamel": "#C49A70",
-  cokelat: "#8B5A2B",
-  caramel: "#C49A70",
-  mocca: "#9E7B66",
-  moka: "#9E7B66",
-  cream: "#EED9C4",
-  krem: "#EED9C4",
-  "sage green": "#8A9A86",
-  sage: "#8A9A86",
-  hijau: "#3A5A40",
-  "hijau botol": "#1B4332",
-  navy: "#1B263B",
-  biru: "#2B4C7E",
-  maroon: "#5E1914",
-  merah: "#9E2A2B",
-  "dusty pink": "#D8A48F",
-  pink: "#E8A598",
-  "abu misty": "#D1D5DB",
-  "abu-abu": "#6D6B63",
-  abu: "#6D6B63",
-  grey: "#6D6B63",
-  lilac: "#B8A9C9",
-  ungu: "#6A4C93",
-  terracotta: "#C86446",
-  mustard: "#D4A373",
-  denim: "#4A6B82",
-  khaki: "#BDB76B",
-  army: "#4B5320",
-  olive: "#556B2F",
-};
-
-const getColorHex = (name: string): string | null => {
-  const normalized = name.toLowerCase().trim();
-  if (colorMap[normalized]) return colorMap[normalized];
-  for (const key in colorMap) {
-    if (normalized.includes(key)) return colorMap[key];
-  }
-  return null;
-};
 
 function ProductDetailContent() {
   const searchParams = useSearchParams();
@@ -80,8 +35,6 @@ function ProductDetailContent() {
   const [showCenterModal, setShowCenterModal] = useState(false);
   const [galleryModalOpen, setGalleryModalOpen] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-
-  // State jumlah kuantitas yang ingin dibeli
   const [quantity, setQuantity] = useState(1);
 
   const { tambahKeKeranjang } = useKeranjang();
@@ -97,7 +50,7 @@ function ProductDetailContent() {
       try {
         const { data, error } = await supabase
           .from("products")
-          .select("*")
+          .select("id, nama, kategori, harga, stok, berat, deskripsi, is_grosir, min_grosir, harga_grosir, gambar_list, gambar_utama, warna, ukuran, rincian")
           .eq("id", productId)
           .single();
 
@@ -134,7 +87,6 @@ function ProductDetailContent() {
           setSelectedColor(warnaArr[0]);
           setSelectedSize(ukuranArr[0]);
 
-          // Jika barang grosir, set kuantitas awal langsung ke batas minimal grosir
           if (mapped.is_grosir && mapped.min_grosir) {
             setQuantity(mapped.min_grosir);
           } else {
@@ -179,7 +131,6 @@ function ProductDetailContent() {
   const sisaStok = product.stok;
   const rawWarnaList: string[] = product.warna;
 
-  // Logika Perhitungan Harga Grosir vs Ecer
   const isQualifiedGrosir = Boolean(
     product.is_grosir && 
     product.min_grosir && 
@@ -189,6 +140,7 @@ function ProductDetailContent() {
 
   const activeUnitPrice = isQualifiedGrosir ? product.harga_grosir : product.rawPrice;
   const subtotalPrice = activeUnitPrice * quantity;
+  const savingPerPcs = product.is_grosir && product.harga_grosir ? (product.rawPrice - product.harga_grosir) : 0;
 
   const toggleAccordion = (section: string) => {
     setOpenAccordion(openAccordion === section ? null : section);
@@ -214,13 +166,13 @@ function ProductDetailContent() {
       {
         id: product.id,
         title: product.title,
-        price: activeUnitPrice, // Mengirimkan harga aktif (harga ecer atau harga grosir)
+        price: activeUnitPrice,
         size: selectedSize,
         color: selectedColor,
         weight: product.weight,
         image: allImages[0],
       },
-      quantity // Mengirim jumlah kuantitas yang dipilih
+      quantity
     );
 
     setShowCenterModal(true);
@@ -230,8 +182,6 @@ function ProductDetailContent() {
 
   return (
     <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 relative">
-      
-      {/* MODAL SUKSES TAMBAH KERANJANG */}
       {showCenterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -241,7 +191,7 @@ function ProductDetailContent() {
           <div className="relative z-10 w-full max-w-sm bg-white border border-neutral-200 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200">
             <button
               onClick={() => setShowCenterModal(false)}
-              className="absolute top-3.5 right-3.5 p-1 text-neutral-400 hover:text-neutral-900 transition-colors"
+              className="absolute top-3.5 right-3.5 p-1 text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -270,7 +220,7 @@ function ProductDetailContent() {
                 />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-900 truncate">
+                <h4 className="text-xs font-bold uppercase tracking-wide text-neutral-900 truncate">
                   {product.title}
                 </h4>
                 <p className="text-[10px] text-neutral-500 uppercase tracking-wider truncate">
@@ -279,7 +229,7 @@ function ProductDetailContent() {
                 <p className="text-xs font-bold text-neutral-900">
                   {quantity} pcs × Rp {activeUnitPrice.toLocaleString("id-ID")}
                 </p>
-                <p className="text-[11px] font-black text-amber-900 font-mono">
+                <p className="text-[11px] font-black text-neutral-950 font-mono">
                   Subtotal: Rp {subtotalPrice.toLocaleString("id-ID")}
                 </p>
               </div>
@@ -307,7 +257,6 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* MODAL FULLSCREEN LIGHTBOX */}
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -319,7 +268,7 @@ function ProductDetailContent() {
             </div>
             <button
               onClick={() => setGalleryModalOpen(false)}
-              className="p-1.5 text-neutral-400 hover:text-white transition rounded-full hover:bg-neutral-800"
+              className="p-1.5 text-neutral-400 hover:text-white transition rounded-full hover:bg-neutral-800 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -328,7 +277,7 @@ function ProductDetailContent() {
           <div className="relative flex-1 flex items-center justify-center py-4">
             <button
               onClick={prevImage}
-              className="absolute left-2 sm:left-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95"
+              className="absolute left-2 sm:left-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -345,7 +294,7 @@ function ProductDetailContent() {
 
             <button
               onClick={nextImage}
-              className="absolute right-2 sm:right-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95"
+              className="absolute right-2 sm:right-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -356,7 +305,7 @@ function ProductDetailContent() {
               <button
                 key={idx}
                 onClick={() => setActiveImageIndex(idx)}
-                className={`relative w-12 h-16 sm:w-14 sm:h-18 shrink-0 border transition overflow-hidden ${
+                className={`relative w-12 h-16 sm:w-14 sm:h-18 shrink-0 border transition overflow-hidden cursor-pointer ${
                   activeImageIndex === idx ? "border-white scale-105 ring-1 ring-white" : "border-neutral-700 opacity-50 hover:opacity-100"
                 }`}
               >
@@ -367,10 +316,7 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* GRID DETAIL PRODUK */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
-        
-        {/* KOLOM FOTO */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           <div 
             onClick={() => openLightbox(selectedImageIndex)}
@@ -384,14 +330,14 @@ function ProductDetailContent() {
               className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
             />
             
-            <div className="absolute top-2.5 left-2.5 bg-white/95 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-neutral-200 shadow-2xs">
+            <div className="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-neutral-200 shadow-2xs">
               {product.category}
             </div>
 
             {product.is_grosir && (
-              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                <span>Grosir Min. {product.min_grosir} Pcs</span>
+              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-white px-2.5 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border border-neutral-800 shadow-sm flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>GROSIR MIN. {product.min_grosir} PCS</span>
               </div>
             )}
 
@@ -440,7 +386,6 @@ function ProductDetailContent() {
           )}
         </div>
 
-        {/* KOLOM INFORMASI PRODUK */}
         <div className="md:col-span-6 space-y-4">
           <div className="space-y-1 border-b border-neutral-200 pb-3">
             <div className="flex items-center gap-2 text-[10px] tracking-widest font-bold uppercase text-neutral-400">
@@ -457,7 +402,6 @@ function ProductDetailContent() {
               {product.title}
             </h1>
 
-            {/* TAMPILAN HARGA REAL-TIME */}
             <div className="pt-1 flex items-baseline gap-2">
               <span className="text-xl sm:text-2xl text-neutral-950 font-black tracking-tight font-mono">
                 Rp {activeUnitPrice.toLocaleString("id-ID")}
@@ -472,51 +416,75 @@ function ProductDetailContent() {
             </div>
           </div>
 
-          {/* KOTAK PROMO / INFO KHUSUS GROSIR JIKA PRODUK INI MEMILIKI OPSI GROSIR */}
+          {/* DUAL-CARD PRICING TIER (ECER VS GROSIR) */}
           {product.is_grosir && product.harga_grosir && (
-            <div className="p-3 bg-[#FAF8F5] border border-amber-300/80 rounded-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="bg-amber-950 text-white text-[8.5px] font-bold uppercase px-1.5 py-0.5 rounded-[2px] flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5 text-amber-300" />
-                    <span>Harga Paket Grosir</span>
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                <span>Pilih Tipe Pembelian</span>
+                {savingPerPcs > 0 && (
+                  <span className="text-emerald-800 font-mono">
+                    Hemat Rp {savingPerPcs.toLocaleString("id-ID")} / pcs di Paket Grosir
                   </span>
-                  <span className="text-[11px] font-bold text-amber-950">
-                    Rp {product.harga_grosir.toLocaleString("id-ID")} / pcs
-                  </span>
-                </div>
-                <span className="text-[10px] text-neutral-500 font-semibold">
-                  Min. {product.min_grosir} pcs
-                </span>
+                )}
               </div>
 
-              {/* Tombol Pintasan Cepat */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* KARTU ECER */}
+                <div
                   onClick={() => setQuantity(1)}
-                  className={`flex-1 py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider border transition ${
+                  className={`relative p-3 border transition cursor-pointer flex flex-col justify-between ${
                     quantity < (product.min_grosir || 3)
-                      ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                      : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500"
+                      ? "border-neutral-950 bg-white ring-1 ring-neutral-950 shadow-xs"
+                      : "border-neutral-200 bg-neutral-50/70 hover:border-neutral-300 hover:bg-white"
                   }`}
                 >
-                  Beli Ecer (1 Pcs)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuantity(product.min_grosir || 3)}
-                  className={`flex-1 py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider border transition flex items-center justify-center gap-1 ${
-                    quantity >= (product.min_grosir || 3)
-                      ? "bg-amber-900 text-white border-amber-900 shadow-2xs"
-                      : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
-                  }`}
-                >
-                  <span>Paket Grosir ({product.min_grosir} Pcs)</span>
-                  <span className="text-[8px] bg-white text-amber-950 px-1 py-0.2 rounded-xs font-black">
-                    HEMAT
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600">
+                        Ecer / Satuan
+                      </span>
+                      {quantity < (product.min_grosir || 3) && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-neutral-950 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold font-mono text-neutral-900">
+                      Rp {product.rawPrice.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                  <span className="text-[9px] text-neutral-400 font-medium mt-2 block">
+                    Beli 1 - {(product.min_grosir || 3) - 1} pcs
                   </span>
-                </button>
+                </div>
+
+                {/* KARTU GROSIR */}
+                <div
+                  onClick={() => setQuantity(product.min_grosir || 3)}
+                  className={`relative p-3 border transition cursor-pointer flex flex-col justify-between ${
+                    quantity >= (product.min_grosir || 3)
+                      ? "border-neutral-950 bg-white ring-1 ring-neutral-950 shadow-xs"
+                      : "border-neutral-200 bg-neutral-50/70 hover:border-neutral-300 hover:bg-white"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1">
+                        <span>Seri Grosir</span>
+                      </span>
+                      {quantity >= (product.min_grosir || 3) && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-neutral-950 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold font-mono text-neutral-950">
+                      Rp {product.harga_grosir.toLocaleString("id-ID")}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-[9px] font-medium">
+                    <span className="text-neutral-500 font-mono">Min. {product.min_grosir} pcs</span>
+                    <span className="text-emerald-700 font-bold font-mono bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded-xs">
+                      LEBIH MURAH
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -525,7 +493,6 @@ function ProductDetailContent() {
             {product.desc}
           </p>
 
-          {/* PILIHAN WARNA */}
           {rawWarnaList && rawWarnaList.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center text-xs uppercase">
@@ -535,41 +502,17 @@ function ProductDetailContent() {
               
               <div className="flex flex-wrap items-center gap-2">
                 {rawWarnaList.map((warnaName) => {
-                  const hexCode = getColorHex(warnaName);
                   const isSelected = selectedColor.toLowerCase() === warnaName.toLowerCase();
-
-                  if (hexCode) {
-                    return (
-                      <button
-                        key={warnaName}
-                        type="button"
-                        onClick={() => setSelectedColor(warnaName)}
-                        title={warnaName}
-                        className={`w-6 h-6 rounded-full flex items-center justify-center transition cursor-pointer ${
-                          isSelected
-                            ? "ring-2 ring-offset-2 ring-neutral-950 scale-110"
-                            : "hover:scale-105 opacity-80 hover:opacity-100"
-                        }`}
-                      >
-                        <span 
-                          style={{ backgroundColor: hexCode }}
-                          className={`w-full h-full rounded-full border ${
-                            hexCode.toLowerCase() === "#ffffff" ? "border-neutral-300" : "border-black/10"
-                          }`} 
-                        />
-                      </button>
-                    );
-                  }
 
                   return (
                     <button
                       key={warnaName}
                       type="button"
                       onClick={() => setSelectedColor(warnaName)}
-                      className={`px-2.5 py-1 text-[11px] font-bold uppercase transition border ${
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition border cursor-pointer ${
                         isSelected
                           ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                          : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500"
+                          : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-400"
                       }`}
                     >
                       {warnaName}
@@ -580,7 +523,6 @@ function ProductDetailContent() {
             </div>
           )}
 
-          {/* PILIHAN UKURAN */}
           {product.ukuran && product.ukuran.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs tracking-wider uppercase">
@@ -596,7 +538,7 @@ function ProductDetailContent() {
                     key={size}
                     type="button"
                     onClick={() => setSelectedSize(size)}
-                    className={`px-3.5 py-1.5 text-xs font-bold uppercase transition border ${
+                    className={`px-3.5 py-1.5 text-xs font-bold uppercase transition border cursor-pointer ${
                       selectedSize === size
                         ? "border-neutral-950 bg-neutral-950 text-white shadow-2xs"
                         : "border-neutral-200 text-neutral-700 hover:border-neutral-400 bg-white"
@@ -609,7 +551,6 @@ function ProductDetailContent() {
             </div>
           )}
 
-          {/* ATUR JUMLAH PEMBELIAN (QUANTITY COUNTER) */}
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
               Jumlah Pembelian
@@ -619,7 +560,7 @@ function ProductDetailContent() {
                 <button
                   type="button"
                   onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
-                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95"
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95 cursor-pointer"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
@@ -637,7 +578,7 @@ function ProductDetailContent() {
                 <button
                   type="button"
                   onClick={() => setQuantity((prev) => Math.min(sisaStok, prev + 1))}
-                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95"
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition active:scale-95 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -649,7 +590,6 @@ function ProductDetailContent() {
             </div>
           </div>
 
-          {/* TOMBOL BELI */}
           <div className="pt-2">
             <button
               onClick={handleAddToCart}
@@ -669,12 +609,11 @@ function ProductDetailContent() {
             </button>
           </div>
 
-          {/* ACCORDION RINCIAN */}
           <div className="border-t border-neutral-200 pt-3 space-y-2 text-xs">
             <div className="border-b border-neutral-100 pb-2">
               <button
                 onClick={() => toggleAccordion("details")}
-                className="w-full flex items-center justify-between text-left py-1 group font-bold uppercase tracking-wider text-neutral-800"
+                className="w-full flex items-center justify-between text-left py-1 group font-bold uppercase tracking-wider text-neutral-800 cursor-pointer"
               >
                 <span>Rincian Produk & Bahan</span>
                 <span className="text-sm">{openAccordion === "details" ? "−" : "+"}</span>
@@ -691,7 +630,7 @@ function ProductDetailContent() {
             <div className="border-b border-neutral-100 pb-2">
               <button
                 onClick={() => toggleAccordion("shipping")}
-                className="w-full flex items-center justify-between text-left py-1 group font-bold uppercase tracking-wider text-neutral-800"
+                className="w-full flex items-center justify-between text-left py-1 group font-bold uppercase tracking-wider text-neutral-800 cursor-pointer"
               >
                 <span>Pengiriman & Garansi</span>
                 <span className="text-sm">{openAccordion === "shipping" ? "−" : "+"}</span>
@@ -706,9 +645,7 @@ function ProductDetailContent() {
               )}
             </div>
           </div>
-
         </div>
-
       </div>
     </main>
   );

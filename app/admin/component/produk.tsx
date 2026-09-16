@@ -37,7 +37,8 @@ export interface ProdukItem {
   gambarUtama: string;
 }
 
-const compressImage = (file: File, maxDimension = 1200, quality = 0.75): Promise<string> => {
+// Kompresi ringan: Batasi resolusi maksimal 700px dan kualitas 0.6 agar muat data cepat
+const compressImage = (file: File, maxDimension = 700, quality = 0.6): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -65,6 +66,8 @@ const compressImage = (file: File, maxDimension = 1200, quality = 0.75): Promise
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
           const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
           resolve(compressedDataUrl);
@@ -135,7 +138,6 @@ export default function ProdukComponent() {
   const [deleteKategoriTarget, setDeleteKategoriTarget] = useState<string | null>(null);
 
   const [inputWarnaBaru, setInputWarnaBaru] = useState('');
-  const warnaSaran = ['Hitam', 'Putih', 'Cokelat Karamel', 'Mocca', 'Sage Green', 'Navy', 'Maroon', 'Dusty Pink', 'Abu Misty', 'Lilac'];
 
   // Form state dengan field grosir
   const [formProduk, setFormProduk] = useState({
@@ -252,22 +254,6 @@ export default function ProdukComponent() {
     setInputWarnaBaru('');
   };
 
-  const toggleWarnaPreset = (warna: string) => {
-    setFormProduk((prev) => {
-      const exists = prev.warnaList.some((w) => w.toLowerCase() === warna.toLowerCase());
-      if (exists) {
-        return {
-          ...prev,
-          warnaList: prev.warnaList.filter((w) => w.toLowerCase() !== warna.toLowerCase()),
-        };
-      }
-      return {
-        ...prev,
-        warnaList: [...prev.warnaList, warna],
-      };
-    });
-  };
-
   const handleRemoveColor = (warnaToRemove: string) => {
     setFormProduk((prev) => ({
       ...prev,
@@ -279,10 +265,20 @@ export default function ProdukComponent() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    if (formProduk.gambarList.length + files.length > 5) {
+      setValidationModal({
+        show: true,
+        title: 'Batas Foto Terlampaui',
+        message: 'Maksimal 5 foto per model busana agar etalase toko tetap cepat dimuat.',
+      });
+      e.target.value = '';
+      return;
+    }
+
     setIsCompressing(true);
     try {
       const compressedList = await Promise.all(
-        Array.from(files).map((file) => compressImage(file, 1200, 0.75))
+        Array.from(files).map((file) => compressImage(file, 700, 0.6))
       );
 
       setFormProduk((prev) => ({
@@ -290,7 +286,7 @@ export default function ProdukComponent() {
         gambarList: [...prev.gambarList, ...compressedList],
       }));
 
-      setToastMessage(`${files.length} foto berhasil ditambahkan ke formulir.`);
+      setToastMessage(`${files.length} foto berhasil dioptimalkan dan ditambahkan.`);
     } catch (err) {
       console.error(err);
       setValidationModal({
@@ -826,7 +822,7 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* PENGATURAN GROSIR BARU */}
+              {/* PENGATURAN GROSIR */}
               <div className="p-3 bg-amber-50/60 border border-amber-200/90 rounded-xs space-y-2.5">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -946,7 +942,7 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* VARIASI WARNA */}
+              {/* VARIASI WARNA (TEXT BAR) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
@@ -960,7 +956,7 @@ export default function ProdukComponent() {
                     {formProduk.warnaList.map((warna) => (
                       <span
                         key={warna}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-neutral-300 text-neutral-900 text-[10px] font-bold uppercase shadow-2xs"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-neutral-300 text-neutral-900 text-[10px] font-bold uppercase shadow-2xs"
                       >
                         <span>{warna}</span>
                         <button
@@ -997,29 +993,6 @@ export default function ProdukComponent() {
                     <Plus className="w-3 h-3" />
                     <span>Tambah</span>
                   </button>
-                </div>
-
-                <div className="space-y-1 pt-0.5">
-                  <span className="text-[9px] text-neutral-400 font-medium">Pilihan cepat:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {warnaSaran.map((warna) => {
-                      const isSelected = formProduk.warnaList.some((w) => w.toLowerCase() === warna.toLowerCase());
-                      return (
-                        <button
-                          key={warna}
-                          type="button"
-                          onClick={() => toggleWarnaPreset(warna)}
-                          className={`px-2 py-0.5 text-[9px] font-semibold border transition cursor-pointer ${
-                            isSelected
-                              ? 'bg-neutral-950 text-white border-neutral-950'
-                              : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400'
-                          }`}
-                        >
-                          {isSelected ? `✓ ${warna}` : `+ ${warna}`}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
 

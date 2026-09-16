@@ -62,7 +62,7 @@ export default function TestimoniComponent() {
     try {
       const { data, error } = await supabase
         .from('testimonials')
-        .select('*')
+        .select('id, foto_url, created_at, tayang')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -172,7 +172,7 @@ export default function TestimoniComponent() {
       setCropBox((prev) => ({ ...prev, x: newX, y: newY }));
     } else if (isResizingCorner.current) {
       let newW = initialCropBox.current.w + deltaX;
-      let newH = (newW * 4) / 3; // Pertahankan rasio 3:4
+      let newH = (newW * 4) / 3;
 
       newW = Math.max(75, newW);
       newH = (newW * 4) / 3;
@@ -188,7 +188,7 @@ export default function TestimoniComponent() {
     isResizingCorner.current = false;
   };
 
-  // 5. Eksekusi Pemotongan Berdasarkan Posisi Kotak
+  // 5. Eksekusi Pemotongan Berdasarkan Posisi Kotak (Optimasi Ukuran Ringan)
   const applyCrop = () => {
     if (!imgRef.current) return;
 
@@ -204,8 +204,12 @@ export default function TestimoniComponent() {
     const sourceW = cropBox.w * scaleFactor;
     const sourceH = cropBox.h * scaleFactor;
 
-    canvas.width = 600;
-    canvas.height = 800; // Output rasio 3:4
+    // Resolusi 360 x 480 px (Rasio 3:4 yang sangat ringan & tajam untuk tampilan carousel)
+    canvas.width = 360;
+    canvas.height = 480;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     ctx.drawImage(
       img,
@@ -215,11 +219,12 @@ export default function TestimoniComponent() {
       sourceH,
       0,
       0,
-      600,
-      800
+      360,
+      480
     );
 
-    const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    // Kualitas JPEG 0.6 menghasilkan ukuran file hanya ~30-40 KB
+    const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
     setPreviewFoto(croppedDataUrl);
   };
 
@@ -409,6 +414,7 @@ export default function TestimoniComponent() {
                   src={item.foto}
                   alt="Foto Testimoni"
                   fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
                   className="object-cover group-hover:scale-105 transition-transform duration-300"
                 />
                 <span className="absolute top-2 left-2 bg-neutral-950/80 text-white text-[8px] font-bold uppercase px-1.5 py-0.5">
@@ -475,7 +481,7 @@ export default function TestimoniComponent() {
                   <span className="text-xs font-bold text-neutral-900 block">
                     Pilih Foto dari Perangkat
                   </span>
-                  <span className="text-[10px] text-neutral-400">PNG, JPG, WEBP</span>
+                  <span className="text-[10px] text-neutral-400">PNG, JPG, WEBP (Maksimal 5 MB)</span>
                 </div>
                 <input
                   type="file"
@@ -517,7 +523,7 @@ export default function TestimoniComponent() {
                     className="max-h-full max-w-full object-contain pointer-events-none"
                   />
 
-                  {/* KOTAK SELEKSI CROP (BERSIH DARI ERROR TYPINGS) */}
+                  {/* KOTAK SELEKSI CROP */}
                   {imageLayout.width > 0 && (
                     <div
                       style={{
@@ -529,7 +535,6 @@ export default function TestimoniComponent() {
                       onMouseDown={handleBoxMouseDown}
                       className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] cursor-move z-20"
                     >
-                      {/* Grid 3x3 */}
                       <div className="w-full h-full grid grid-cols-3 grid-rows-3 pointer-events-none">
                         <div className="border-r border-b border-white/30" />
                         <div className="border-r border-b border-white/30" />
@@ -542,7 +547,6 @@ export default function TestimoniComponent() {
                         <div />
                       </div>
 
-                      {/* Sudut Tarik Kanan Bawah (Resize Handle) */}
                       <div
                         onMouseDown={handleCornerMouseDown}
                         className="absolute -bottom-2.5 -right-2.5 w-6 h-6 bg-white border-2 border-neutral-950 cursor-se-resize flex items-center justify-center shadow-md rounded-full z-30"
