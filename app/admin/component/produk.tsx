@@ -14,8 +14,7 @@ import {
   Palette, 
   Loader2,
   Scale,
-  CheckCircle2,
-  Sparkles
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
 
@@ -611,7 +610,7 @@ export default function ProdukComponent() {
                 {/* BADGE PENANDA GROSIR DI ADMIN */}
                 {item.is_grosir && (
                   <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[7.5px] sm:text-[8px] font-bold uppercase tracking-wider bg-amber-900 text-amber-100 px-1.5 py-0.5 shadow-xs flex items-center gap-0.5">
-                    <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                  
                     <span>Grosir Min {item.min_grosir}</span>
                   </span>
                 )}
