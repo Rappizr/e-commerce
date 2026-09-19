@@ -15,6 +15,7 @@ import {
   User
 } from 'lucide-react';
 import Footer from '../../Footer';
+import { useKeranjang } from '../../penyimpanan/KeranjangContext';
 import { supabase } from '../../penyimpanan/supabase';
 
 interface PembayaranProps {
@@ -36,6 +37,28 @@ export default function PembayaranComponent({
   const [liveKurir, setLiveKurir] = useState<string>(ekspedisi || '');
   const [livePenerima, setLivePenerima] = useState<string>(namaPenerima || '');
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+
+  const { removeItem } = (useKeranjang() as any) || {};
+
+  // Hapus produk terpilih yang sudah dibayar dari Keranjang Utama LocalStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const checkoutSessionItems = sessionStorage.getItem('almaco_checkout_items');
+        if (checkoutSessionItems && typeof removeItem === 'function') {
+          const parsed = JSON.parse(checkoutSessionItems);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              removeItem(item.id, item.size, item.color);
+            });
+          }
+          sessionStorage.removeItem('almaco_checkout_items');
+        }
+      } catch (e) {
+        console.error('Error clearing checked-out items:', e);
+      }
+    }
+  }, [removeItem]);
 
   // Ambil data pesanan langsung dari tabel orders Supabase jika invoiceId tersedia
   useEffect(() => {
@@ -206,7 +229,7 @@ export default function PembayaranComponent({
               <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold block">
                 Total Jumlah Transfer
               </span>
-              <p className="text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight mt-0.5 flex items-center gap-2">
+              <p className="text-2xl sm:text-3xl font-bold text-neutral-950 tracking-tight mt-0.5 flex items-center gap-2 font-mono">
                 {isLoadingOrder ? (
                   <span className="flex items-center gap-1.5 text-sm text-neutral-500 font-normal">
                     <Loader2 className="w-4 h-4 animate-spin" /> Menghitung tagihan...
@@ -275,7 +298,7 @@ export default function PembayaranComponent({
 
             <Link
               href={`/konfirmasi-pembayaran?invoice=${encodeURIComponent(paymentDetails.invoiceNo)}`}
-              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.2em] py-4 transition-all flex items-center justify-center gap-2 shadow-md text-center"
+              className="w-full bg-neutral-950 hover:bg-black text-white text-xs font-bold uppercase tracking-[0.2em] py-4 transition-all flex items-center justify-center gap-2 shadow-md text-center cursor-pointer"
             >
               <FileCheck className="w-4 h-4" />
               <span>Upload Bukti Pembayaran</span>
@@ -284,7 +307,7 @@ export default function PembayaranComponent({
 
             <Link
               href="/"
-              className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-xs font-bold uppercase tracking-wider py-3 transition-colors block text-center"
+              className="w-full bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 text-xs font-bold uppercase tracking-wider py-3 transition-colors block text-center cursor-pointer"
             >
               Kembali ke Halaman Utama
             </Link>

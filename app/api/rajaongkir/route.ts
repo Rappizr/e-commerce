@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Perhitungan Biaya Ongkir Multi-Ekspedisi
+// 2. POST: Perhitungan Biaya Ongkir Khusus JNE, J&T, dan SiCepat (Reguler & Kargo)
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -67,8 +67,11 @@ export async function POST(req: Request) {
 
     // Minimum berat 100 gram
     const totalWeight = Math.max(100, Number(weight) || 350);
-    const couriers = ['jne', 'jnt', 'sicepat', 'pos'];
+    
+    // HANYA MENGGUNAKAN JNE, J&T, DAN SICEPAT (YANG DUKUNG API RAJAONGKIR)
+    const couriers = ['jne', 'jnt', 'sicepat'];
     const pricingList: any[] = [];
+    const seenServices = new Set<string>();
 
     const requests = couriers.map(async (courier) => {
       try {
@@ -96,38 +99,91 @@ export async function POST(req: Request) {
 
     const results = await Promise.all(requests);
 
-    // Parsing dan standardisasi format respon tarif
+    // Filter ketat: HANYA JNE, J&T, dan SiCepat (Reguler & Kargo)
     results.flat().forEach((c: any) => {
       const priceValue = Number(c.cost ?? c.tariff ?? c.price ?? 0);
       
       if (c && priceValue > 0) {
-        const rawEtd = c.etd || c.duration || '';
-        const cleanEtd = rawEtd
-          ? `${String(rawEtd).replace(/hari|HARI|days|DAYS/g, '').trim()} Hari`
-          : '2-3 Hari';
+        // Pembersihan format ETD / durasi pengiriman
+        const rawEtd = String(c.etd || c.duration || '').toUpperCase();
+        let cleanEtd = rawEtd
+          .replace(/HARI|DAY|DAYS/g, '')
+          .trim();
+        cleanEtd = cleanEtd ? `${cleanEtd} Hari` : '2-4 Hari';
 
-        pricingList.push({
-          company: (c.code || c.courier || '').toLowerCase(),
-          courier_name: (c.name || c.code || 'Kurir').toUpperCase(),
-          courier_service_name: c.service || c.service_name || 'REG',
-          duration: cleanEtd,
-          price: priceValue,
-        });
+        const rawService = String(c.service || c.service_name || 'REG').toUpperCase().trim();
+        const rawCompany = String(c.code || c.courier || '').toLowerCase().trim();
+
+        // Validasi Ekspedisi (Hanya JNE, J&T, SiCepat)
+        const isAllowedCompany = 
+          rawCompany.includes('jne') || 
+          rawCompany.includes('jnt') || 
+          rawCompany.includes('j&t') || 
+          rawCompany.includes('sicepat');
+
+        // Filter Layanan Reguler
+        const isReguler = 
+          rawService === 'REG' || 
+          rawService === 'EZ' || 
+          rawService === 'SIUNTUNG' ||
+          rawService === 'CTC';
+
+        // Filter Layanan Kargo (JNE JTR, SiCepat GOKIL)
+        const isCargo = 
+          rawService === 'JTR' || 
+          rawService === 'GOKIL' ||
+          rawService === 'J&T CARGO' || 
+          rawService === 'CARGO' ||
+          rawService === 'KARGO';
+
+        // Hindari penambahan opsi duplikat
+        const serviceKey = `${rawCompany}-${rawService}`;
+
+        if (isAllowedCompany && (isReguler || isCargo) && !seenServices.has(serviceKey)) {
+          seenServices.add(serviceKey);
+
+          let displayCourierName = 'JNE';
+          if (rawCompany.includes('jnt') || rawCompany.includes('j&t')) {
+            displayCourierName = 'J&T EXPRESS';
+          } else if (rawCompany.includes('sicepat')) {
+            displayCourierName = 'SICEPAT';
+          }
+
+          let displayServiceName = rawService;
+          if (rawService === 'JTR') displayServiceName = 'JTR (KARGO)';
+          if (rawService === 'GOKIL') displayServiceName = 'GOKIL (KARGO)';
+
+          pricingList.push({
+            company: rawCompany,
+            courier_name: displayCourierName,
+            courier_service_name: displayServiceName,
+            duration: cleanEtd,
+            price: priceValue,
+          });
+        }
       }
     });
 
-    // Urutkan opsi ongkir dari yang paling hemat
+    // Urutkan opsi ongkir dari harga paling murah
     pricingList.sort((a, b) => a.price - b.price);
 
-    // Fallback tarif jika kuota API habis atau server Komerce timeout
+    // Fallback khusus JNE, J&T, SiCepat jika API Komerce mengalami kendala/timeout
     if (pricingList.length === 0) {
-      const weightKg = totalWeight <= 1000 ? 1 : Math.ceil(totalWeight / 1000);
+      const weightKg = Math.max(1, Math.ceil(totalWeight / 1000));
+      const isHeavy = totalWeight >= 10000;
+
       return NextResponse.json({
         pricing: [
+          // JNE
           { company: 'jne', courier_name: 'JNE', courier_service_name: 'REG', duration: '2-3 Hari', price: 16000 * weightKg },
-          { company: 'jnt', courier_name: 'J&T', courier_service_name: 'EZ', duration: '2-3 Hari', price: 15000 * weightKg },
+          { company: 'jne', courier_name: 'JNE', courier_service_name: 'JTR (KARGO)', duration: '3-5 Hari', price: isHeavy ? 45000 + (weightKg * 2000) : 50000 },
+          
+          // J&T
+          { company: 'jnt', courier_name: 'J&T EXPRESS', courier_service_name: 'EZ', duration: '2-3 Hari', price: 15000 * weightKg },
+          
+          // SiCepat
           { company: 'sicepat', courier_name: 'SICEPAT', courier_service_name: 'SIUNTUNG', duration: '2-3 Hari', price: 15000 * weightKg },
-          { company: 'pos', courier_name: 'POS', courier_service_name: 'KILAT KHUSUS', duration: '2-4 Hari', price: 14000 * weightKg },
+          { company: 'sicepat', courier_name: 'SICEPAT', courier_service_name: 'GOKIL (KARGO)', duration: '3-5 Hari', price: isHeavy ? 40000 + (weightKg * 2000) : 48000 },
         ],
       });
     }

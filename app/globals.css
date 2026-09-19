@@ -12,3 +12,6 @@
   font-family: 'Playfair Display', Georgia, Cambria, "Times New Roman", Times, serif;
 }
 
+html {
+  scroll-behavior: smooth !important;
+}

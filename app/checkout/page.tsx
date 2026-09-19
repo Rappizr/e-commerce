@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, User, Check, Plus, ChevronDown, Loader2, Trash2, Minus } from 'lucide-react';
+import { ArrowLeft, User, Check, Plus, ChevronDown, Loader2, Trash2, Minus, Scale } from 'lucide-react';
 import Footer from '../Footer';
 import { useKeranjang } from '../penyimpanan/KeranjangContext';
 import PembayaranComponent from './component/pembayaran';
@@ -26,6 +26,7 @@ interface RajaOngkirCity {
 }
 
 export default function CheckoutPage() {
+  const [isClient, setIsClient] = useState(false); // Penanganan Hydration Error
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [createdInvoiceNo, setCreatedInvoiceNo] = useState('');
   const [finalAmount, setFinalAmount] = useState(0);
@@ -51,18 +52,101 @@ export default function CheckoutPage() {
   const [isLoadingShipping, setIsLoadingShipping] = useState(false);
   const [showCourierDropdown, setShowCourierDropdown] = useState(false);
 
-  const { cartItems = [], subtotal = 0, updateQty, hapusItem, kosongkanKeranjang } = (useKeranjang() as any) || {};
-  
+  // STATE PRODUK YANG DI-CHECKOUT & CONTEXT KERANJANG
+  const [checkoutItems, setCheckoutItems] = useState<any[]>([]);
+  const { 
+    cartItems: fullCartItems = [], 
+    hapusItemDaftar, 
+    kosongkanKeranjang 
+  } = (useKeranjang() as any) || {};
+
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const courierDropdownRef = useRef<HTMLDivElement | null>(null);
   const cityDropdownRef = useRef<HTMLDivElement | null>(null);
   const shippingAbortControllerRef = useRef<AbortController | null>(null);
 
-  const totalWeight = cartItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
+  // 1. DIBUAT UNTUK MEMASTIKAN CLIENT-SIDE MOUNTING SUDAH SELESAI
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // 2. AMBIL ITEM TERPILIH DARI SESSION STORAGE
+  useEffect(() => {
+    try {
+      const savedCheckoutItems = sessionStorage.getItem('almaco_checkout_items');
+      if (savedCheckoutItems) {
+        const parsed = JSON.parse(savedCheckoutItems);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCheckoutItems(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Gagal membaca item checkout dari session storage:", e);
+    }
+
+    // Fallback jika session storage kosong
+    setCheckoutItems(fullCartItems);
+  }, [fullCartItems]);
+
+  // HITUNG SUBTOTAL & BERAT HANYA DARI PRODUK TERPILIH
+  const subtotal = checkoutItems.reduce((acc: number, item: any) => {
+    return acc + (Number(item.price) || 0) * item.qty;
+  }, 0);
+
+  const totalWeight = checkoutItems.reduce((acc: number, item: any) => {
+    return acc + (Number(item.weight) || 350) * item.qty;
+  }, 0);
+
   const totalWeightKg = totalWeight > 0 ? Math.max(1, Math.ceil(totalWeight / 1000)) : 1;
-  const packingFee = cartItems.length > 0 ? totalWeightKg * 3000 : 0;
+  const packingFee = checkoutItems.length > 0 ? totalWeightKg * 3000 : 0;
   const shippingFee = selectedCourier ? selectedCourier.price : 0;
   const total = subtotal + shippingFee + packingFee;
+
+  // Hapus item dari tampilan checkout & session storage
+  const handleRemoveCheckoutItem = (id: string | number, size?: string, color?: string) => {
+    const updated = checkoutItems.filter((item: any) => {
+      if (size && color) {
+        return !(String(item.id) === String(id) && item.size === size && item.color === color);
+      }
+      return String(item.id) !== String(id);
+    });
+
+    setCheckoutItems(updated);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('almaco_checkout_items', JSON.stringify(updated));
+    }
+  };
+
+  // Update kuantitas item di checkout & evaluasi harga grosir
+  const handleUpdateQtyCheckout = (item: any, change: number) => {
+    const newQty = item.qty + change;
+    if (newQty <= 0) {
+      handleRemoveCheckoutItem(item.id, item.size, item.color);
+      return;
+    }
+
+    const ecerPrice = Number(item.rawPrice || item.harga_ecer || item.harga || item.price);
+    const minGrosir = Number(item.min_grosir || 0);
+    const hargaGrosir = Number(item.harga_grosir || 0);
+
+    let activePrice = ecerPrice;
+    if (item.is_grosir && minGrosir > 0 && hargaGrosir > 0) {
+      activePrice = newQty >= minGrosir ? hargaGrosir : ecerPrice;
+    }
+
+    const updated = checkoutItems.map((i: any) => {
+      if (String(i.id) === String(item.id) && i.size === item.size && i.color === item.color) {
+        return { ...i, qty: newQty, price: activePrice };
+      }
+      return i;
+    });
+
+    setCheckoutItems(updated);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('almaco_checkout_items', JSON.stringify(updated));
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -79,7 +163,7 @@ export default function CheckoutPage() {
   }, []);
 
   const fetchRates = useCallback(async (destinationCityId: string) => {
-    if (!destinationCityId) return;
+    if (!destinationCityId || checkoutItems.length === 0) return;
 
     if (shippingAbortControllerRef.current) {
       shippingAbortControllerRef.current.abort();
@@ -91,7 +175,7 @@ export default function CheckoutPage() {
     setShippingOptions([]);
     setSelectedCourier(null);
 
-    const calculatedWeight = cartItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
+    const calculatedWeight = checkoutItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
 
     try {
       const res = await fetch('/api/rajaongkir', {
@@ -123,13 +207,13 @@ export default function CheckoutPage() {
     } finally {
       setIsLoadingShipping(false);
     }
-  }, [cartItems]);
+  }, [checkoutItems]);
 
   useEffect(() => {
-    if (selectedCityId && cartItems.length > 0) {
+    if (selectedCityId && checkoutItems.length > 0) {
       fetchRates(selectedCityId);
     }
-  }, [cartItems.length, selectedCityId, fetchRates]);
+  }, [checkoutItems, selectedCityId, fetchRates]);
 
   const handleCitySearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -175,7 +259,7 @@ export default function CheckoutPage() {
     fetchRates(city.city_id);
   };
 
-  // Submit pesanan langsung ke Supabase
+  // Submit pesanan ke Supabase
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nama.trim() || !whatsapp.trim() || !selectedCityId || !alamat.trim()) {
@@ -188,8 +272,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (cartItems.length === 0) {
-      alert('Keranjang belanja kosong.');
+    if (checkoutItems.length === 0) {
+      alert('Tidak ada produk yang dipilih untuk di-checkout.');
       return;
     }
 
@@ -202,25 +286,20 @@ export default function CheckoutPage() {
     const inv = `ORD-${Date.now()}`;
     const formattedWa = whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp;
 
-    // Normalisasi nama kurir dari objek RajaOngkir
     const rawCompany = (
       selectedCourier.courier_name ||
       selectedCourier.company ||
       (selectedCourier as any).code ||
-      'POS INDONESIA'
+      'JNE'
     ).trim().toUpperCase();
 
     let namaKurirBersih = rawCompany;
-    if (rawCompany.includes('POS')) {
-      namaKurirBersih = 'POS INDONESIA';
-    } else if (rawCompany.includes('SICEPAT')) {
-      namaKurirBersih = 'SICEPAT';
-    } else if (rawCompany.includes('JNE')) {
+    if (rawCompany.includes('JNE')) {
       namaKurirBersih = 'JNE';
     } else if (rawCompany.includes('J&T') || rawCompany.includes('JNT')) {
       namaKurirBersih = 'J&T EXPRESS';
-    } else if (rawCompany.includes('TIKI')) {
-      namaKurirBersih = 'TIKI';
+    } else if (rawCompany.includes('SICEPAT')) {
+      namaKurirBersih = 'SICEPAT';
     }
 
     const serviceName = (
@@ -256,9 +335,9 @@ export default function CheckoutPage() {
 
       if (orderError) throw orderError;
 
-      // 2. Simpan setiap item ke order_items
+      // 2. Simpan setiap item checkout ke order_items
       if (orderData) {
-        const orderItemsPayload = cartItems.map((item: any) => ({
+        const orderItemsPayload = checkoutItems.map((item: any) => ({
           order_id: orderData.id,
           product_id: typeof item.id === 'number' ? item.id : null,
           nama_produk: item.title,
@@ -274,9 +353,18 @@ export default function CheckoutPage() {
         if (itemsError) throw itemsError;
       }
 
+      // 3. HAPUS BARANG YANG DIBELI DARI KERANJANG UTAMA & LOCALSTORAGE
+      if (typeof hapusItemDaftar === 'function') {
+        hapusItemDaftar(checkoutItems);
+      } else if (typeof kosongkanKeranjang === 'function') {
+        kosongkanKeranjang();
+      }
+
       setFinalAmount(calculatedTotal);
       setCreatedInvoiceNo(inv);
-      if (typeof kosongkanKeranjang === 'function') kosongkanKeranjang();
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('almaco_checkout_items');
+      }
       setIsSubmitted(true);
 
     } catch (err: any) {
@@ -436,31 +524,39 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="relative" ref={courierDropdownRef}>
-                  <button
-                    type="button"
-                    disabled={isLoadingShipping || shippingOptions.length === 0}
-                    onClick={() => setShowCourierDropdown(!showCourierDropdown)}
-                    className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
-                  >
-                    {isLoadingShipping ? (
-                      <div className="flex items-center gap-2 mx-auto">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Memuat Tarif...</span>
-                      </div>
-                    ) : selectedCourier ? (
-                      <>
-                        <span className="truncate uppercase tracking-wide">
-                          {selectedCourier.courier_name || selectedCourier.company} {selectedCourier.courier_service_name} ({selectedCourier.duration})
-                        </span>
-                        <ChevronDown className="w-4 h-4 shrink-0" />
-                      </>
-                    ) : (
-                      <>
-                        <span>PILIH JASA KIRIM</span>
-                        <ChevronDown className="w-4 h-4 shrink-0" />
-                      </>
-                    )}
-                  </button>
+                  {/* PENANGANAN HYDRATION ERROR DROPDOWN */}
+                  {!isClient ? (
+                    <div className="bg-neutral-400 text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px]">
+                      <span>PILIH JASA KIRIM</span>
+                      <ChevronDown className="w-4 h-4 shrink-0" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isLoadingShipping || shippingOptions.length === 0}
+                      onClick={() => setShowCourierDropdown(!showCourierDropdown)}
+                      className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
+                    >
+                      {isLoadingShipping ? (
+                        <div className="flex items-center gap-2 mx-auto">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Memuat Tarif...</span>
+                        </div>
+                      ) : selectedCourier ? (
+                        <>
+                          <span className="truncate uppercase tracking-wide">
+                            {selectedCourier.courier_name || selectedCourier.company} {selectedCourier.courier_service_name} ({selectedCourier.duration})
+                          </span>
+                          <ChevronDown className="w-4 h-4 shrink-0" />
+                        </>
+                      ) : (
+                        <>
+                          <span>PILIH JASA KIRIM</span>
+                          <ChevronDown className="w-4 h-4 shrink-0" />
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {showCourierDropdown && shippingOptions.length > 0 && (
                     <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 max-w-[90vw] bg-white border border-neutral-300 shadow-2xl rounded-sm z-50 py-1 max-h-64 overflow-y-auto">
@@ -490,49 +586,54 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {/* LIST ITEM PRODUK DARI CHECKOUTITEMS */}
               <div className="p-4 sm:p-6 space-y-4">
-                {cartItems.map((item: any) => (
-                  <div key={`${item.id}-${item.size}-${item.color}`} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0">
-                    <div className="flex gap-3 items-center min-w-0">
-                      <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden">
-                        <Image src={item.image} alt={item.title} fill className="object-cover" />
+                {checkoutItems.length === 0 ? (
+                  <p className="text-xs text-neutral-500 text-center py-4">Tidak ada produk terpilih untuk di-checkout.</p>
+                ) : (
+                  checkoutItems.map((item: any) => (
+                    <div key={`${item.id}-${item.size}-${item.color}`} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0">
+                      <div className="flex gap-3 items-center min-w-0">
+                        <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden">
+                          <Image src={item.image} alt={item.title} fill className="object-cover" />
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">{item.title}</h4>
+                          <p className="text-[11px] text-neutral-500">{item.size || 'All Size'} ({item.color || 'Default'})</p>
+                          <p className="text-xs font-bold text-red-600 font-mono">Rp {Number(item.price).toLocaleString('id-ID')}</p>
+                        </div>
                       </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">{item.title}</h4>
-                        <p className="text-[11px] text-neutral-500">{item.size || 'All Size'} ({item.color || 'Default'})</p>
-                        <p className="text-xs font-bold text-red-600">Rp {item.price.toLocaleString('id-ID')}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-3 self-end sm:self-center">
-                      <button
-                        type="button"
-                        onClick={() => hapusItem && hapusItem(item.id, item.size, item.color)}
-                        className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-
-                      <div className="flex items-center border border-neutral-300 rounded bg-white">
+                      <div className="flex items-center gap-3 self-end sm:self-center">
                         <button
                           type="button"
-                          onClick={() => updateQty && updateQty(item.id, item.size, item.color, Math.max(1, item.qty - 1))}
-                          className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300"
+                          onClick={() => handleRemoveCheckoutItem(item.id, item.size, item.color)}
+                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center transition cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-neutral-800">{item.qty}</span>
-                        <button
-                          type="button"
-                          onClick={() => updateQty && updateQty(item.id, item.size, item.color, item.qty + 1)}
-                          className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+
+                        <div className="flex items-center border border-neutral-300 rounded bg-white">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQtyCheckout(item, -1)}
+                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300 cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">{item.qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQtyCheckout(item, 1)}
+                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
 
                 <div className="pt-2">
                   <input
@@ -576,13 +677,23 @@ export default function CheckoutPage() {
                   RINCIAN PESANAN
                 </h4>
                 <div className="space-y-2 text-xs text-neutral-600">
+                  <div className="flex justify-between items-center text-neutral-700">
+                    <span className="flex items-center gap-1.5 text-[11px]">
+                      <Scale className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Total Berat Pesanan</span>
+                    </span>
+                    <span className="font-semibold text-neutral-900 font-mono">
+                      {totalWeight} Gram ({totalWeightKg} Kg)
+                    </span>
+                  </div>
+
                   <div className="flex justify-between">
                     <span>Subtotal Produk</span>
-                    <span className="font-semibold text-neutral-900">Rp {subtotal.toLocaleString('id-ID')}</span>
+                    <span className="font-semibold text-neutral-900 font-mono">Rp {subtotal.toLocaleString('id-ID')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Ongkos Kirim ({selectedCourier ? (selectedCourier.courier_name || selectedCourier.company).toUpperCase() : "Kurir"})</span>
-                    <span className="font-semibold text-neutral-900">
+                    <span className="font-semibold text-neutral-900 font-mono">
                       {isLoadingShipping ? "Menghitung..." : (selectedCourier ? "Rp " + shippingFee.toLocaleString("id-ID") : "Pilih Kurir")}
                     </span>
                   </div>
@@ -593,29 +704,36 @@ export default function CheckoutPage() {
                         {totalWeightKg} kg (Rp 3.000/kg)
                       </span>
                     </div>
-                    <span className="font-semibold text-neutral-900">
+                    <span className="font-semibold text-neutral-900 font-mono">
                       Rp {packingFee.toLocaleString("id-ID")}
                     </span>
                   </div>
                   <div className="border-t border-neutral-100 pt-3 flex justify-between text-sm font-bold text-neutral-900">
                     <span>Total Tagihan</span>
-                    <span className="text-base font-bold text-neutral-950">Rp {total.toLocaleString('id-ID')}</span>
+                    <span className="text-base font-bold text-neutral-950 font-mono">Rp {total.toLocaleString('id-ID')}</span>
                   </div>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={!selectedCourier || isLoadingShipping || isSubmittingOrder}
-                className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 ${
-                  !selectedCourier || isLoadingShipping || isSubmittingOrder
-                    ? 'bg-neutral-400 cursor-not-allowed' 
-                    : 'bg-neutral-950 hover:bg-black cursor-pointer'
-                }`}
-              >
-                {isSubmittingOrder && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{isSubmittingOrder ? 'MEMPROSES PESANAN...' : 'BAYAR SEKARANG'}</span>
-              </button>
+              {/* PERBAIKAN HYDRATION ERROR PADA TOMBOL SUBMIT */}
+              {!isClient ? (
+                <div className="w-full bg-neutral-400 text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md text-center">
+                  MEMPROSES PESANAN...
+                </div>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!selectedCourier || isLoadingShipping || isSubmittingOrder || checkoutItems.length === 0}
+                  className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 ${
+                    !selectedCourier || isLoadingShipping || isSubmittingOrder || checkoutItems.length === 0
+                      ? 'bg-neutral-400 cursor-not-allowed' 
+                      : 'bg-neutral-950 hover:bg-black cursor-pointer'
+                  }`}
+                >
+                  {isSubmittingOrder && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{isSubmittingOrder ? 'MEMPROSES PESANAN...' : 'BAYAR SEKARANG'}</span>
+                </button>
+              )}
             </div>
           </div>
         </form>

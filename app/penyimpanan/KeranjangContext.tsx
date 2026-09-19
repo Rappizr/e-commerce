@@ -6,12 +6,16 @@ import { supabase } from './supabase';
 export interface ItemKeranjang {
   id: string | number;
   title: string;
-  price: number;
+  price: number;        // Harga aktif (Eceran atau Grosir)
+  rawPrice: number;     // Acuan Harga Eceran Asli dari database
   qty: number;
   size: string;
   color: string;
   image: string;
   weight?: number;
+  is_grosir?: boolean;
+  min_grosir?: number | null;
+  harga_grosir?: number | null;
 }
 
 export interface Pesanan {
@@ -34,10 +38,11 @@ export interface Pesanan {
 
 interface KeranjangContextType {
   cartItems: ItemKeranjang[];
-  tambahKeKeranjang: (item: Omit<ItemKeranjang, 'qty'>, qty?: number) => void;
-  updateQty: (id: string | number, size: string, color: string, qtyOrDelta: number) => void;
+  tambahKeKeranjang: (item: any, qty?: number) => void;
+  updateQty: (id: string | number, size: string, color: string, qtyOrDelta: number, newPrice?: number) => void;
   removeItem: (id: string | number, size?: string, color?: string) => void;
   hapusItem: (id: string | number, size?: string, color?: string) => void;
+  hapusItemDaftar: (itemsToRemove: any[]) => void; // DITAMBAHKAN
   clearCart: () => void;
   kosongkanKeranjang: () => void;
   totalCount: number;
@@ -55,7 +60,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   const [pesananList, setPesananList] = useState<Pesanan[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // 1. Ambil data pesanan langsung dari tabel orders Supabase
+  // 1. Ambil data pesanan dari Supabase
   const fetchOrdersFromSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -94,7 +99,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Muat keranjang dari LocalStorage di sisi client
+  // Muat dari LocalStorage
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('almaco_keranjang');
@@ -108,15 +113,15 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     fetchOrdersFromSupabase();
   }, []);
 
-  // Simpan keranjang ke LocalStorage setiap ada pembaruan
+  // Simpan ke LocalStorage
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem('almaco_keranjang', JSON.stringify(cartItems));
     }
   }, [cartItems, isLoaded]);
 
-  // Tambah item ke keranjang
-  const tambahKeKeranjang = (newItem: Omit<ItemKeranjang, 'qty'>, qty = 1) => {
+  // TAMBAH KE KERANJANG (DENGAN REFRESH SKEMA GROSIR)
+  const tambahKeKeranjang = (newItem: any, qty = 1) => {
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
         (i) =>
@@ -124,23 +129,91 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
           i.size === newItem.size &&
           i.color === newItem.color
       );
+
+      // Ambil acuan harga eceran asli
+      const rawPrice = Number(newItem.rawPrice || newItem.harga || newItem.price || 0);
+      const minGrosir = newItem.min_grosir ? Number(newItem.min_grosir) : null;
+      const hargaGrosir = newItem.harga_grosir ? Number(newItem.harga_grosir) : null;
+      const isGrosirAllowed = Boolean(newItem.is_grosir && minGrosir && hargaGrosir);
+
       if (existingIndex > -1) {
         const updated = [...prev];
-        updated[existingIndex].qty += qty;
+        const newQty = updated[existingIndex].qty + qty;
+
+        // Evaluasi harga grosir
+        const isQualifiedGrosir = isGrosirAllowed && newQty >= (minGrosir || 0);
+        const activePrice = isQualifiedGrosir ? hargaGrosir! : rawPrice;
+
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          qty: newQty,
+          price: activePrice,
+          rawPrice: rawPrice,
+          is_grosir: newItem.is_grosir,
+          min_grosir: minGrosir,
+          harga_grosir: hargaGrosir,
+        };
         return updated;
+      } else {
+        const isQualifiedGrosir = isGrosirAllowed && qty >= (minGrosir || 0);
+        const activePrice = isQualifiedGrosir ? hargaGrosir! : rawPrice;
+
+        return [
+          ...prev,
+          {
+            id: newItem.id,
+            title: newItem.title || newItem.nama || 'Busana Almaco',
+            price: activePrice,
+            rawPrice: rawPrice, // ACUAN PENTING HARGA ECERAN
+            qty: qty,
+            size: newItem.size || 'All Size',
+            color: newItem.color || 'Default',
+            image: newItem.image || newItem.gambar_utama || '',
+            weight: Number(newItem.weight || newItem.berat || 350),
+            is_grosir: newItem.is_grosir,
+            min_grosir: minGrosir,
+            harga_grosir: hargaGrosir,
+          },
+        ];
       }
-      return [...prev, { ...newItem, qty, weight: newItem.weight || 350 }];
     });
   };
 
-  // Update kuantitas item (presisi target kuantitas)
-  const updateQty = (id: string | number, size: string, color: string, targetQty: number) => {
+  const updateQty = (
+    id: string | number, 
+    size: string, 
+    color: string, 
+    targetQty: number, 
+    newPrice?: number
+  ) => {
     setCartItems((prev) =>
       prev
         .map((item) => {
           if (String(item.id) === String(id) && item.size === size && item.color === color) {
             const finalQty = Number(targetQty);
-            return finalQty > 0 ? { ...item, qty: finalQty } : item;
+            if (finalQty <= 0) return { ...item, qty: 0 };
+
+            // Ambil acuan harga eceran asli
+            const rawPrice = item.rawPrice || item.price;
+            const minGrosir = item.min_grosir;
+            const hargaGrosir = item.harga_grosir;
+            const isGrosir = Boolean(item.is_grosir && minGrosir && hargaGrosir);
+
+            let activePrice = item.price;
+
+            // Jika newPrice dikirim dari KeranjangPage, langsung pakai newPrice
+            if (newPrice !== undefined) {
+              activePrice = newPrice;
+            } else if (isGrosir) {
+              // Logika fallback: jika Qty < minGrosir, paksa kembali ke rawPrice
+              activePrice = finalQty >= minGrosir! ? hargaGrosir! : rawPrice;
+            }
+
+            return {
+              ...item,
+              qty: finalQty,
+              price: activePrice, // Memperbarui harga di context
+            };
           }
           return item;
         })
@@ -148,7 +221,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // Hapus item dari keranjang
+  // REMOVE ITEM SINGLE
   const removeItem = (id: string | number, size?: string, color?: string) => {
     setCartItems((prev) =>
       prev.filter((item) => {
@@ -160,11 +233,28 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  // FUNGSI BARU: HAPUS DAFTAR ITEM DARI KERANJANG (DIPAKAI SAAT CHECKOUT SUKSES)
+  const hapusItemDaftar = (itemsToRemove: any[]) => {
+    if (!Array.isArray(itemsToRemove) || itemsToRemove.length === 0) return;
+
+    setCartItems((prev) =>
+      prev.filter(
+        (cartItem) =>
+          !itemsToRemove.some(
+            (target) =>
+              String(target.id) === String(cartItem.id) &&
+              (target.size ? target.size === cartItem.size : true) &&
+              (target.color ? target.color === cartItem.color : true)
+          )
+      )
+    );
+  };
+
   const clearCart = () => {
     setCartItems([]);
   };
 
-  // Buat pesanan baru ke Supabase
+  // BUAT PESANAN BARU
   const tambahPesanan = async (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
     const today = new Date();
     const invoiceNo = `ORD-${Date.now()}`;
@@ -204,7 +294,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Update status pesanan di database
+  // UPDATE STATUS PESANAN
   const updateStatusPesanan = async (id: string, status: Pesanan['status']) => {
     setPesananList((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status } : item))
@@ -227,9 +317,10 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         tambahKeKeranjang,
         updateQty,
         removeItem,
-        hapusItem: removeItem, // Alias untuk kompatibilitas
+        hapusItem: removeItem,
+        hapusItemDaftar, // DITAMBAHKAN KAN
         clearCart,
-        kosongkanKeranjang: clearCart, // Alias untuk kompatibilitas
+        kosongkanKeranjang: clearCart,
         totalCount,
         subtotal,
         pesananList,

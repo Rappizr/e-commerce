@@ -14,7 +14,8 @@ import {
   Palette, 
   Loader2,
   Scale,
-  CheckCircle2
+  CheckCircle2,
+  Tag
 } from 'lucide-react';
 import { supabase } from '../../penyimpanan/supabase';
 
@@ -36,7 +37,6 @@ export interface ProdukItem {
   gambarUtama: string;
 }
 
-// Kompresi ringan: Batasi resolusi maksimal 700px dan kualitas 0.6 agar muat data cepat
 const compressImage = (file: File, maxDimension = 700, quality = 0.6): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -84,7 +84,6 @@ export default function ProdukComponent() {
   const [produk, setProduk] = useState<ProdukItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Ambil data langsung dari Supabase tabel 'products'
   const fetchProdukFromSupabase = async () => {
     setIsLoading(true);
     try {
@@ -138,7 +137,6 @@ export default function ProdukComponent() {
 
   const [inputWarnaBaru, setInputWarnaBaru] = useState('');
 
-  // Form state dengan field grosir
   const [formProduk, setFormProduk] = useState({
     nama: '',
     kategori: '',
@@ -236,8 +234,11 @@ export default function ProdukComponent() {
     setToastMessage(`Kategori "${kat}" berhasil dihapus.`);
   };
 
-  const handleAddCustomColor = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleAddCustomColor = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const trimmed = inputWarnaBaru.trim();
     if (!trimmed) return;
 
@@ -345,7 +346,6 @@ export default function ProdukComponent() {
     });
   };
 
-  // 2. Tambah / Edit Produk ke Supabase
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -408,7 +408,6 @@ export default function ProdukComponent() {
 
     try {
       if (isEditMode && editingItem) {
-        // UPDATE DATA PRODUK
         const { error } = await supabase
           .from('products')
           .update(payload)
@@ -431,7 +430,6 @@ export default function ProdukComponent() {
         );
         setToastMessage(`Produk "${payload.nama}" berhasil diperbarui!`);
       } else {
-        // TAMBAH DATA PRODUK BARU
         const { data, error } = await supabase
           .from('products')
           .insert([payload])
@@ -471,7 +469,6 @@ export default function ProdukComponent() {
     }
   };
 
-  // 3. Update stok produk (+ / -) langsung ke Supabase
   const handleUpdateStock = async (id: number, newStock: number) => {
     if (newStock < 0) return;
     setProduk((prev) => prev.map((p) => (p.id === id ? { ...p, stok: newStock } : p)));
@@ -488,7 +485,6 @@ export default function ProdukComponent() {
     }
   };
 
-  // 4. Hapus produk langsung dari Supabase
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
@@ -510,8 +506,6 @@ export default function ProdukComponent() {
 
   return (
     <div className="space-y-4 w-full relative">
-      
-      {/* MODAL SUKSES DI TENGAH LAYAR */}
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
           <div 
@@ -546,7 +540,6 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* HEADER PANEL */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 border border-neutral-200 shadow-xs">
         <div>
           <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
@@ -568,7 +561,6 @@ export default function ProdukComponent() {
         </button>
       </div>
 
-      {/* LIST PRODUK DARI SUPABASE */}
       {isLoading ? (
         <div className="bg-white border border-neutral-200 p-12 text-center text-neutral-400 flex flex-col items-center justify-center gap-2">
           <Loader2 className="w-6 h-6 animate-spin text-neutral-700" />
@@ -597,95 +589,112 @@ export default function ProdukComponent() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {produk.map((item) => (
-            <div key={item.id} className="bg-white border border-neutral-200 overflow-hidden flex flex-col justify-between shadow-xs group hover:border-neutral-400 transition-all duration-200">
-              <div className="relative aspect-[4/3] w-full bg-neutral-100 overflow-hidden">
-                <Image src={item.gambarUtama} alt={item.nama} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                
-                <span className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-white/95 px-1.5 sm:px-2 py-0.5 border border-neutral-200 text-neutral-900 shadow-xs">
-                  {item.kategori}
-                </span>
-
-                {/* BADGE PENANDA GROSIR DI ADMIN */}
-                {item.is_grosir && (
-                  <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[7.5px] sm:text-[8px] font-bold uppercase tracking-wider bg-amber-900 text-amber-100 px-1.5 py-0.5 shadow-xs flex items-center gap-0.5">
+        <div className="max-h-[calc(100vh-210px)] overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pb-4">
+            {produk.map((item) => (
+              <div 
+                key={item.id} 
+                className={`bg-white border overflow-hidden flex flex-col justify-between shadow-xs group transition-all duration-200 ${
+                  item.is_grosir ? 'border-emerald-800/40 hover:border-emerald-800' : 'border-neutral-200 hover:border-neutral-400'
+                }`}
+              >
+                <div className="relative aspect-[4/3] w-full bg-neutral-100 overflow-hidden">
+                  <Image src={item.gambarUtama} alt={item.nama} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
                   
-                    <span>Grosir Min {item.min_grosir}</span>
+                  {/* Badge Kategori */}
+                  <span className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-white/95 px-1.5 sm:px-2 py-0.5 border border-neutral-200 text-neutral-900 shadow-xs">
+                    {item.kategori}
                   </span>
-                )}
 
-                <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider bg-neutral-950/80 text-white px-1.5 py-0.5 backdrop-blur-xs">
-                  {item.gambarList?.length || 1} Foto
-                </span>
-              </div>
-              <div className="p-2.5 sm:p-4 space-y-1">
-                <h4 className="text-[11px] sm:text-xs font-bold text-neutral-900 line-clamp-1">{item.nama}</h4>
-                <p className="text-[9px] sm:text-[11px] text-neutral-500 line-clamp-1">
-                  {item.ukuran.join(', ')} • {item.warna.length} Warna {item.berat ? `• ${item.berat} gr` : ''}
-                </p>
-
-                <div className="flex flex-col pt-1">
-                  <span className="font-bold text-neutral-950 text-xs">Rp {item.harga.toLocaleString('id-ID')}</span>
-                  {item.is_grosir && item.harga_grosir && (
-                    <span className="text-[9.5px] text-amber-800 font-bold font-mono">
-                      Grosir: Rp {item.harga_grosir.toLocaleString('id-ID')} / pcs
+                  {/* TAMPILAN GROSIR BADGE TERPERBAIKI */}
+                  {item.is_grosir && (
+                    <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[8px] sm:text-[9.5px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 shadow-sm flex items-center gap-1">
+                      <Tag className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>MIN {item.min_grosir || 3} PCS</span>
                     </span>
                   )}
-                </div>
 
-                <div className="pt-1 flex items-center justify-between">
-                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 border ${item.stok > 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
-                    Stok: {item.stok}
+                  <span className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider bg-neutral-950/80 text-white px-1.5 py-0.5 backdrop-blur-xs">
+                    {item.gambarList?.length || 1} Foto
                   </span>
                 </div>
-              </div>
 
-              <div className="p-2 sm:p-3 bg-neutral-50 border-t border-neutral-200 flex items-center justify-between gap-1">
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">Stok:</span>
-                  <button
-                    onClick={() => handleUpdateStock(item.id, Math.max(0, item.stok - 1))}
-                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <button
-                    onClick={() => handleUpdateStock(item.id, item.stok + 1)}
-                    className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
-                  >
-                    +
-                  </button>
+                <div className="p-2.5 sm:p-4 space-y-1.5">
+                  <h4 className="text-[11px] sm:text-xs font-bold text-neutral-900 line-clamp-1">{item.nama}</h4>
+                  <p className="text-[9px] sm:text-[11px] text-neutral-500 line-clamp-1">
+                    {item.ukuran.join(', ')} • {item.warna.length} Warna {item.berat ? `• ${item.berat} gr` : ''}
+                  </p>
+
+                  <div className="flex flex-col pt-0.5 space-y-0.5">
+                    <span className="text-[10px] sm:text-xs text-neutral-600 font-medium">
+                      Ecer: <strong className="text-neutral-950 font-bold">Rp {item.harga.toLocaleString('id-ID')}</strong>
+                    </span>
+
+                    {/* HARGA GROSIR DENGAN STYLING HIJAU EMERALD EKSLUSIF */}
+                    {item.is_grosir && item.harga_grosir && (
+                      <div className="bg-emerald-50 border border-emerald-200 px-2 py-1 mt-1 flex items-center justify-between text-emerald-900">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-800">
+                          Grosir:
+                        </span>
+                        <span className="text-[10.5px] sm:text-xs font-bold font-mono">
+                          Rp {item.harga_grosir.toLocaleString('id-ID')} <span className="text-[8.5px] font-normal text-emerald-700">/pcs</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between">
+                    <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 border ${item.stok > 0 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
+                      Stok: {item.stok}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(item)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral-950 text-white hover:bg-black text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
-                    title="Edit Produk"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>Edit</span>
-                  </button>
+                <div className="p-2 sm:p-3 bg-neutral-50 border-t border-neutral-200 flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">Stok:</span>
+                    <button
+                      onClick={() => handleUpdateStock(item.id, Math.max(0, item.stok - 1))}
+                      className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <button
+                      onClick={() => handleUpdateStock(item.id, item.stok + 1)}
+                      className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-neutral-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(item)}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
-                    title="Hapus Produk"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden xs:inline">Hapus</span>
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(item)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral-950 text-white hover:bg-black text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
+                      title="Edit Produk"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(item)}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition shadow-xs cursor-pointer"
+                      title="Hapus Produk"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden xs:inline">Hapus</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* MODAL TAMBAH & EDIT PRODUK */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div className="fixed inset-0" onClick={() => setShowAddModal(false)} />
@@ -704,15 +713,13 @@ export default function ProdukComponent() {
             </div>
 
             <form onSubmit={handleAddSubmit} className="p-3.5 sm:p-5 overflow-y-auto space-y-3.5 flex-1 text-xs">
-              
-              {/* UPLOAD FOTO PRODUK */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                     Foto Produk ({formProduk.gambarList.length})
                   </label>
                   {isCompressing ? (
-                    <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-neutral-600 flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" /> Memproses...
                     </span>
                   ) : (
@@ -759,7 +766,6 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* NAMA PRODUK */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Nama Model Busana <span className="text-red-500">*</span>
@@ -774,7 +780,6 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* 3 KOLOM: HARGA ECER, STOK, BERAT */}
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="space-y-1">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
@@ -821,8 +826,8 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* PENGATURAN GROSIR */}
-              <div className="p-3 bg-amber-50/60 border border-amber-200/90 rounded-xs space-y-2.5">
+              {/* FORM PENGATURAN GROSIR */}
+              <div className="p-3 bg-emerald-50/40 border border-emerald-800/30 rounded-xs space-y-2.5">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -835,17 +840,18 @@ export default function ProdukComponent() {
                         harga_grosir: e.target.checked ? prev.harga_grosir : '',
                       }))
                     }
-                    className="w-4 h-4 accent-neutral-950 cursor-pointer"
+                    className="w-4 h-4 accent-emerald-950 cursor-pointer"
                   />
-                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-emerald-800" />
                     <span>Aktifkan Harga Grosir / Seri</span>
                   </span>
                 </label>
 
                 {formProduk.is_grosir && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-200/50">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-emerald-200">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 block">
                         Min. Pembelian Seri (Pcs) <span className="text-red-500">*</span>
                       </label>
                       <input
@@ -854,13 +860,13 @@ export default function ProdukComponent() {
                         placeholder="Contoh: 3 atau 5"
                         value={formProduk.min_grosir}
                         onChange={(e) => setFormProduk({ ...formProduk, min_grosir: e.target.value })}
-                        className="w-full bg-white border border-neutral-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-950"
+                        className="w-full bg-white border border-emerald-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-emerald-950"
                         required={formProduk.is_grosir}
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 block">
                         Harga Grosir / Pcs (Rp) <span className="text-red-500">*</span>
                       </label>
                       <input
@@ -868,7 +874,7 @@ export default function ProdukComponent() {
                         placeholder="Contoh: 55.000"
                         value={formProduk.harga_grosir}
                         onChange={handleHargaGrosirChange}
-                        className="w-full bg-white border border-neutral-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-950"
+                        className="w-full bg-white border border-emerald-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-emerald-950"
                         required={formProduk.is_grosir}
                       />
                     </div>
@@ -876,7 +882,6 @@ export default function ProdukComponent() {
                 )}
               </div>
 
-              {/* KATEGORI */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
@@ -941,7 +946,6 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* VARIASI WARNA (TEXT BAR) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
@@ -995,7 +999,6 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* PILIHAN UKURAN */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Pilihan Ukuran
@@ -1021,7 +1024,6 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* DESKRIPSI */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Deskripsi Produk
@@ -1035,7 +1037,6 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* RINCIAN DETAIL */}
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
                   Rincian Detail (Poin-poin)
@@ -1049,7 +1050,6 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* TOMBOL AKSI MODAL FORM */}
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200 sticky bottom-0 bg-white">
                 <button
                   type="button"
@@ -1068,12 +1068,10 @@ export default function ProdukComponent() {
                 </button>
               </div>
             </form>
-
           </div>
         </div>
       )}
 
-      {/* MODAL HAPUS KATEGORI */}
       {deleteKategoriTarget && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="fixed inset-0" onClick={() => setDeleteKategoriTarget(null)} />
@@ -1114,7 +1112,6 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* MODAL HAPUS PRODUK */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="fixed inset-0" onClick={() => setDeleteTarget(null)} />
@@ -1170,7 +1167,6 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* MODAL VALIDASI FORM */}
       {validationModal.show && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white border border-neutral-200 max-w-sm w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">

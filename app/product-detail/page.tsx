@@ -16,7 +16,8 @@ import {
   Loader2, 
   Plus, 
   Minus,
-  CheckCircle2
+  CheckCircle2,
+  Tag
 } from "lucide-react";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
@@ -159,6 +160,7 @@ function ProductDetailContent() {
     setActiveImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
   };
 
+  // PERBAIKAN PENTING DI SINI
   const handleAddToCart = () => {
     if (quantity <= 0 || sisaStok <= 0) return;
 
@@ -167,6 +169,10 @@ function ProductDetailContent() {
         id: product.id,
         title: product.title,
         price: activeUnitPrice,
+        rawPrice: product.rawPrice,         // PERBAIKAN: Mengirim harga eceran asli
+        is_grosir: product.is_grosir,       // PERBAIKAN: Status grosir
+        min_grosir: product.min_grosir,     // PERBAIKAN: Syarat minimal grosir
+        harga_grosir: product.harga_grosir, // PERBAIKAN: Nilai harga grosir
         size: selectedSize,
         color: selectedColor,
         weight: product.weight,
@@ -178,10 +184,11 @@ function ProductDetailContent() {
     setShowCenterModal(true);
   };
 
-  const extraImagesCount = allImages.length > 3 ? allImages.length - 3 : 0;
+  const extraImagesCount = allImages.length > 3 ? allImages.length - 2 : 0;
 
   return (
     <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 relative">
+      {/* MODAL BERHASIL MASUK KERANJANG */}
       {showCenterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -257,6 +264,7 @@ function ProductDetailContent() {
         </div>
       )}
 
+      {/* LIGHTBOX POPUP DAFTAR FOTO UTUH */}
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -316,7 +324,10 @@ function ProductDetailContent() {
         </div>
       )}
 
+      {/* KONTEN DETAIL UTAMA */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
+        
+        {/* GALERI FOTO KIRI */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           <div 
             onClick={() => openLightbox(selectedImageIndex)}
@@ -335,8 +346,8 @@ function ProductDetailContent() {
             </div>
 
             {product.is_grosir && (
-              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-white px-2.5 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border border-neutral-800 shadow-sm flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <div className="absolute top-2.5 right-2.5 bg-emerald-950 text-emerald-300 border border-emerald-800 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5">
+                <Tag className="w-3 h-3 text-emerald-400" />
                 <span>GROSIR MIN. {product.min_grosir} PCS</span>
               </div>
             )}
@@ -349,34 +360,40 @@ function ProductDetailContent() {
             </div>
           </div>
 
+          {/* LIST THUMBNAIL BAWAH (3 KOTAK SAJA) */}
           {allImages.length > 1 && (
             <div className="grid grid-cols-3 gap-2">
               {allImages.slice(0, 3).map((img: string, idx: number) => {
-                const isThirdAndMore = idx === 2 && extraImagesCount > 0;
+                const isThirdAndHasMore = idx === 2 && extraImagesCount > 0;
                 const isSelected = selectedImageIndex === idx;
 
                 return (
                   <div
                     key={idx}
                     onClick={() => {
-                      if (isThirdAndMore) {
+                      if (isThirdAndHasMore) {
                         openLightbox(2);
                       } else {
                         setSelectedImageIndex(idx);
                       }
                     }}
                     className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition ${
-                      isSelected && !isThirdAndMore
+                      isSelected && !isThirdAndHasMore
                         ? "border-neutral-950 ring-1 ring-neutral-950" 
                         : "border-neutral-200 hover:border-neutral-400"
                     }`}
                   >
                     <Image src={img} alt={`Foto ${idx + 1}`} fill className="object-cover" />
                     
-                    {isThirdAndMore && (
-                      <div className="absolute inset-0 bg-neutral-950/75 hover:bg-neutral-950/85 transition flex flex-col items-center justify-center text-white p-1 text-center">
-                        <Images className="w-3.5 h-3.5 mb-0.5" />
-                        <span className="text-[10px] font-bold tracking-tight">+{extraImagesCount} Lainnya</span>
+                    {isThirdAndHasMore && (
+                      <div className="absolute inset-0 bg-neutral-950/80 hover:bg-neutral-950/90 transition flex flex-col items-center justify-center text-white p-1 text-center">
+                        <Images className="w-4 h-4 mb-1 text-emerald-400" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider leading-tight">
+                          +{extraImagesCount} Foto
+                        </span>
+                        <span className="text-[8.5px] font-semibold tracking-tight text-neutral-300">
+                          Lihat Lainnya
+                        </span>
                       </div>
                     )}
                   </div>
@@ -386,6 +403,7 @@ function ProductDetailContent() {
           )}
         </div>
 
+        {/* INFORMASI PRODUK KANAN */}
         <div className="md:col-span-6 space-y-4">
           <div className="space-y-1 border-b border-neutral-200 pb-3">
             <div className="flex items-center gap-2 text-[10px] tracking-widest font-bold uppercase text-neutral-400">
@@ -409,7 +427,7 @@ function ProductDetailContent() {
               <span className="text-xs text-neutral-500 font-medium">/ pcs</span>
 
               {isQualifiedGrosir && (
-                <span className="ml-2 text-xs text-neutral-400 line-through">
+                <span className="ml-2 text-xs text-neutral-400 line-through font-mono">
                   Rp {product.rawPrice.toLocaleString("id-ID")}
                 </span>
               )}
@@ -422,7 +440,7 @@ function ProductDetailContent() {
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-neutral-500">
                 <span>Pilih Tipe Pembelian</span>
                 {savingPerPcs > 0 && (
-                  <span className="text-emerald-800 font-mono">
+                  <span className="text-emerald-800 font-mono font-bold">
                     Hemat Rp {savingPerPcs.toLocaleString("id-ID")} / pcs di Paket Grosir
                   </span>
                 )}
@@ -461,26 +479,26 @@ function ProductDetailContent() {
                   onClick={() => setQuantity(product.min_grosir || 3)}
                   className={`relative p-3 border transition cursor-pointer flex flex-col justify-between ${
                     quantity >= (product.min_grosir || 3)
-                      ? "border-neutral-950 bg-white ring-1 ring-neutral-950 shadow-xs"
+                      ? "border-emerald-800 bg-emerald-50/20 ring-1 ring-emerald-800 shadow-xs"
                       : "border-neutral-200 bg-neutral-50/70 hover:border-neutral-300 hover:bg-white"
                   }`}
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1">
                         <span>Seri Grosir</span>
                       </span>
                       {quantity >= (product.min_grosir || 3) && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-neutral-950 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
                       )}
                     </div>
-                    <p className="text-xs sm:text-sm font-bold font-mono text-neutral-950">
+                    <p className="text-xs sm:text-sm font-bold font-mono text-emerald-950">
                       Rp {product.harga_grosir.toLocaleString("id-ID")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between mt-2 text-[9px] font-medium">
                     <span className="text-neutral-500 font-mono">Min. {product.min_grosir} pcs</span>
-                    <span className="text-emerald-700 font-bold font-mono bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded-xs">
+                    <span className="text-emerald-800 font-bold font-mono bg-emerald-100/80 border border-emerald-300 px-1 py-0.2 rounded-2xs">
                       LEBIH MURAH
                     </span>
                   </div>
@@ -493,6 +511,7 @@ function ProductDetailContent() {
             {product.desc}
           </p>
 
+          {/* WARNA */}
           {rawWarnaList && rawWarnaList.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center text-xs uppercase">
@@ -523,6 +542,7 @@ function ProductDetailContent() {
             </div>
           )}
 
+          {/* UKURAN */}
           {product.ukuran && product.ukuran.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs tracking-wider uppercase">
@@ -551,6 +571,7 @@ function ProductDetailContent() {
             </div>
           )}
 
+          {/* KONTROL JUMLAH */}
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
               Jumlah Pembelian
@@ -590,6 +611,7 @@ function ProductDetailContent() {
             </div>
           </div>
 
+          {/* TOMBOL ADD TO CART */}
           <div className="pt-2">
             <button
               onClick={handleAddToCart}
@@ -609,6 +631,7 @@ function ProductDetailContent() {
             </button>
           </div>
 
+          {/* ACCORDION INFORMATION */}
           <div className="border-t border-neutral-200 pt-3 space-y-2 text-xs">
             <div className="border-b border-neutral-100 pb-2">
               <button
@@ -637,7 +660,7 @@ function ProductDetailContent() {
               </button>
               {openAccordion === "shipping" && (
                 <div className="mt-2 text-neutral-600 space-y-1 pl-1 leading-relaxed">
-                  <p>• Pengiriman langsung dari Dusun Jai, Mergayu, Bandung, Tulungagung</p>
+                  <p>• Pengiriman langsung dari Dusun Jati, Mergayu, Bandung, Tulungagung</p>
                   <p>• Ekspedisi reguler: JNE, POS, TIKI, J&T</p>
                   <p>• Ekspedisi kargo (&ge;10 kg): JNE JTR, SiCepat GOKIL, J&T Cargo</p>
                   <p>• Garansi ganti baru 100% jika terdapat cacat produksi</p>
