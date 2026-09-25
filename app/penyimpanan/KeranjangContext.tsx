@@ -42,7 +42,7 @@ interface KeranjangContextType {
   updateQty: (id: string | number, size: string, color: string, qtyOrDelta: number, newPrice?: number) => void;
   removeItem: (id: string | number, size?: string, color?: string) => void;
   hapusItem: (id: string | number, size?: string, color?: string) => void;
-  hapusItemDaftar: (itemsToRemove: any[]) => void; // DITAMBAHKAN
+  hapusItemDaftar: (itemsToRemove: any[]) => void;
   clearCart: () => void;
   kosongkanKeranjang: () => void;
   totalCount: number;
@@ -54,6 +54,43 @@ interface KeranjangContextType {
 }
 
 const KeranjangContext = createContext<KeranjangContextType | undefined>(undefined);
+
+// HELPER UNTUK GENERATE INVOICE FORMAT: ORD-YYYYMMDD-URUTAN-ABJAD (misal: ORD-20260920-01-FYP)
+export const generateInvoiceNo = async (supabaseClient: any): Promise<string> => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${year}${month}${day}`;
+
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+  const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+
+  let countToday = 1;
+  try {
+    const { count, error } = await supabaseClient
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay);
+
+    if (!error && count !== null) {
+      countToday = count + 1;
+    }
+  } catch (err) {
+    console.error('Gagal menghitung order hari ini:', err);
+  }
+
+  const sequenceStr = String(countToday).padStart(2, '0');
+
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let randomAbjad = '';
+  for (let i = 0; i < 3; i++) {
+    randomAbjad += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return `ORD-${dateStr}-${sequenceStr}-${randomAbjad}`;
+};
 
 export function KeranjangProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<ItemKeranjang[]>([]);
@@ -120,7 +157,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     }
   }, [cartItems, isLoaded]);
 
-  // TAMBAH KE KERANJANG (DENGAN REFRESH SKEMA GROSIR)
+  // TAMBAH KE KERANJANG
   const tambahKeKeranjang = (newItem: any, qty = 1) => {
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
@@ -130,7 +167,6 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
           i.color === newItem.color
       );
 
-      // Ambil acuan harga eceran asli
       const rawPrice = Number(newItem.rawPrice || newItem.harga || newItem.price || 0);
       const minGrosir = newItem.min_grosir ? Number(newItem.min_grosir) : null;
       const hargaGrosir = newItem.harga_grosir ? Number(newItem.harga_grosir) : null;
@@ -140,7 +176,6 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         const updated = [...prev];
         const newQty = updated[existingIndex].qty + qty;
 
-        // Evaluasi harga grosir
         const isQualifiedGrosir = isGrosirAllowed && newQty >= (minGrosir || 0);
         const activePrice = isQualifiedGrosir ? hargaGrosir! : rawPrice;
 
@@ -164,7 +199,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
             id: newItem.id,
             title: newItem.title || newItem.nama || 'Busana Almaco',
             price: activePrice,
-            rawPrice: rawPrice, // ACUAN PENTING HARGA ECERAN
+            rawPrice: rawPrice,
             qty: qty,
             size: newItem.size || 'All Size',
             color: newItem.color || 'Default',
@@ -193,7 +228,6 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
             const finalQty = Number(targetQty);
             if (finalQty <= 0) return { ...item, qty: 0 };
 
-            // Ambil acuan harga eceran asli
             const rawPrice = item.rawPrice || item.price;
             const minGrosir = item.min_grosir;
             const hargaGrosir = item.harga_grosir;
@@ -201,18 +235,16 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
 
             let activePrice = item.price;
 
-            // Jika newPrice dikirim dari KeranjangPage, langsung pakai newPrice
             if (newPrice !== undefined) {
               activePrice = newPrice;
             } else if (isGrosir) {
-              // Logika fallback: jika Qty < minGrosir, paksa kembali ke rawPrice
               activePrice = finalQty >= minGrosir! ? hargaGrosir! : rawPrice;
             }
 
             return {
               ...item,
               qty: finalQty,
-              price: activePrice, // Memperbarui harga di context
+              price: activePrice,
             };
           }
           return item;
@@ -233,7 +265,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // FUNGSI BARU: HAPUS DAFTAR ITEM DARI KERANJANG (DIPAKAI SAAT CHECKOUT SUKSES)
+  // HAPUS DAFTAR ITEM DARI KERANJANG
   const hapusItemDaftar = (itemsToRemove: any[]) => {
     if (!Array.isArray(itemsToRemove) || itemsToRemove.length === 0) return;
 
@@ -254,10 +286,10 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     setCartItems([]);
   };
 
-  // BUAT PESANAN BARU
+  // BUAT PESANAN BARU DENGAN FORMAT INVOICE DINAMIS
   const tambahPesanan = async (data: Omit<Pesanan, 'id' | 'tanggal' | 'status'>) => {
     const today = new Date();
-    const invoiceNo = `ORD-${Date.now()}`;
+    const invoiceNo = await generateInvoiceNo(supabase);
 
     const newPesanan: Pesanan = {
       ...data,
@@ -318,7 +350,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         updateQty,
         removeItem,
         hapusItem: removeItem,
-        hapusItemDaftar, // DITAMBAHKAN KAN
+        hapusItemDaftar,
         clearCart,
         kosongkanKeranjang: clearCart,
         totalCount,
