@@ -117,14 +117,14 @@ export default function PembayaranComponent({
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-neutral-900 flex flex-col font-sans selection:bg-amber-900 selection:text-white justify-between overflow-x-hidden">
-      {/* HEADER */}
+      {/* HEADER RINGKAS */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-stone-200">
-        <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="w-full px-3.5 sm:px-8 lg:px-12 h-14 sm:h-16 flex items-center justify-between gap-2">
           <Link
             href="/"
-            className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0"
+            className="flex items-center gap-2 transition-opacity hover:opacity-85 min-w-0"
           >
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 shrink-0">
               <Image
                 src="/logo.png"
                 alt="Almaco Logo"
@@ -134,11 +134,11 @@ export default function PembayaranComponent({
               />
             </div>
             <div className="leading-tight truncate">
-              <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black tracking-wider">ALMACO</span>
-                <span className="font-light text-nuetral-800">FASHION</span>
+              <div className="text-sm sm:text-base uppercase tracking-tight text-neutral-950">
+                <span className="font-black tracking-wider">ALMACO</span>{" "}
+                <span className="font-light text-neutral-500">FASHION</span>
               </div>
-              <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
+              <span className="text-[8.5px] sm:text-[9.5px] text-neutral-400 font-medium tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
               </span>
             </div>
@@ -146,75 +146,74 @@ export default function PembayaranComponent({
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-stone-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-2xs shrink-0"
+            className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-stone-300 hover:border-neutral-950 px-2.5 sm:px-3 py-1.5 transition-all shadow-2xs shrink-0 rounded-2xs"
           >
-            <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xs:inline">Kembali Beranda</span>
-            <span className="xs:hidden">Beranda</span>
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">Beranda</span>
           </Link>
         </div>
       </header>
 
-      {/* MAIN CONTAINER */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <div className="text-center space-y-2 mb-6 sm:mb-8">
-          <span className="text-[10px] sm:text-[11px] uppercase font-bold tracking-[0.25em] text-amber-900/70 block">
-            PESANAN TELAH TERCATAT
+      {/* MAIN CONTAINER COMPACT */}
+      <main className="flex-1 max-w-lg w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-8">
+        {/* JUDUL COMPACT */}
+        <div className="text-center space-y-1 mb-3.5 sm:mb-5">
+          <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-[0.2em] text-amber-900 block">
+            Pesanan Telah Tercatat
           </span>
-          <h1 className="text-2xl sm:text-3xl font-serif uppercase tracking-tight text-neutral-950 leading-snug">
+          <h1 className="text-lg sm:text-xl font-serif uppercase tracking-tight text-neutral-950 font-bold leading-tight">
             Selesaikan Pembayaran Anda
           </h1>
-          <p className="text-xs sm:text-sm text-neutral-600 max-w-md mx-auto leading-relaxed">
-            Invoice No:{" "}
-            <strong className="text-amber-950 font-mono text-xs sm:text-sm px-2 py-0.5 bg-stone-200/70 border border-stone-300/80 rounded-2xs">
+          <div className="pt-0.5">
+            <span className="text-[10.5px] text-neutral-500">Invoice No: </span>
+            <strong className="text-neutral-950 font-mono text-[11px] sm:text-xs px-2 py-0.5 bg-[#FAF8F5] border border-stone-300 rounded-2xs inline-block">
               {paymentDetails.invoiceNo}
             </strong>
-          </p>
+          </div>
         </div>
 
-        <div className="bg-white border border-stone-200 p-5 sm:p-7 shadow-xs space-y-5">
-          {/* TIMER */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#FDFBF7] border border-amber-300/80 p-3.5 text-amber-950 text-xs gap-2 rounded-xs">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-800 shrink-0" />
+        <div className="bg-white border border-stone-200 p-3.5 sm:p-5 shadow-2xs space-y-3 rounded-xs">
+          {/* TIMER / STATUS */}
+          <div className="flex items-center justify-between bg-[#FDFBF7] border border-amber-300/80 p-2.5 text-amber-950 text-[11px] sm:text-xs gap-2 rounded-2xs">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-800 shrink-0" />
               <span>
-                Batas Waktu Pembayaran:{" "}
-                <strong className="font-bold">1 x 24 Jam</strong>
+                Batas Waktu: <strong className="font-bold">1 x 24 Jam</strong>
               </span>
             </div>
-            <span className="font-bold text-[10px] uppercase tracking-wider text-amber-900 self-start sm:self-auto px-2 py-0.5 bg-amber-100/90 border border-amber-300/70 rounded-2xs">
+            <span className="font-bold text-[8.5px] sm:text-[9.5px] uppercase tracking-wider text-amber-900 px-2 py-0.5 bg-amber-100 border border-amber-300 rounded-2xs whitespace-nowrap">
               Menunggu Transfer
             </span>
           </div>
 
-          {/* DETAIL RINGKAS PENERIMA & EKSPEDISI */}
+          {/* DETAIL RINGKAS PENERIMA & EKSPEDISI (1 BARIS DUA KOLOM) */}
           {(livePenerima || liveKurir) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 bg-[#FAF8F5] border border-stone-200 text-xs rounded-xs">
+            <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#FAF8F5] border border-stone-200 text-xs rounded-2xs">
               {livePenerima && (
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-stone-200/80 flex items-center justify-center shrink-0">
-                    <User className="w-3.5 h-3.5 text-stone-700" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center shrink-0">
+                    <User className="w-3 h-3 text-stone-700" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-wider">
+                    <span className="text-[8.5px] uppercase font-bold text-neutral-400 block tracking-wider leading-none">
                       Penerima
                     </span>
-                    <span className="font-bold text-neutral-900 truncate block">
+                    <span className="font-bold text-neutral-900 truncate block text-[11px] mt-0.5">
                       {livePenerima}
                     </span>
                   </div>
                 </div>
               )}
               {liveKurir && (
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-stone-200/80 flex items-center justify-center shrink-0">
-                    <Truck className="w-3.5 h-3.5 text-stone-700" />
+                <div className="flex items-center gap-2 min-w-0 border-l border-stone-200 pl-2">
+                  <div className="w-6 h-6 rounded-full bg-stone-200 flex items-center justify-center shrink-0">
+                    <Truck className="w-3 h-3 text-stone-700" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-wider">
-                      Ekspedisi Pilihan
+                    <span className="text-[8.5px] uppercase font-bold text-neutral-400 block tracking-wider leading-none">
+                      Ekspedisi
                     </span>
-                    <span className="font-bold text-neutral-900 uppercase truncate block">
+                    <span className="font-bold text-neutral-900 uppercase truncate block text-[11px] mt-0.5">
                       {liveKurir}
                     </span>
                   </div>
@@ -224,44 +223,56 @@ export default function PembayaranComponent({
           )}
 
           {/* NOMINAL TRANSFER */}
-          <div className="border border-stone-200 bg-[#FAF8F5] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xs">
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-amber-900/70 font-bold block">
+          <div className="border border-stone-200 bg-[#FAF8F5] p-3 sm:p-4 rounded-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[9.5px] sm:text-[10.5px] uppercase tracking-wider text-amber-900 font-bold block">
                 Total Jumlah Transfer
               </span>
-              <p className="text-2xl sm:text-3xl font-black text-amber-950 tracking-tight mt-0.5 flex items-center gap-2 font-mono">
+              <span className="text-[9px] text-rose-600 font-medium">
+                *Transfer tepat sesuai nominal
+              </span>
+            </div>
+
+            <div className="flex items-baseline justify-between border-y border-stone-200 py-1.5">
+              <span className="text-xs font-bold text-neutral-500">Total</span>
+              <p className="text-xl sm:text-2xl font-black text-amber-950 tracking-tight font-mono">
                 {isLoadingOrder ? (
-                  <span className="flex items-center gap-1.5 text-sm text-neutral-500 font-normal">
-                    <Loader2 className="w-4 h-4 animate-spin text-amber-900" />{" "}
-                    Menghitung tagihan...
+                  <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500 font-normal">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-900" />
+                    Memuat...
                   </span>
                 ) : (
                   `Rp ${Number(liveAmount || totalAmount).toLocaleString("id-ID")}`
                 )}
               </p>
-              <p className="text-[10px] text-rose-600 font-medium mt-0.5">
-                *Transfer tepat sesuai nominal hingga digit terakhir
-              </p>
             </div>
+
             <button
               type="button"
               onClick={handleCopyNominal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-stone-300 hover:border-amber-900 text-xs font-bold text-neutral-800 hover:text-amber-950 transition-all shadow-2xs w-full sm:w-auto justify-center cursor-pointer"
+              className="w-full py-2 bg-white hover:bg-stone-50 border border-stone-300 text-xs font-bold text-neutral-800 transition rounded-2xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer active:scale-[0.99]"
             >
               {copiedNominal ? (
-                <Check className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                  <span className="text-emerald-700 text-[11px]">
+                    Nominal Disalin!
+                  </span>
+                </>
               ) : (
-                <Copy className="w-4 h-4 text-stone-600" />
+                <>
+                  <Copy className="w-3.5 h-3.5 text-stone-500" />
+                  <span className="text-[11px]">Salin Nominal</span>
+                </>
               )}
-              <span>{copiedNominal ? "Tersalin" : "Salin Nominal"}</span>
             </button>
           </div>
 
           {/* REKENING PEMBAYARAN */}
-          <div className="border border-stone-200 p-4 sm:p-5 space-y-4 bg-white rounded-xs">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="relative w-12 h-7 border border-stone-200 px-1 flex items-center justify-center bg-white rounded-2xs">
+          <div className="border border-stone-200 p-3 sm:p-4 space-y-2.5 bg-white rounded-2xs">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <div className="relative w-10 h-5 border border-stone-200 px-1 flex items-center justify-center bg-white rounded-2xs">
                   <Image
                     src="/BCA.png"
                     alt="Bank BCA"
@@ -270,67 +281,69 @@ export default function PembayaranComponent({
                   />
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-neutral-400 font-bold">
+                  <p className="text-[9px] uppercase tracking-wider text-neutral-400 font-bold leading-none">
                     {paymentDetails.bank}
                   </p>
-                  <p className="text-xs font-bold text-neutral-900">
+                  <p className="text-[11px] font-bold text-neutral-900 mt-0.5 leading-none">
                     {paymentDetails.atasNama}
                   </p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 text-[9px] uppercase font-bold text-amber-900 bg-amber-50 px-2 py-0.5 border border-amber-200 rounded-2xs">
-                <ShieldCheck className="w-3 h-3 text-amber-700" />
+              <span className="inline-flex items-center gap-1 text-[8px] uppercase font-bold text-amber-900 bg-amber-50 px-1.5 py-0.5 border border-amber-200 rounded-2xs">
+                <ShieldCheck className="w-2.5 h-2.5 text-amber-700" />
                 Akun Resmi
               </span>
             </div>
 
-            <div className="bg-[#FAF8F5] p-3.5 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xs">
-              <div>
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block tracking-wider">
-                  Nomor Rekening BCA
+            <div className="bg-[#FAF8F5] p-2.5 border border-stone-200 rounded-2xs space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">
+                  No. Rekening BCA
                 </span>
-                <span className="font-mono text-lg sm:text-xl font-bold text-neutral-950 tracking-wider block mt-0.5">
+                <span className="font-mono text-base sm:text-lg font-bold text-neutral-950 tracking-wider">
                   {paymentDetails.noRek}
                 </span>
               </div>
+
               <button
                 type="button"
                 onClick={handleCopyRek}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-stone-300 hover:border-amber-900 text-xs font-bold text-neutral-800 hover:text-amber-950 transition-all shadow-2xs w-full sm:w-auto justify-center cursor-pointer"
+                className="w-full py-2 bg-white hover:bg-stone-50 border border-stone-300 text-xs font-bold text-neutral-800 transition rounded-2xs flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer active:scale-[0.99]"
                 title="Salin Nomor Rekening"
               >
                 {copiedRek ? (
-                  <Check className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[2.5]" />
+                    <span className="text-emerald-700 text-[11px]">
+                      No. Rekening Disalin!
+                    </span>
+                  </>
                 ) : (
-                  <Copy className="w-4 h-4 text-stone-600" />
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-stone-500" />
+                    <span className="text-[11px]">Salin No. Rekening</span>
+                  </>
                 )}
-                <span>{copiedRek ? "Tersalin" : "Salin No. Rekening"}</span>
               </button>
             </div>
           </div>
 
-          {/* TOMBOL AKSI */}
-          <div className="pt-2 space-y-3">
-            <p className="text-xs text-neutral-500 text-center leading-relaxed">
-              Setelah menyelesaikan transfer melalui ATM, M-Banking, atau
-              Internet Banking, silakan unggah bukti transfer agar pesanan
-              segera kami verifikasi dan kirimkan.
-            </p>
-
+          {/* TOMBOL AKSI UTAMA */}
+          <div className="pt-1 space-y-2">
             <Link
               href={`/konfirmasi-pembayaran?invoice=${encodeURIComponent(paymentDetails.invoiceNo)}`}
-              className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-[0.2em] py-4 transition-all flex items-center justify-center gap-2 shadow-md text-center cursor-pointer active:scale-[0.99]"
+              className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-[11px] sm:text-xs font-bold uppercase tracking-widest py-3 transition flex items-center justify-center gap-1.5 shadow-sm rounded-2xs text-center cursor-pointer active:scale-[0.99]"
             >
               <FileCheck className="w-4 h-4 text-amber-300" />
-              <span>Upload Bukti Pembayaran</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
+              <span>Sudah Transfer? Upload Bukti</span>
+              <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
             </Link>
 
             <Link
               href="/"
-              className="w-full bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 text-xs font-bold uppercase tracking-wider py-3 transition-colors block text-center cursor-pointer shadow-2xs"
+              className="w-full bg-white border border-stone-300 hover:border-neutral-900 text-neutral-700 text-[10.5px] font-bold uppercase tracking-wider py-2 transition block text-center cursor-pointer rounded-2xs shadow-2xs"
             >
-              Kembali ke Halaman Utama
+              Kembali ke Beranda
             </Link>
           </div>
         </div>

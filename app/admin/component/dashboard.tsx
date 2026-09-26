@@ -34,7 +34,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
   const [activePoint, setActivePoint] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // State Statistik dari Katalog
+  // State Statistik dari Katalog & Kas
   const [totalPendapatan, setTotalPendapatan] = useState(0);
   const [perluVerifikasiCount, setPerluVerifikasiCount] = useState(0);
   const [totalPesananCount, setTotalPesananCount] = useState(0);
@@ -59,23 +59,56 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
       if (ordersErr) throw ordersErr;
 
       const orders = ordersData || [];
-      const nonCanceled = orders.filter((o: any) => o.status !== "Dibatalkan");
 
-      const pendapatan = nonCanceled.reduce(
-        (acc: number, o: any) => acc + Number(o.total || o.total_harga || 0),
-        0,
+      // Pesanan yang benar-benar SAH & LUNAS
+      const paidOrders = orders.filter((o: any) =>
+        ["Diproses", "Dikirim", "Selesai"].includes(o.status),
       );
+
+      // Pesanan yang masih pending transfer / verifikasi
       const pendingVerif = orders.filter(
         (o: any) =>
           o.status === "Menunggu Verifikasi" ||
           o.status === "Menunggu Pembayaran",
       ).length;
 
-      setTotalPendapatan(pendapatan);
       setPerluVerifikasiCount(pendingVerif);
       setTotalPesananCount(orders.length);
 
-      // 2. Ambil jumlah produk aktif (products)
+      // 2. Ambil data kas masuk dan kas keluar dari tabel cash_flow
+      const { data: cashData } = await supabase
+        .from("cash_flow")
+        .select("tipe, nominal, tanggal, created_at");
+
+      let masukDariCashFlow = 0;
+      let keluar = 0;
+
+      if (cashData && cashData.length > 0) {
+        masukDariCashFlow = cashData
+          .filter((c: any) => {
+            const t = (c.tipe || "").toLowerCase();
+            return t === "pemasukan" || t === "masuk";
+          })
+          .reduce((acc: number, c: any) => acc + Number(c.nominal || 0), 0);
+
+        keluar = cashData
+          .filter((c: any) => {
+            const t = (c.tipe || "").toLowerCase();
+            return t === "pengeluaran" || t === "keluar";
+          })
+          .reduce((acc: number, c: any) => acc + Number(c.nominal || 0), 0);
+      } else {
+        // Fallback jika tabel cash_flow belum ada data, hitung dari pesanan yang sudah lunas
+        masukDariCashFlow = paidOrders.reduce(
+          (acc: number, o: any) => acc + Number(o.total || o.total_harga || 0),
+          0,
+        );
+      }
+
+      setTotalPendapatan(masukDariCashFlow);
+      setTotalKasKeluar(keluar);
+
+      // 3. Ambil jumlah produk aktif
       const { count: productCount, error: productErr } = await supabase
         .from("products")
         .select("*", { count: "exact", head: true });
@@ -84,22 +117,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         setTotalProdukCount(productCount);
       }
 
-      // 3. Ambil pengeluaran dari arus kas (cash_flow)
-      const { data: cashData } = await supabase
-        .from("cash_flow")
-        .select("tipe, nominal");
-
-      if (cashData) {
-        const keluar = cashData
-          .filter((c: any) => {
-            const t = (c.tipe || "").toLowerCase();
-            return t === "pengeluaran" || t === "keluar";
-          })
-          .reduce((acc: number, c: any) => acc + Number(c.nominal || 0), 0);
-        setTotalKasKeluar(keluar);
-      }
-
-      // 4. Bangun data tren omzet 7 hari terakhir
+      // 4. Bangun data tren omzet 7 hari terakhir (HANYA DARI PESANAN LUNAS)
       const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
       const points: ChartPoint[] = [];
       const today = new Date();
@@ -110,7 +128,8 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         const dateStr = d.toISOString().split("T")[0];
         const dayLabel = dayNames[d.getDay()];
 
-        const dayTotal = nonCanceled
+        // Hitung omzet per tanggal dari pesanan yang sudah berstatus lunas
+        const dayTotal = paidOrders
           .filter((o: any) => o.created_at && o.created_at.startsWith(dateStr))
           .reduce(
             (acc: number, o: any) =>
@@ -166,7 +185,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
     <div className="space-y-4 sm:space-y-6 w-full">
       {/* 4 KARTU STATISTIK ATAS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        {/* TOTAL PENDAPATAN */}
+        {/* TOTAL PENDAPATAN (LUNAS SAJA) */}
         <div className="bg-white border border-stone-200 p-3 sm:p-5 shadow-2xs rounded-xs flex items-center justify-between gap-1.5">
           <div className="min-w-0 flex-1">
             <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-900/70 truncate">
@@ -243,8 +262,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
                   Tren Penjualan 7 Hari Terakhir
                 </h3>
                 <p className="text-[9px] sm:text-[10px] text-stone-400 truncate">
-                  Ketuk titik koordinat grafik untuk melihat rincian omzet
-                  harian
+                  Memetakan omzet harian dari pesanan yang terverifikasi
                 </p>
               </div>
             </div>
@@ -387,7 +405,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
           </div>
         </div>
 
-        {/* RINGKASAN ARUS KAS */}
+        {/* RINGKASAN ARUS KAS (SINKRON BUKU KAS) */}
         <div className="lg:col-span-4 bg-white border border-stone-200 p-4 sm:p-6 shadow-2xs rounded-xs space-y-4 flex flex-col justify-between">
           <div className="space-y-3 sm:space-y-4">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3 sm:pb-4">

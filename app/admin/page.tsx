@@ -35,6 +35,25 @@ export default function AdminMainPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+  // Badge indikator pesanan butuh verifikasi
+  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+
+  // Hitung pesanan yang butuh tindakan
+  const fetchBadgeCounts = useCallback(async () => {
+    try {
+      const { count, error } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .or("status.eq.Menunggu Verifikasi,status.eq.Menunggu Pembayaran");
+
+      if (!error && count !== null) {
+        setPendingOrdersCount(count);
+      }
+    } catch {
+      // diamkan jika error
+    }
+  }, []);
+
   // Verifikasi otentikasi ketat via Server Supabase Auth & Tabel Profiles
   const checkStrictAuth = useCallback(async () => {
     try {
@@ -49,7 +68,7 @@ export default function AdminMainPage() {
       }
 
       // 2. Wajib verifikasi role 'admin' langsung dari database
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role, nama")
         .eq("id", session.user.id)
@@ -63,8 +82,8 @@ export default function AdminMainPage() {
       if (profile?.role === "admin" || isAdminWhitelist) {
         setIsAuthenticated(true);
         if (profile?.nama) setAdminName(profile.nama);
+        fetchBadgeCounts();
       } else {
-        // Jika akun bukan admin, cabut sesi paksa
         await supabase.auth.signOut();
         setIsAuthenticated(false);
       }
@@ -73,7 +92,7 @@ export default function AdminMainPage() {
       localStorage.removeItem("almaco_admin_user");
       setIsAuthenticated(false);
     }
-  }, []);
+  }, [fetchBadgeCounts]);
 
   useEffect(() => {
     checkStrictAuth();
@@ -157,7 +176,7 @@ export default function AdminMainPage() {
               <div className="leading-tight">
                 <div className="text-xs uppercase tracking-tight text-neutral-950">
                   <span className="font-black tracking-wider">ALMACO</span>
-                  <span className="font-light text-nuetral-800 ml-1">
+                  <span className="font-light text-neutral-800 ml-1">
                     FASHION
                   </span>
                 </div>
@@ -168,7 +187,7 @@ export default function AdminMainPage() {
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1 text-stone-400"
+              className="md:hidden p-1 text-stone-400 hover:text-neutral-900 cursor-pointer"
               aria-label="Tutup Menu"
             >
               <X className="w-5 h-5" />
@@ -196,14 +215,21 @@ export default function AdminMainPage() {
                 setActiveMenu("pesanan");
                 setSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
                 activeMenu === "pesanan"
                   ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
                   : "text-neutral-600 hover:bg-[#FAF8F5]"
               }`}
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Pesanan</span>
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="w-4 h-4" />
+                <span>Pesanan</span>
+              </div>
+              {pendingOrdersCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-amber-800 text-white font-mono text-[9.5px] font-bold rounded-full">
+                  {pendingOrdersCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -211,14 +237,21 @@ export default function AdminMainPage() {
                 setActiveMenu("pembayaran");
                 setSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
                 activeMenu === "pembayaran"
                   ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
                   : "text-neutral-600 hover:bg-[#FAF8F5]"
               }`}
             >
-              <CreditCard className="w-4 h-4" />
-              <span>Konfirmasi Bayar</span>
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-4 h-4" />
+                <span>Konfirmasi Bayar</span>
+              </div>
+              {pendingOrdersCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-rose-600 text-white font-mono text-[9.5px] font-bold rounded-full animate-pulse">
+                  {pendingOrdersCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -295,7 +328,7 @@ export default function AdminMainPage() {
             <button
               type="button"
               onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 text-neutral-800 border border-stone-200 rounded-2xs"
+              className="md:hidden p-2 text-neutral-800 border border-stone-200 rounded-2xs cursor-pointer"
               aria-label="Buka Menu"
             >
               <Menu className="w-4 h-4" />
@@ -309,8 +342,9 @@ export default function AdminMainPage() {
               {activeMenu === "testimoni" && "Kelola Galeri Foto Testimoni"}
             </h1>
           </div>
-          <div className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 uppercase">
-            ● Terautentikasi
+          <div className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 uppercase flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Terautentikasi</span>
           </div>
         </header>
 
@@ -340,14 +374,14 @@ export default function AdminMainPage() {
               <button
                 type="button"
                 onClick={() => setShowLogoutModal(false)}
-                className="py-2.5 bg-white border border-stone-300 text-xs font-bold uppercase rounded-2xs cursor-pointer"
+                className="py-2.5 bg-white border border-stone-300 hover:bg-stone-50 text-xs font-bold uppercase rounded-2xs cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="py-2.5 bg-rose-600 text-white text-xs font-bold uppercase rounded-2xs cursor-pointer"
+                className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase rounded-2xs cursor-pointer"
               >
                 Ya, Keluar
               </button>

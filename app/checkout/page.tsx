@@ -1,13 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { ArrowLeft, User, Check, Plus, ChevronDown, Loader2, Trash2, Minus, Scale } from 'lucide-react';
-import Footer from '../Footer';
-import { useKeranjang } from '../penyimpanan/KeranjangContext';
-import PembayaranComponent from './component/pembayaran';
-import { supabase } from '../penyimpanan/supabase';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  User,
+  Check,
+  Plus,
+  ChevronDown,
+  Loader2,
+  Trash2,
+  Minus,
+  Scale,
+} from "lucide-react";
+import Footer from "../Footer";
+import { useKeranjang } from "../penyimpanan/KeranjangContext";
+import PembayaranComponent from "./component/pembayaran";
+import { supabase } from "../penyimpanan/supabase";
 
 interface CourierPricing {
   company: string;
@@ -25,39 +35,98 @@ interface RajaOngkirCity {
   postal_code?: string;
 }
 
+// --- FUNGSI GENERATOR INVOICE RESMI (Contoh: ORD-2026091901FYP) ---
+async function generateInvoiceNumber(): Promise<string> {
+  const now = new Date();
+
+  // 1. Ambil Tahun, Bulan, Tanggal (YYYYMMDD)
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const dateStr = `${year}${month}${day}`;
+
+  // 2. Rentang awal & akhir hari ini untuk menghitung urutan transaksi harian
+  const startOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+  ).toISOString();
+  const endOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  ).toISOString();
+
+  let nextSequence = 1;
+
+  try {
+    const { count, error } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", startOfDay)
+      .lte("created_at", endOfDay);
+
+    if (!error && typeof count === "number") {
+      nextSequence = count + 1;
+    }
+  } catch (err) {
+    console.error("Gagal menghitung urutan order harian:", err);
+  }
+
+  // Format 2 digit urutan (01, 02, dst)
+  const sequenceStr = String(nextSequence).padStart(2, "0");
+
+  // 3 Karakter acak kapital sebagai pembeda unik anti bentrok
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let randomSuffix = "";
+  for (let i = 0; i < 3; i++) {
+    randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return `ORD-${dateStr}${sequenceStr}${randomSuffix}`;
+}
+
 export default function CheckoutPage() {
-  const [isClient, setIsClient] = useState(false); // Penanganan Hydration Error
+  const [isClient, setIsClient] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [createdInvoiceNo, setCreatedInvoiceNo] = useState('');
+  const [createdInvoiceNo, setCreatedInvoiceNo] = useState("");
   const [finalAmount, setFinalAmount] = useState(0);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
   // Form Field Penerima
-  const [nama, setNama] = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [alamat, setAlamat] = useState('');
-  const [catatan, setCatatan] = useState('');
-  const [selectedBank, setSelectedBank] = useState('bca');
+  const [nama, setNama] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [alamat, setAlamat] = useState("");
+  const [catatan, setCatatan] = useState("");
+  const [selectedBank, setSelectedBank] = useState("bca");
 
   // RajaOngkir Wilayah
-  const [searchCityInput, setSearchCityInput] = useState('');
-  const [selectedCityId, setSelectedCityId] = useState('');
+  const [searchCityInput, setSearchCityInput] = useState("");
+  const [selectedCityId, setSelectedCityId] = useState("");
   const [cityResults, setCityResults] = useState<RajaOngkirCity[]>([]);
   const [isSearchingCity, setIsSearchingCity] = useState(false);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   // Ekspedisi
   const [shippingOptions, setShippingOptions] = useState<CourierPricing[]>([]);
-  const [selectedCourier, setSelectedCourier] = useState<CourierPricing | null>(null);
+  const [selectedCourier, setSelectedCourier] = useState<CourierPricing | null>(
+    null,
+  );
   const [isLoadingShipping, setIsLoadingShipping] = useState(false);
   const [showCourierDropdown, setShowCourierDropdown] = useState(false);
 
   // STATE PRODUK YANG DI-CHECKOUT & CONTEXT KERANJANG
   const [checkoutItems, setCheckoutItems] = useState<any[]>([]);
-  const { 
-    cartItems: fullCartItems = [], 
-    hapusItemDaftar, 
-    kosongkanKeranjang 
+  const {
+    cartItems: fullCartItems = [],
+    hapusItemDaftar,
+    kosongkanKeranjang,
   } = (useKeranjang() as any) || {};
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -65,15 +134,15 @@ export default function CheckoutPage() {
   const cityDropdownRef = useRef<HTMLDivElement | null>(null);
   const shippingAbortControllerRef = useRef<AbortController | null>(null);
 
-  // 1. DIBUAT UNTUK MEMASTIKAN CLIENT-SIDE MOUNTING SUDAH SELESAI
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  // 2. AMBIL ITEM TERPILIH DARI SESSION STORAGE
   useEffect(() => {
     try {
-      const savedCheckoutItems = sessionStorage.getItem('almaco_checkout_items');
+      const savedCheckoutItems = sessionStorage.getItem(
+        "almaco_checkout_items",
+      );
       if (savedCheckoutItems) {
         const parsed = JSON.parse(savedCheckoutItems);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -85,11 +154,9 @@ export default function CheckoutPage() {
       console.error("Gagal membaca item checkout dari session storage:", e);
     }
 
-    // Fallback jika session storage kosong
     setCheckoutItems(fullCartItems);
   }, [fullCartItems]);
 
-  // HITUNG SUBTOTAL & BERAT HANYA DARI PRODUK TERPILIH
   const subtotal = checkoutItems.reduce((acc: number, item: any) => {
     return acc + (Number(item.price) || 0) * item.qty;
   }, 0);
@@ -98,27 +165,34 @@ export default function CheckoutPage() {
     return acc + (Number(item.weight) || 350) * item.qty;
   }, 0);
 
-  const totalWeightKg = totalWeight > 0 ? Math.max(1, Math.ceil(totalWeight / 1000)) : 1;
+  const totalWeightKg =
+    totalWeight > 0 ? Math.max(1, Math.ceil(totalWeight / 1000)) : 1;
   const packingFee = checkoutItems.length > 0 ? totalWeightKg * 3000 : 0;
   const shippingFee = selectedCourier ? selectedCourier.price : 0;
   const total = subtotal + shippingFee + packingFee;
 
-  // Hapus item dari tampilan checkout & session storage
-  const handleRemoveCheckoutItem = (id: string | number, size?: string, color?: string) => {
+  const handleRemoveCheckoutItem = (
+    id: string | number,
+    size?: string,
+    color?: string,
+  ) => {
     const updated = checkoutItems.filter((item: any) => {
       if (size && color) {
-        return !(String(item.id) === String(id) && item.size === size && item.color === color);
+        return !(
+          String(item.id) === String(id) &&
+          item.size === size &&
+          item.color === color
+        );
       }
       return String(item.id) !== String(id);
     });
 
     setCheckoutItems(updated);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('almaco_checkout_items', JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("almaco_checkout_items", JSON.stringify(updated));
     }
   };
 
-  // Update kuantitas item di checkout & evaluasi harga grosir
   const handleUpdateQtyCheckout = (item: any, change: number) => {
     const newQty = item.qty + change;
     if (newQty <= 0) {
@@ -126,7 +200,9 @@ export default function CheckoutPage() {
       return;
     }
 
-    const ecerPrice = Number(item.rawPrice || item.harga_ecer || item.harga || item.price);
+    const ecerPrice = Number(
+      item.rawPrice || item.harga_ecer || item.harga || item.price,
+    );
     const minGrosir = Number(item.min_grosir || 0);
     const hargaGrosir = Number(item.harga_grosir || 0);
 
@@ -136,78 +212,100 @@ export default function CheckoutPage() {
     }
 
     const updated = checkoutItems.map((i: any) => {
-      if (String(i.id) === String(item.id) && i.size === item.size && i.color === item.color) {
+      if (
+        String(i.id) === String(item.id) &&
+        i.size === item.size &&
+        i.color === item.color
+      ) {
         return { ...i, qty: newQty, price: activePrice };
       }
       return i;
     });
 
     setCheckoutItems(updated);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('almaco_checkout_items', JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("almaco_checkout_items", JSON.stringify(updated));
     }
   };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as Node;
-      if (courierDropdownRef.current && !courierDropdownRef.current.contains(target)) {
+      if (
+        courierDropdownRef.current &&
+        !courierDropdownRef.current.contains(target)
+      ) {
         setShowCourierDropdown(false);
       }
-      if (cityDropdownRef.current && !cityDropdownRef.current.contains(target)) {
+      if (
+        cityDropdownRef.current &&
+        !cityDropdownRef.current.contains(target)
+      ) {
         setShowCityDropdown(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchRates = useCallback(async (destinationCityId: string) => {
-    if (!destinationCityId || checkoutItems.length === 0) return;
+  const fetchRates = useCallback(
+    async (destinationCityId: string) => {
+      if (!destinationCityId || checkoutItems.length === 0) return;
 
-    if (shippingAbortControllerRef.current) {
-      shippingAbortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    shippingAbortControllerRef.current = controller;
+      if (shippingAbortControllerRef.current) {
+        shippingAbortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      shippingAbortControllerRef.current = controller;
 
-    setIsLoadingShipping(true);
-    setShippingOptions([]);
-    setSelectedCourier(null);
+      setIsLoadingShipping(true);
+      setShippingOptions([]);
+      setSelectedCourier(null);
 
-    const calculatedWeight = checkoutItems.reduce((acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty, 0);
+      const calculatedWeight = checkoutItems.reduce(
+        (acc: number, item: any) =>
+          acc + (Number(item.weight) || 350) * item.qty,
+        0,
+      );
 
-    try {
-      const res = await fetch('/api/rajaongkir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destination_city_id: destinationCityId,
-          weight: calculatedWeight,
-        }),
-        signal: controller.signal,
-      });
-
-      const text = await res.text();
-      let data: any = {};
       try {
-        data = JSON.parse(text);
-      } catch {
-        data = {};
-      }
+        const res = await fetch("/api/rajaongkir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            destination_city_id: destinationCityId,
+            weight: calculatedWeight,
+          }),
+          signal: controller.signal,
+        });
 
-      if (data && data.pricing && Array.isArray(data.pricing) && data.pricing.length > 0) {
-        setShippingOptions(data.pricing);
-        setSelectedCourier(data.pricing[0]);
+        const text = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = {};
+        }
+
+        if (
+          data &&
+          data.pricing &&
+          Array.isArray(data.pricing) &&
+          data.pricing.length > 0
+        ) {
+          setShippingOptions(data.pricing);
+          setSelectedCourier(data.pricing[0]);
+        }
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.error("Gagal mengambil tarif ongkir:", err);
+        }
+      } finally {
+        setIsLoadingShipping(false);
       }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.error('Gagal mengambil tarif ongkir:', err);
-      }
-    } finally {
-      setIsLoadingShipping(false);
-    }
-  }, [checkoutItems]);
+    },
+    [checkoutItems],
+  );
 
   useEffect(() => {
     if (selectedCityId && checkoutItems.length > 0) {
@@ -218,7 +316,7 @@ export default function CheckoutPage() {
   const handleCitySearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchCityInput(val);
-    setSelectedCityId('');
+    setSelectedCityId("");
     setShippingOptions([]);
     setSelectedCourier(null);
 
@@ -252,7 +350,7 @@ export default function CheckoutPage() {
   };
 
   const handleSelectCity = (city: RajaOngkirCity) => {
-    const formatted = `${city.type ? city.type + ' ' : ''}${city.city_name}${city.province ? ', ' + city.province : ''}`;
+    const formatted = `${city.type ? city.type + " " : ""}${city.city_name}${city.province ? ", " + city.province : ""}`;
     setSearchCityInput(formatted);
     setSelectedCityId(city.city_id);
     setShowCityDropdown(false);
@@ -263,17 +361,17 @@ export default function CheckoutPage() {
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nama.trim() || !whatsapp.trim() || !selectedCityId || !alamat.trim()) {
-      alert('Mohon lengkapi data penerima dan kota tujuan.');
+      alert("Mohon lengkapi data penerima dan kota tujuan.");
       return;
     }
 
     if (!selectedCourier) {
-      alert('Silakan pilih salah satu opsi jasa kirim.');
+      alert("Silakan pilih salah satu opsi jasa kirim.");
       return;
     }
 
     if (checkoutItems.length === 0) {
-      alert('Tidak ada produk yang dipilih untuk di-checkout.');
+      alert("Tidak ada produk yang dipilih untuk di-checkout.");
       return;
     }
 
@@ -283,44 +381,54 @@ export default function CheckoutPage() {
     const calculatedPacking = packingFee;
     const calculatedTotalOngkir = calculatedShipping + calculatedPacking;
     const calculatedTotal = subtotal + calculatedTotalOngkir;
-    const inv = `ORD-${Date.now()}`;
-    const formattedWa = whatsapp.startsWith('0') ? '62' + whatsapp.slice(1) : whatsapp;
+    const formattedWa = whatsapp.startsWith("0")
+      ? "62" + whatsapp.slice(1)
+      : whatsapp;
 
     const rawCompany = (
       selectedCourier.courier_name ||
       selectedCourier.company ||
       (selectedCourier as any).code ||
-      'JNE'
-    ).trim().toUpperCase();
+      "JNE"
+    )
+      .trim()
+      .toUpperCase();
 
     let namaKurirBersih = rawCompany;
-    if (rawCompany.includes('JNE')) {
-      namaKurirBersih = 'JNE';
-    } else if (rawCompany.includes('J&T') || rawCompany.includes('JNT')) {
-      namaKurirBersih = 'J&T EXPRESS';
-    } else if (rawCompany.includes('SICEPAT')) {
-      namaKurirBersih = 'SICEPAT';
+    if (rawCompany.includes("JNE")) {
+      namaKurirBersih = "JNE";
+    } else if (rawCompany.includes("J&T") || rawCompany.includes("JNT")) {
+      namaKurirBersih = "J&T EXPRESS";
+    } else if (rawCompany.includes("SICEPAT")) {
+      namaKurirBersih = "SICEPAT";
     }
 
     const serviceName = (
-      selectedCourier.courier_service_name || 
-      (selectedCourier as any).service || 
-      ''
-    ).trim().toUpperCase();
+      selectedCourier.courier_service_name ||
+      (selectedCourier as any).service ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
 
-    const kurirFinalSimpan = serviceName ? `${namaKurirBersih} - ${serviceName}` : namaKurirBersih;
+    const kurirFinalSimpan = serviceName
+      ? `${namaKurirBersih} - ${serviceName}`
+      : namaKurirBersih;
 
     try {
-      // 1. Simpan ke tabel orders
+      // 1. Buat kode invoice berformat tanggal & urutan (Contoh: ORD-2026091901FYP)
+      const inv = await generateInvoiceNumber();
+
+      // 2. Simpan ke tabel orders
       const { data: orderData, error: orderError } = await supabase
-        .from('orders')
+        .from("orders")
         .insert([
           {
             invoice_no: inv,
             nama_pembeli: nama.trim(),
             no_hp: formattedWa,
             alamat_lengkap: `${alamat.trim()} (${searchCityInput})`,
-            status: 'Menunggu Pembayaran',
+            status: "Menunggu Pembayaran",
             subtotal: subtotal,
             ongkir: calculatedTotalOngkir,
             total: calculatedTotal,
@@ -328,18 +436,18 @@ export default function CheckoutPage() {
             kurir: kurirFinalSimpan,
             bank_asal: selectedBank.toUpperCase(),
             catatan: catatan.trim() || null,
-          }
+          },
         ])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
-      // 2. Simpan setiap item checkout ke order_items
+      // 3. Simpan setiap item checkout ke order_items
       if (orderData) {
         const orderItemsPayload = checkoutItems.map((item: any) => ({
           order_id: orderData.id,
-          product_id: typeof item.id === 'number' ? item.id : null,
+          product_id: typeof item.id === "number" ? item.id : null,
           nama_produk: item.title,
           harga: item.price,
           qty: item.qty,
@@ -349,27 +457,31 @@ export default function CheckoutPage() {
           subtotal: item.price * item.qty,
         }));
 
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .insert(orderItemsPayload);
         if (itemsError) throw itemsError;
       }
 
-      // 3. HAPUS BARANG YANG DIBELI DARI KERANJANG UTAMA & LOCALSTORAGE
-      if (typeof hapusItemDaftar === 'function') {
+      // 4. Bersihkan item keranjang
+      if (typeof hapusItemDaftar === "function") {
         hapusItemDaftar(checkoutItems);
-      } else if (typeof kosongkanKeranjang === 'function') {
+      } else if (typeof kosongkanKeranjang === "function") {
         kosongkanKeranjang();
       }
 
       setFinalAmount(calculatedTotal);
       setCreatedInvoiceNo(inv);
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('almaco_checkout_items');
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("almaco_checkout_items");
       }
       setIsSubmitted(true);
-
     } catch (err: any) {
-      console.error('Gagal membuat pesanan ke database:', err);
-      alert('Terjadi kesalahan saat menyimpan pesanan: ' + (err.message || 'Silakan coba lagi.'));
+      console.error("Gagal membuat pesanan ke database:", err);
+      alert(
+        "Terjadi kesalahan saat menyimpan pesanan: " +
+          (err.message || "Silakan coba lagi."),
+      );
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -377,11 +489,15 @@ export default function CheckoutPage() {
 
   if (isSubmitted) {
     return (
-      <PembayaranComponent 
-        totalAmount={finalAmount} 
+      <PembayaranComponent
+        totalAmount={finalAmount}
         invoiceId={createdInvoiceNo}
         namaPenerima={nama}
-        ekspedisi={selectedCourier ? `${selectedCourier.courier_name || selectedCourier.company} (${selectedCourier.courier_service_name})` : undefined}
+        ekspedisi={
+          selectedCourier
+            ? `${selectedCourier.courier_name || selectedCourier.company} (${selectedCourier.courier_service_name})`
+            : undefined
+        }
       />
     );
   }
@@ -391,13 +507,23 @@ export default function CheckoutPage() {
       {/* HEADER */}
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0"
+          >
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
-              <Image src="/logo.png" alt="Almaco Logo" fill priority className="object-contain" />
+              <Image
+                src="/logo.png"
+                alt="Almaco Logo"
+                fill
+                priority
+                className="object-contain"
+              />
             </div>
             <div className="leading-tight">
               <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
+                <span className="font-black">ALMACO</span>
+                <span className="font-light text-neutral-500">FASHION</span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block">
                 Fashionable • Syari • Berkualitas
@@ -422,7 +548,10 @@ export default function CheckoutPage() {
           PEMBAYARAN & CHECKOUT
         </h1>
 
-        <form onSubmit={handlePay} className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+        <form
+          onSubmit={handlePay}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start"
+        >
           <div className="lg:col-span-7 space-y-6">
             <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs">
               <div className="flex items-center gap-2 border-b border-neutral-100 pb-3">
@@ -463,7 +592,8 @@ export default function CheckoutPage() {
 
               <div className="space-y-1 relative" ref={cityDropdownRef}>
                 <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
-                  KOTA / KABUPATEN TUJUAN <span className="text-red-500">*(KETIK MIN. 3 HURUF)</span>
+                  ALAMAT TUJUAN{" "}
+                  <span className="text-red-500">*(KETIK MIN. 3 HURUF)</span>
                 </label>
                 <div className="relative">
                   <input
@@ -471,8 +601,10 @@ export default function CheckoutPage() {
                     required
                     value={searchCityInput}
                     onChange={handleCitySearchChange}
-                    onFocus={() => cityResults.length > 0 && setShowCityDropdown(true)}
-                    placeholder="Contoh: Tulungagung / Mojokerto / Bandung"
+                    onFocus={() =>
+                      cityResults.length > 0 && setShowCityDropdown(true)
+                    }
+                    placeholder="Contoh: Kecamatan / Kabupaten / Kota"
                     className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 pr-9"
                   />
                   {isSearchingCity && (
@@ -491,10 +623,12 @@ export default function CheckoutPage() {
                         className="p-3 hover:bg-neutral-100 cursor-pointer border-b border-neutral-100 last:border-none text-left"
                       >
                         <p className="text-xs font-bold text-neutral-900">
-                          {c.type ? `${c.type} ` : ''}{c.city_name}
+                          {c.type ? `${c.type} ` : ""}
+                          {c.city_name}
                         </p>
                         <p className="text-[10px] text-neutral-500">
-                          Provinsi: {c.province} • Kodepos: {c.postal_code || '-'}
+                          Provinsi: {c.province} • Kodepos:{" "}
+                          {c.postal_code || "-"}
                         </p>
                       </div>
                     ))}
@@ -520,11 +654,15 @@ export default function CheckoutPage() {
             <div className="bg-white border border-neutral-200 shadow-xs">
               <div className="bg-[#F1F3F5] p-4 sm:p-5 border-b border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs text-neutral-800">
-                  <span>Dikirim dari: <strong className="text-neutral-950 font-bold">Tulungagung</strong></span>
+                  <span>
+                    Dikirim dari:{" "}
+                    <strong className="text-neutral-950 font-bold">
+                      Tulungagung
+                    </strong>
+                  </span>
                 </div>
 
                 <div className="relative" ref={courierDropdownRef}>
-                  {/* PENANGANAN HYDRATION ERROR DROPDOWN */}
                   {!isClient ? (
                     <div className="bg-neutral-400 text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px]">
                       <span>PILIH JASA KIRIM</span>
@@ -533,8 +671,12 @@ export default function CheckoutPage() {
                   ) : (
                     <button
                       type="button"
-                      disabled={isLoadingShipping || shippingOptions.length === 0}
-                      onClick={() => setShowCourierDropdown(!showCourierDropdown)}
+                      disabled={
+                        isLoadingShipping || shippingOptions.length === 0
+                      }
+                      onClick={() =>
+                        setShowCourierDropdown(!showCourierDropdown)
+                      }
                       className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
                     >
                       {isLoadingShipping ? (
@@ -545,7 +687,10 @@ export default function CheckoutPage() {
                       ) : selectedCourier ? (
                         <>
                           <span className="truncate uppercase tracking-wide">
-                            {selectedCourier.courier_name || selectedCourier.company} {selectedCourier.courier_service_name} ({selectedCourier.duration})
+                            {selectedCourier.courier_name ||
+                              selectedCourier.company}{" "}
+                            {selectedCourier.courier_service_name} (
+                            {selectedCourier.duration})
                           </span>
                           <ChevronDown className="w-4 h-4 shrink-0" />
                         </>
@@ -568,16 +713,23 @@ export default function CheckoutPage() {
                             setShowCourierDropdown(false);
                           }}
                           className={`px-4 py-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
-                            (selectedCourier?.courier_name || selectedCourier?.company) === (opt.courier_name || opt.company) && selectedCourier?.courier_service_name === opt.courier_service_name
-                              ? 'bg-neutral-100 font-bold text-neutral-950' 
-                              : 'hover:bg-neutral-50 text-neutral-800'
+                            (selectedCourier?.courier_name ||
+                              selectedCourier?.company) ===
+                              (opt.courier_name || opt.company) &&
+                            selectedCourier?.courier_service_name ===
+                              opt.courier_service_name
+                              ? "bg-neutral-100 font-bold text-neutral-950"
+                              : "hover:bg-neutral-50 text-neutral-800"
                           }`}
                         >
                           <div>
-                            <p className="uppercase">{opt.courier_name || opt.company} {opt.courier_service_name} ({opt.duration})</p>
+                            <p className="uppercase">
+                              {opt.courier_name || opt.company}{" "}
+                              {opt.courier_service_name} ({opt.duration})
+                            </p>
                           </div>
                           <span className="font-bold shrink-0 ml-2 text-neutral-950">
-                            Rp {opt.price.toLocaleString('id-ID')}
+                            Rp {opt.price.toLocaleString("id-ID")}
                           </span>
                         </div>
                       ))}
@@ -589,25 +741,48 @@ export default function CheckoutPage() {
               {/* LIST ITEM PRODUK DARI CHECKOUTITEMS */}
               <div className="p-4 sm:p-6 space-y-4">
                 {checkoutItems.length === 0 ? (
-                  <p className="text-xs text-neutral-500 text-center py-4">Tidak ada produk terpilih untuk di-checkout.</p>
+                  <p className="text-xs text-neutral-500 text-center py-4">
+                    Tidak ada produk terpilih untuk di-checkout.
+                  </p>
                 ) : (
                   checkoutItems.map((item: any) => (
-                    <div key={`${item.id}-${item.size}-${item.color}`} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0">
+                    <div
+                      key={`${item.id}-${item.size}-${item.color}`}
+                      className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0"
+                    >
                       <div className="flex gap-3 items-center min-w-0">
                         <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden">
-                          <Image src={item.image} alt={item.title} fill className="object-cover" />
+                          <Image
+                            src={item.image}
+                            alt={item.title}
+                            fill
+                            className="object-cover"
+                          />
                         </div>
                         <div className="space-y-0.5 min-w-0">
-                          <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">{item.title}</h4>
-                          <p className="text-[11px] text-neutral-500">{item.size || 'All Size'} ({item.color || 'Default'})</p>
-                          <p className="text-xs font-bold text-red-600 font-mono">Rp {Number(item.price).toLocaleString('id-ID')}</p>
+                          <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">
+                            {item.title}
+                          </h4>
+                          <p className="text-[11px] text-neutral-500">
+                            {item.size || "All Size"} ({item.color || "Default"}
+                            )
+                          </p>
+                          <p className="text-xs font-bold text-red-600 font-mono">
+                            Rp {Number(item.price).toLocaleString("id-ID")}
+                          </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3 self-end sm:self-center">
                         <button
                           type="button"
-                          onClick={() => handleRemoveCheckoutItem(item.id, item.size, item.color)}
+                          onClick={() =>
+                            handleRemoveCheckoutItem(
+                              item.id,
+                              item.size,
+                              item.color,
+                            )
+                          }
                           className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center transition cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -621,7 +796,9 @@ export default function CheckoutPage() {
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">{item.qty}</span>
+                          <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">
+                            {item.qty}
+                          </span>
                           <button
                             type="button"
                             onClick={() => handleUpdateQtyCheckout(item, 1)}
@@ -654,17 +831,26 @@ export default function CheckoutPage() {
                 METODE PEMBAYARAN
               </h3>
 
-              <div 
-                onClick={() => setSelectedBank('bca')}
+              <div
+                onClick={() => setSelectedBank("bca")}
                 className="flex items-center justify-between p-3.5 border-2 border-neutral-950 bg-neutral-50 shadow-xs cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <div className="relative w-12 h-6 shrink-0 bg-white border border-neutral-200 flex items-center justify-center">
-                    <Image src="/BCA.png" alt="Bank BCA" fill className="object-contain p-0.5" />
+                    <Image
+                      src="/BCA.png"
+                      alt="Bank BCA"
+                      fill
+                      className="object-contain p-0.5"
+                    />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-neutral-900 block">Bank BCA</span>
-                    <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Transfer Manual</span>
+                    <span className="text-xs font-bold text-neutral-900 block">
+                      Bank BCA
+                    </span>
+                    <span className="text-[9px] text-neutral-500 uppercase tracking-wider">
+                      Transfer Manual
+                    </span>
                   </div>
                 </div>
                 <div className="w-5 h-5 rounded-full bg-neutral-950 text-white flex items-center justify-center">
@@ -689,12 +875,27 @@ export default function CheckoutPage() {
 
                   <div className="flex justify-between">
                     <span>Subtotal Produk</span>
-                    <span className="font-semibold text-neutral-900 font-mono">Rp {subtotal.toLocaleString('id-ID')}</span>
+                    <span className="font-semibold text-neutral-900 font-mono">
+                      Rp {subtotal.toLocaleString("id-ID")}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Ongkos Kirim ({selectedCourier ? (selectedCourier.courier_name || selectedCourier.company).toUpperCase() : "Kurir"})</span>
+                    <span>
+                      Ongkos Kirim (
+                      {selectedCourier
+                        ? (
+                            selectedCourier.courier_name ||
+                            selectedCourier.company
+                          ).toUpperCase()
+                        : "Kurir"}
+                      )
+                    </span>
                     <span className="font-semibold text-neutral-900 font-mono">
-                      {isLoadingShipping ? "Menghitung..." : (selectedCourier ? "Rp " + shippingFee.toLocaleString("id-ID") : "Pilih Kurir")}
+                      {isLoadingShipping
+                        ? "Menghitung..."
+                        : selectedCourier
+                          ? "Rp " + shippingFee.toLocaleString("id-ID")
+                          : "Pilih Kurir"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -710,12 +911,13 @@ export default function CheckoutPage() {
                   </div>
                   <div className="border-t border-neutral-100 pt-3 flex justify-between text-sm font-bold text-neutral-900">
                     <span>Total Tagihan</span>
-                    <span className="text-base font-bold text-neutral-950 font-mono">Rp {total.toLocaleString('id-ID')}</span>
+                    <span className="text-base font-bold text-neutral-950 font-mono">
+                      Rp {total.toLocaleString("id-ID")}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* PERBAIKAN HYDRATION ERROR PADA TOMBOL SUBMIT */}
               {!isClient ? (
                 <div className="w-full bg-neutral-400 text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md text-center">
                   MEMPROSES PESANAN...
@@ -723,15 +925,29 @@ export default function CheckoutPage() {
               ) : (
                 <button
                   type="submit"
-                  disabled={!selectedCourier || isLoadingShipping || isSubmittingOrder || checkoutItems.length === 0}
+                  disabled={
+                    !selectedCourier ||
+                    isLoadingShipping ||
+                    isSubmittingOrder ||
+                    checkoutItems.length === 0
+                  }
                   className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 ${
-                    !selectedCourier || isLoadingShipping || isSubmittingOrder || checkoutItems.length === 0
-                      ? 'bg-neutral-400 cursor-not-allowed' 
-                      : 'bg-neutral-950 hover:bg-black cursor-pointer'
+                    !selectedCourier ||
+                    isLoadingShipping ||
+                    isSubmittingOrder ||
+                    checkoutItems.length === 0
+                      ? "bg-neutral-400 cursor-not-allowed"
+                      : "bg-neutral-950 hover:bg-black cursor-pointer"
                   }`}
                 >
-                  {isSubmittingOrder && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{isSubmittingOrder ? 'MEMPROSES PESANAN...' : 'BAYAR SEKARANG'}</span>
+                  {isSubmittingOrder && (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  )}
+                  <span>
+                    {isSubmittingOrder
+                      ? "MEMPROSES PESANAN..."
+                      : "BAYAR SEKARANG"}
+                  </span>
                 </button>
               )}
             </div>

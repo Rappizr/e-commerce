@@ -1,5 +1,6 @@
 export interface OrderItemResi {
   id: number;
+  product_id?: number;
   nama_produk: string;
   qty: number;
   warna: string;
@@ -23,6 +24,7 @@ export interface OrderRecordResi {
   no_resi?: string | null;
   kurir?: string | null;
   berat_total?: number;
+  catatan?: string | null; // Catatan khusus dari pembeli saat checkout
   created_at: string;
   order_items: OrderItemResi[];
 }
@@ -30,27 +32,42 @@ export interface OrderRecordResi {
 export const cetakLabelPacking = (
   item: OrderRecordResi,
   customResi?: string,
-  customKurir?: string
+  customKurir?: string,
 ) => {
-  const printWindow = window.open('', '_blank');
+  const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    alert('Pop-up terblokir. Izinkan pop-up untuk mencetak label pengiriman.');
+    alert(
+      "Pop-up terblokir. Izinkan pop-up browser untuk mencetak label pengiriman.",
+    );
     return;
   }
 
   // Hitung total kuantitas barang
-  const totalQty = (item.order_items || []).reduce((acc, curr) => acc + (curr.qty || 1), 0);
-  
-  // Estimasi berat paket (default 250gr per pcs)
-  const beratGram = item.berat_total 
-    ? item.berat_total 
-    : (item.order_items || []).reduce((acc, curr) => acc + ((curr.berat || 250) * (curr.qty || 1)), 0);
-  
-  const beratDisplay = beratGram >= 1000 ? `${(beratGram / 1000).toFixed(1)} Kg` : `${beratGram} gr`;
+  const totalQty = (item.order_items || []).reduce(
+    (acc, curr) => acc + (curr.qty || 1),
+    0,
+  );
+
+  // Estimasi berat paket (default 100gr per pcs jika tidak diset)
+  const beratGram = item.berat_total
+    ? item.berat_total
+    : (item.order_items || []).reduce(
+        (acc, curr) => acc + (curr.berat || 100) * (curr.qty || 1),
+        0,
+      );
+
+  const beratDisplay =
+    beratGram >= 1000
+      ? `${(beratGram / 1000).toFixed(1)} Kg`
+      : `${beratGram} gr`;
 
   // Format total pembayaran
   const totalBayar = Number(item.total || item.total_harga || 0);
-  const totalHargaDisplay = `Rp ${totalBayar.toLocaleString('id-ID')}`;
+  const totalHargaDisplay = `Rp ${totalBayar.toLocaleString("id-ID")}`;
+
+  // Kurir aktif & Resi aktif
+  const kurirAktif = (customKurir || item.kurir || "REGULER").toUpperCase();
+  const noResiAktif = customResi || item.no_resi;
 
   const rowsItemsHtml = (item.order_items || [])
     .map(
@@ -59,15 +76,15 @@ export const cetakLabelPacking = (
         <td style="padding: 5px 3px; vertical-align: top; width: 20px;">${i + 1}.</td>
         <td style="padding: 5px 3px; vertical-align: top;">
           <div style="font-weight: bold; font-size: 11px;">${prod.nama_produk}</div>
-          <div style="font-size: 10px; color: #555555;">Varian: ${prod.warna || '-'} | Size: ${prod.ukuran || '-'}</div>
+          <div style="font-size: 10px; color: #555555;">Varian: ${prod.warna || "-"} | Size: ${prod.ukuran || "-"}</div>
         </td>
         <td style="padding: 5px 3px; text-align: right; vertical-align: top; font-weight: bold; font-size: 12px; width: 35px;">
           x${prod.qty}
         </td>
       </tr>
-    `
+    `,
     )
-    .join('');
+    .join("");
 
   printWindow.document.write(`
     <!DOCTYPE html>
@@ -144,17 +161,17 @@ export const cetakLabelPacking = (
           }
           .resi-box {
             border-bottom: 2px dashed #000000;
-            padding: 12px 8px;
+            padding: 10px 8px;
             text-align: center;
           }
           .tempel-area {
-            border: 1.5px dashed #888888;
-            padding: 14px 10px;
+            border: 1.5px dashed #666666;
+            padding: 10px;
             font-size: 10px;
             font-weight: bold;
-            color: #666666;
+            color: #333333;
             background: #fafafa;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
           }
           .info-grid {
@@ -163,11 +180,11 @@ export const cetakLabelPacking = (
           }
           .meta-bar {
             display: grid;
-            grid-template-columns: 1fr 1fr 1.3fr;
+            grid-template-columns: 1fr 1fr 1fr 1.2fr;
             background: #f0f0f0;
             padding: 5px 6px;
             border: 1px solid #000000;
-            font-size: 9.5px;
+            font-size: 9px;
             font-weight: bold;
             margin-bottom: 6px;
             text-align: center;
@@ -190,6 +207,27 @@ export const cetakLabelPacking = (
           .buyer-address {
             font-size: 10.5px;
             line-height: 1.35;
+          }
+          .catatan-box {
+            margin-top: 6px;
+            padding: 5px 8px;
+            background: #fffbeb;
+            border: 1.5px dashed #b45309;
+            border-radius: 3px;
+          }
+          .catatan-title {
+            font-size: 8.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #92400e;
+          }
+          .catatan-val {
+            font-size: 10.5px;
+            font-weight: bold;
+            font-style: italic;
+            color: #1c1917;
+            margin-top: 2px;
+            line-height: 1.3;
           }
           .items-box {
             padding: 8px 0;
@@ -215,7 +253,7 @@ export const cetakLabelPacking = (
       <body>
         <div class="container">
           <div>
-            <!-- KOP TOKO (TANPA BADGE KURIR) -->
+            <!-- KOP TOKO -->
             <div class="header">
               <div class="brand-box">
                 <img 
@@ -235,18 +273,23 @@ export const cetakLabelPacking = (
               </div>
             </div>
 
-            <!-- AREA STIKER RESI KOSONG (UNTUK COUNTER EKSPEDISI) -->
+            <!-- AREA RESI / STIKER COUNTER -->
             <div class="resi-box">
               <div class="tempel-area">
-                [ TEMPAT MENEMPEL STIKER RESI DARI COUNTER ]
+                ${
+                  noResiAktif
+                    ? `KURIR: ${kurirAktif} &nbsp;\vert{}&nbsp; NO. RESI: ${noResiAktif}`
+                    : `[ TEMPAT STIKER RESI DARI COUNTER ${kurirAktif} ]`
+                }
               </div>
             </div>
 
             <!-- DETAIL PENERIMA, BERAT, QTY & TOTAL -->
             <div class="info-grid">
               <div class="meta-bar">
-                <span>BERAT: ${beratDisplay}</span>
-                <span style="border-left: 1px solid #cccccc; border-right: 1px solid #cccccc;">QTY: ${totalQty} PCS</span>
+                <span>KURIR: ${kurirAktif}</span>
+                <span style="border-left: 1px solid #cccccc; border-right: 1px solid #cccccc;">BERAT: ${beratDisplay}</span>
+                <span style="border-right: 1px solid #cccccc;">QTY: ${totalQty} PCS</span>
                 <span style="color: #000000;">TOTAL: ${totalHargaDisplay}</span>
               </div>
               
@@ -254,6 +297,18 @@ export const cetakLabelPacking = (
               <div class="buyer-name">${item.nama_pembeli}</div>
               <div class="buyer-phone">Telp: ${item.no_hp}</div>
               <div class="buyer-address">${item.alamat_lengkap}</div>
+
+              <!-- CATATAN KHUSUS DARI PEMBELI -->
+              ${
+                item.catatan && item.catatan.trim()
+                  ? `
+                  <div class="catatan-box">
+                    <div class="catatan-title">💬 Catatan Khusus Pembeli:</div>
+                    <div class="catatan-val">"${item.catatan.trim()}"</div>
+                  </div>
+                `
+                  : ""
+              }
             </div>
 
             <!-- CHECKLIST PACKING BARANG -->
@@ -267,7 +322,7 @@ export const cetakLabelPacking = (
 
           <!-- FOOTER -->
           <div class="footer">
-            <span>Pengirim: ALMACO FASHION</span>
+            <span>Pengirim: ALMACO FASHION (Tulungagung)</span>
             <span>Packing Selesai: [ &nbsp; ]</span>
           </div>
         </div>

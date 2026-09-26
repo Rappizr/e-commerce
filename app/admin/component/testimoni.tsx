@@ -323,8 +323,8 @@ export default function TestimoniComponent() {
             </h2>
           </div>
           <p className="text-[10px] sm:text-xs text-neutral-500 mt-1">
-            Format rasio <strong>9:16 (Story HP)</strong>. Foto pas memenuhi
-            layar tanpa garis tepi hitam.
+            Format rasio <strong>9:16</strong>. Foto pas memenuhi layar tanpa
+            garis tepi hitam.
           </p>
         </div>
 
@@ -338,7 +338,7 @@ export default function TestimoniComponent() {
           className="inline-flex items-center justify-center gap-2 bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider px-3.5 py-2 shadow-xs shrink-0 transition cursor-pointer rounded-2xs active:scale-95"
         >
           <Plus className="w-4 h-4 text-amber-300" />
-          <span>Upload Foto (9:16)</span>
+          <span>Upload Foto</span>
         </button>
       </div>
 

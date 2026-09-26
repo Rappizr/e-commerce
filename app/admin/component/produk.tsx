@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Tag,
   Layers,
-  Sparkles,
 } from "lucide-react";
 import { supabase } from "../../penyimpanan/supabase";
 
@@ -105,14 +104,20 @@ export default function ProdukComponent() {
           kategori: p.kategori || "Daster",
           harga: Number(p.harga || 0),
           stok: Number(p.stok || 0),
-          berat: Number(p.berat || 0),
+          berat: Number(p.berat || 100),
           deskripsi: p.deskripsi || "",
           is_grosir: Boolean(p.is_grosir),
           min_grosir: p.min_grosir ? Number(p.min_grosir) : null,
           harga_grosir: p.harga_grosir ? Number(p.harga_grosir) : null,
           rincian: Array.isArray(p.rincian) ? p.rincian : [],
-          warna: Array.isArray(p.warna) ? p.warna : [],
-          ukuran: Array.isArray(p.ukuran) ? p.ukuran : [],
+          warna:
+            Array.isArray(p.warna) && p.warna.length > 0
+              ? p.warna
+              : ["Default"],
+          ukuran:
+            Array.isArray(p.ukuran) && p.ukuran.length > 0
+              ? p.ukuran
+              : ["All Size"],
           gambarList: Array.isArray(p.gambar_list)
             ? p.gambar_list
             : p.gambar_utama
@@ -159,7 +164,7 @@ export default function ProdukComponent() {
     kategori: "",
     harga: "",
     stok: "",
-    berat: "",
+    berat: "100",
     deskripsi: "",
     rincianText: "",
     is_grosir: false,
@@ -179,9 +184,9 @@ export default function ProdukComponent() {
       nama: item.nama,
       kategori: item.kategori,
       harga: item.harga ? item.harga.toLocaleString("id-ID") : "",
-      stok: String(item.stok),
-      berat: item.berat ? String(item.berat) : "",
-      deskripsi: item.deskripsi,
+      stok: String(item.stok ?? 0),
+      berat: item.berat ? String(item.berat) : "100",
+      deskripsi: item.deskripsi || "",
       rincianText: (item.rincian || []).join("\n"),
       is_grosir: Boolean(item.is_grosir),
       min_grosir: item.min_grosir ? String(item.min_grosir) : "",
@@ -203,7 +208,7 @@ export default function ProdukComponent() {
       kategori: "",
       harga: "",
       stok: "",
-      berat: "",
+      berat: "100",
       deskripsi: "",
       rincianText: "",
       is_grosir: false,
@@ -298,8 +303,7 @@ export default function ProdukComponent() {
       setValidationModal({
         show: true,
         title: "Batas Foto Terlampaui",
-        message:
-          "Maksimal 5 foto per model busana agar etalase toko tetap cepat dimuat.",
+        message: "Maksimal 5 foto per model busana.",
       });
       e.target.value = "";
       return;
@@ -423,10 +427,10 @@ export default function ProdukComponent() {
       return;
     }
 
-    const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, ""));
+    const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, "")) || 0;
     const rawHargaGrosir =
       formProduk.is_grosir && formProduk.harga_grosir
-        ? Number(formProduk.harga_grosir.replace(/[^0-9]/g, ""))
+        ? Number(formProduk.harga_grosir.replace(/[^0-9]/g, "")) || null
         : null;
 
     const parsedRincian = formProduk.rincianText
@@ -439,19 +443,23 @@ export default function ProdukComponent() {
     const finalList =
       formProduk.gambarList.length > 0 ? formProduk.gambarList : [fallbackImg];
 
+    const parsedBerat = Number(formProduk.berat);
+    const validBerat =
+      !isNaN(parsedBerat) && parsedBerat > 0 ? parsedBerat : 100;
+
     const payload = {
       nama: formProduk.nama.trim(),
       kategori: formProduk.kategori,
       harga: rawHarga,
-      stok: Number(formProduk.stok) || 0,
-      berat: formProduk.berat ? Number(formProduk.berat) : 350,
+      stok: Math.max(0, Number(formProduk.stok) || 0),
+      berat: validBerat,
       deskripsi:
         formProduk.deskripsi.trim() ||
         "Busana modis berkualitas premium dari ALMACO FASHION.",
       is_grosir: formProduk.is_grosir,
       min_grosir:
         formProduk.is_grosir && formProduk.min_grosir
-          ? Number(formProduk.min_grosir)
+          ? Math.max(2, Number(formProduk.min_grosir) || 3)
           : null,
       harga_grosir: rawHargaGrosir,
       rincian:
@@ -507,7 +515,7 @@ export default function ProdukComponent() {
             kategori: data.kategori,
             harga: Number(data.harga || 0),
             stok: Number(data.stok || 0),
-            berat: Number(data.berat || 0),
+            berat: Number(data.berat || 100),
             deskripsi: data.deskripsi,
             is_grosir: Boolean(data.is_grosir),
             min_grosir: data.min_grosir ? Number(data.min_grosir) : null,
@@ -575,6 +583,17 @@ export default function ProdukComponent() {
 
   return (
     <div className="space-y-4 w-full relative">
+      <style jsx global>{`
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield !important;
+        }
+      `}</style>
+
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
           <div
@@ -693,7 +712,7 @@ export default function ProdukComponent() {
                     {item.kategori}
                   </span>
 
-                  {/* Badge Grosir Elegan */}
+                  {/* Badge Grosir */}
                   {item.is_grosir && (
                     <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-neutral-950 text-amber-200 border border-amber-700/40 px-2 py-0.5 shadow-sm flex items-center gap-1 rounded-2xs">
                       <Tag className="w-2.5 h-2.5 text-amber-300" />
@@ -803,7 +822,7 @@ export default function ProdukComponent() {
             className="fixed inset-0"
             onClick={() => setShowAddModal(false)}
           />
-          <div className="relative z-10 bg-white border border-stone-200 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col rounded-xs">
+          <div className="relative z-10 bg-white border border-stone-200 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col rounded-xs">
             <div className="p-3.5 sm:p-4 border-b border-stone-200 flex items-center justify-between bg-white shrink-0">
               <div>
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1.5">
@@ -908,8 +927,9 @@ export default function ProdukComponent() {
 
               {/* NAMA PRODUK */}
               <div className="space-y-1">
-                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                  Nama Model Busana <span className="text-rose-600">*</span>
+                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
+                  <span>Nama Model Busana</span>
+                  <span className="text-rose-600 font-bold">*</span>
                 </label>
                 <input
                   type="text"
@@ -923,53 +943,56 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* HARGA, STOK, BERAT */}
-              <div className="grid grid-cols-3 gap-2.5">
+              {/* BARIS HARGA, STOK, DAN BERAT */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                    Harga Ecer (Rp) <span className="text-rose-600">*</span>
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
+                    <span>Harga Ecer (Rp)</span>
+                    <span className="text-rose-600 font-bold">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: 85.000"
+                    inputMode="numeric"
+                    placeholder="Cth: 85000"
                     value={formProduk.harga}
                     onChange={handleHargaChange}
-                    className="w-full bg-[#FAF8F5] border border-stone-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
+                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                    Stok <span className="text-rose-600">*</span>
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
+                    <span>Stok</span>
+                    <span className="text-rose-600 font-bold">*</span>
                   </label>
                   <input
                     type="number"
                     required
                     min="0"
-                    placeholder="Contoh: 50"
+                    placeholder="Cth: 50"
                     value={formProduk.stok}
                     onChange={(e) =>
                       setFormProduk({ ...formProduk, stok: e.target.value })
                     }
-                    className="w-full bg-[#FAF8F5] border border-stone-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
+                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
-                    <Scale className="w-3 h-3 text-stone-500" />
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1 whitespace-nowrap">
+                    <Scale className="w-3 h-3 text-stone-500 shrink-0" />
                     <span>Berat (Gram)</span>
                   </label>
                   <input
                     type="number"
-                    min="10"
-                    placeholder="Contoh: 325"
+                    min="1"
+                    placeholder="Cth: 100"
                     value={formProduk.berat}
                     onChange={(e) =>
                       setFormProduk({ ...formProduk, berat: e.target.value })
                     }
-                    className="w-full bg-[#FAF8F5] border border-stone-300 px-3 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
+                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
                   />
                 </div>
               </div>
@@ -1001,14 +1024,14 @@ export default function ProdukComponent() {
                 {formProduk.is_grosir && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-200">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
-                        Min. Pembelian Seri (Pcs){" "}
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-0.5">
+                        <span>Min. Pembelian Seri (Pcs)</span>
                         <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="number"
                         min="2"
-                        placeholder="Contoh: 3 atau 5"
+                        placeholder="Cth: 3"
                         value={formProduk.min_grosir}
                         onChange={(e) =>
                           setFormProduk({
@@ -1016,22 +1039,23 @@ export default function ProdukComponent() {
                             min_grosir: e.target.value,
                           })
                         }
-                        className="w-full bg-white border border-amber-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
+                        className="w-full bg-white border border-amber-300 px-2.5 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
                         required={formProduk.is_grosir}
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
-                        Harga Grosir / Pcs (Rp){" "}
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-0.5">
+                        <span>Harga Grosir / Pcs (Rp)</span>
                         <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="text"
-                        placeholder="Contoh: 55.000"
+                        inputMode="numeric"
+                        placeholder="Cth: 55000"
                         value={formProduk.harga_grosir}
                         onChange={handleHargaGrosirChange}
-                        className="w-full bg-white border border-amber-300 px-3 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
+                        className="w-full bg-white border border-amber-300 px-2.5 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
                         required={formProduk.is_grosir}
                       />
                     </div>
@@ -1042,8 +1066,9 @@ export default function ProdukComponent() {
               {/* KATEGORI */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                    Kategori <span className="text-rose-600">*</span>
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5">
+                    <span>Kategori</span>
+                    <span className="text-rose-600">*</span>
                   </label>
                   <button
                     type="button"
@@ -1144,7 +1169,7 @@ export default function ProdukComponent() {
                 <div className="flex gap-1.5">
                   <input
                     type="text"
-                    placeholder="Ketik nama warna baru..."
+                    placeholder="Ketik nama warna baru (cth: Biru, Hitam)..."
                     value={inputWarnaBaru}
                     onChange={(e) => setInputWarnaBaru(e.target.value)}
                     onKeyDown={(e) => {
