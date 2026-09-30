@@ -25,7 +25,6 @@ import {
 import { supabase } from "../../penyimpanan/supabase";
 import { cetakLabelPacking, OrderRecordResi } from "./resi";
 
-// IKON RESMI LOGO WHATSAPP
 function WhatsAppIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
     <svg
@@ -40,17 +39,24 @@ function WhatsAppIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   );
 }
 
+// Helper Sanitasi Nomor WhatsApp
+const formatWaNumber = (noHp: string | number | undefined): string => {
+  if (!noHp) return "";
+  const raw = String(noHp).replace(/[^0-9]/g, "");
+  if (raw.startsWith("0")) return "62" + raw.slice(1);
+  if (raw.startsWith("8")) return "62" + raw;
+  return raw;
+};
+
 export default function PesananComponent() {
   const [orders, setOrders] = useState<OrderRecordResi[]>([]);
   const [filterStatus, setFilterStatus] = useState("Semua");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // State Modal Detail Pembeli
   const [selectedBuyerDetail, setSelectedBuyerDetail] =
     useState<OrderRecordResi | null>(null);
 
-  // State Input Resi per pesanan
   const [resiInputs, setResiInputs] = useState<{
     [key: number]: { no_resi: string; kurir: string };
   }>({});
@@ -58,22 +64,18 @@ export default function PesananComponent() {
     {},
   );
 
-  // State Modal Tolak Pesanan & Kembalikan Stok
   const [rejectModal, setRejectModal] = useState<{
     show: boolean;
     order: OrderRecordResi | null;
     alasan: string;
-    catatanTambahan: string;
     isSubmitting: boolean;
   }>({
     show: false,
     order: null,
     alasan: "Stok Barang Habis",
-    catatanTambahan: "",
     isSubmitting: false,
   });
 
-  // State Modal Konfirmasi Update Status
   const [statusModal, setStatusModal] = useState<{
     show: boolean;
     orderId: number | null;
@@ -88,7 +90,6 @@ export default function PesananComponent() {
     actionLabel: "",
   });
 
-  // State Modal Konfirmasi Hapus Pesanan
   const [deleteModal, setDeleteModal] = useState<{
     show: boolean;
     orderId: number | null;
@@ -206,81 +207,46 @@ export default function PesananComponent() {
     }
   };
 
-  // Logika Tolak Pesanan + Kembalikan Stok Produk
+  // LOGIKA TOLAK PESANAN: Cukup update status ke 'Dibatalkan'.
+  // Trigger 'trigger_kembalikan_stok' di Supabase akan mengembalikan stok otomatis!
   const handleConfirmReject = async () => {
-    const { order, alasan, catatanTambahan } = rejectModal;
-    if (!order) return;
+    const { order, alasan, isSubmitting } = rejectModal;
+    if (!order || isSubmitting) return;
+
+    if (order.status === "Dibatalkan") {
+      alert("Pesanan ini sudah dibatalkan sebelumnya.");
+      return;
+    }
 
     setRejectModal((prev) => ({ ...prev, isSubmitting: true }));
 
     try {
-      // 1. KEMBALIKAN STOK KE TABEL PRODUCTS
-      for (const item of order.order_items || []) {
-        const prodItem = item as any;
-        if (prodItem.product_id) {
-          const { data: currentProduct } = await supabase
-            .from("products")
-            .select("stok")
-            .eq("id", prodItem.product_id)
-            .single();
-
-          if (currentProduct) {
-            await supabase
-              .from("products")
-              .update({ stok: (currentProduct.stok || 0) + item.qty })
-              .eq("id", prodItem.product_id);
-          }
-        } else {
-          const { data: currentProduct } = await supabase
-            .from("products")
-            .select("id, stok")
-            .eq("nama", item.nama_produk)
-            .single();
-
-          if (currentProduct) {
-            await supabase
-              .from("products")
-              .update({ stok: (currentProduct.stok || 0) + item.qty })
-              .eq("id", currentProduct.id);
-          }
-        }
-      }
-
-      // 2. UPDATE STATUS PESANAN MENJADI DIBATALKAN
-      const reasonFull = catatanTambahan
-        ? `${alasan}: ${catatanTambahan}`
-        : alasan;
-
-      const { error } = await supabase
+      const { error: updateOrderErr } = await supabase
         .from("orders")
         .update({
           status: "Dibatalkan",
-          catatan: reasonFull,
+          catatan: `Dibatalkan: ${alasan}`,
         })
         .eq("id", order.id);
 
-      if (error) throw error;
+      if (updateOrderErr) throw updateOrderErr;
 
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === order.id
-            ? { ...o, status: "Dibatalkan", catatan: reasonFull }
-            : o,
+          o.id === order.id ? { ...o, status: "Dibatalkan" } : o,
         ),
       );
 
-      // 3. BUKA WHATSAPP OTOMATIS DENGAN FORMAT PEMBATALAN
-      const waUrl = generateWaTolakUrl(order, alasan, catatanTambahan);
+      const waUrl = generateWaTolakUrl(order, alasan);
       window.open(waUrl, "_blank");
     } catch (err: any) {
       console.error("Gagal menolak pesanan:", err);
-      alert("Gagal menolak pesanan: " + err.message);
+      alert("Gagal menolak pesanan: " + (err.message || err));
     } finally {
       setRejectModal({
         show: false,
         order: null,
         alasan: "Stok Barang Habis",
-        catatanTambahan: "",
         isSubmitting: false,
       });
     }
@@ -329,7 +295,7 @@ export default function PesananComponent() {
       }
     } catch (err: any) {
       console.error("Gagal simpan resi:", err);
-      alert("Gagal memperbarui nomor resi: " + err.message);
+      alert("Gagal memperbarui nomor resi: " + (err.message || err));
     } finally {
       setIsSavingResi((prev) => ({ ...prev, [orderId]: false }));
     }
@@ -364,20 +330,16 @@ export default function PesananComponent() {
     }
   };
 
-  // Format Chat WA Khusus Penolakan / Pembatalan
-  const generateWaTolakUrl = (
-    order: OrderRecordResi,
-    alasan: string,
-    catatanTambahan: string,
-  ) => {
-    const rawWa = order.no_hp ? String(order.no_hp).replace(/[^0-9]/g, "") : "";
-    const phone = rawWa.startsWith("0") ? "62" + rawWa.slice(1) : rawWa;
+  // Format Chat WA Penolakan
+  const generateWaTolakUrl = (order: OrderRecordResi, alasan: string) => {
+    const phone = formatWaNumber(order.no_hp);
 
     const itemsSummary = (order.order_items || [])
-      .map(
-        (i) =>
-          `- ${i.nama_produk} (${i.ukuran || "All Size"}, ${i.warna || "Default"}) x${i.qty}`,
-      )
+      .map((i) => {
+        const warnaLabel =
+          i.warna && i.warna !== "Default" ? i.warna : "Sesuai Katalog";
+        return `- ${i.nama_produk} (${warnaLabel}, ${i.ukuran || "All Size"}) x${i.qty}`;
+      })
       .join("\n");
 
     const totalFormat = `Rp ${Number(order.total || order.total_harga || 0).toLocaleString("id-ID")}`;
@@ -385,47 +347,56 @@ export default function PesananComponent() {
     let penjelasan = "";
     if (alasan === "Stok Barang Habis") {
       penjelasan =
-        "Mohon maaf yang sebesar-besarnya, stok busana yang Anda pesan saat ini sedang habis terjual. Jika Anda sudah terlanjur melakukan transfer dana, mohon segera kirimkan nomor rekening Anda agar dana kami kembalikan 100% (Refund).";
+        "Mohon maaf yang sebesar-besarnya, stok busana yang Anda pesan saat ini sedang habis terjual. Jika Anda sudah terlanjur melakukan transfer dana, mohon kirimkan nomor rekening Anda agar dana segera kami kembalikan penuh (Refund 100%).";
     } else if (alasan === "Bukti Transfer Tidak Valid / Tidak Masuk") {
       penjelasan =
-        "Kami telah memeriksa mutasi rekening kami, namun dana transfer Anda belum masuk atau bukti transfer yang diunggah kurang jelas/tidak valid. Mohon kirimkan ulang struk resmi mutasi bank Anda.";
+        "Kami telah memeriksa mutasi rekening resmi kami, namun dana transfer Anda belum masuk atau foto bukti transfer yang diunggah kurang jelas/tidak terbaca. Mohon kirimkan ulang foto struk mutasi bank Anda melalui chat ini.";
+    } else if (alasan === "Nominal Transfer Tidak Sesuai") {
+      penjelasan =
+        "Nominal dana yang ditransfer belum sesuai dengan total tagihan pesanan Anda. Silakan konfirmasi kekurangan transfer atau hubungi kami untuk penyesuaian pesanan.";
+    } else if (alasan === "Permintaan Pembatalan Oleh Pembeli") {
+      penjelasan =
+        "Pesanan Anda telah resmi kami batalkan sesuai dengan permintaan Anda.";
     } else {
-      penjelasan = `Keterangan: ${alasan}.${catatanTambahan ? `\nCatatan Admin: ${catatanTambahan}` : ""}`;
+      penjelasan = `Keterangan: ${alasan}. Silakan hubungi kami kembali jika ada pertanyaan.`;
     }
 
-    const text = `Halo Kak *${order.nama_pembeli}*,
+    const lines = [
+      `Halo Kak *${order.nama_pembeli}*,`,
+      "",
+      `Kami dari Admin *ALMACO FASHION* ingin menginformasikan terkait pesanan Anda:`,
+      `*No. Invoice:* ${order.invoice_no}`,
+      "",
+      `*Detail Produk:*`,
+      itemsSummary,
+      `*Total Tagihan:* ${totalFormat}`,
+      "",
+      `*Status Pesanan:* *DIBATALKAN / DITOLAK*`,
+      "",
+      `*Keterangan:*`,
+      penjelasan,
+      "",
+      `Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya Kak. Terima kasih banyak atas pengertiannya.`,
+    ];
 
-Kami dari Admin *ALMACO FASHION* ingin menginformasikan terkait pesanan Anda:
-*No. Invoice:* ${order.invoice_no}
-
-*Detail Produk:*
-${itemsSummary}
-*Total:* ${totalFormat}
-
-*Status Pesanan: DIBATALKAN / DITOLAK*
-
-*Keterangan:*
-${penjelasan}
-
-Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya Kak. Terima kasih banyak atas pengertiannya. 🙏`;
-
+    const text = lines.join("\n");
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   };
 
-  // FORMAT CHAT WHATSAPP OTOMATIS STANDAR
+  // FORMAT CHAT WHATSAPP OTOMATIS
   const generateWaUrl = (item: OrderRecordResi) => {
     if (item.status === "Dibatalkan") {
-      return generateWaTolakUrl(item, item.catatan || "Pesanan Dibatalkan", "");
+      return generateWaTolakUrl(item, item.catatan || "Pesanan Dibatalkan");
     }
 
-    const rawWa = item.no_hp ? String(item.no_hp).replace(/[^0-9]/g, "") : "";
-    const phone = rawWa.startsWith("0") ? "62" + rawWa.slice(1) : rawWa;
+    const phone = formatWaNumber(item.no_hp);
 
     const itemsSummary = (item.order_items || [])
-      .map(
-        (i) =>
-          `- ${i.nama_produk} (${i.ukuran || "All Size"}, ${i.warna || "Default"}) x${i.qty}`,
-      )
+      .map((i) => {
+        const warnaLabel =
+          i.warna && i.warna !== "Default" ? i.warna : "Sesuai Katalog";
+        return `- ${i.nama_produk} (${warnaLabel}, ${i.ukuran || "All Size"}) x${i.qty}`;
+      })
       .join("\n");
 
     const totalFormat = `Rp ${Number(item.total || item.total_harga || 0).toLocaleString("id-ID")}`;
@@ -440,7 +411,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
 
     let textMessage = "";
 
-    // KONDISI 1: BELUM BAYAR / MENUNGGU KONFIRMASI
     if (
       item.status === "Menunggu Pembayaran" ||
       item.status === "Menunggu Verifikasi"
@@ -470,9 +440,7 @@ Jika sudah melakukan transfer, mohon konfirmasi dan upload bukti struknya melalu
 ${originUrl}/konfirmasi-pembayaran?invoice=${item.invoice_no}
 
 Pesanan akan langsung kami proses setelah pembayaran terverifikasi. Terima kasih!`;
-    }
-    // KONDISI 2: TELAH DIKIRIM / SELESAI
-    else if (item.status === "Dikirim" || item.status === "Selesai") {
+    } else if (item.status === "Dikirim" || item.status === "Selesai") {
       textMessage = `Halo Kak *${item.nama_pembeli}*,
 
 Kabar baik, pesanan Anda dari *ALMACO FASHION* saat ini *sudah selesai kami kemas dan telah kami serahkan ke pihak kurir/ekspedisi* untuk dikirimkan ke alamat Anda.
@@ -493,9 +461,7 @@ ${alamatTujuan}
 Paket sedang dalam perjalanan. Semoga busananya sampai dengan aman dan nyaman dikenakan ya Kak.
 
 Terima kasih banyak sudah berbelanja di toko kami!`;
-    }
-    // KONDISI 3: STATUS LAINNYA
-    else {
+    } else {
       textMessage = `Halo Kak *${item.nama_pembeli}*,
 
 Terima kasih telah berbelanja di *ALMACO FASHION*.
@@ -626,7 +592,7 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
           <button
             type="button"
             onClick={fetchOrders}
-            className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 border border-stone-300 hover:border-neutral-900 bg-white hover:bg-stone-50 text-neutral-800 text-xs font-bold uppercase tracking-wider transition shadow-2xs cursor-pointer active:scale-95"
+            className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 border border-stone-300 hover:border-neutral-900 bg-white hover:bg-stone-50 text-neutral-800 text-xs font-bold uppercase tracking-wider transition shadow-2xs cursor-pointer active:scale-95 rounded-2xs"
             title="Segarkan Data"
           >
             <RefreshCw
@@ -782,14 +748,16 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                         key={prod.id}
                         className="text-[11px] text-neutral-800 line-clamp-1"
                       >
-                        - {prod.nama_produk} ({prod.ukuran || "All Size"},{" "}
-                        {prod.warna || "Default"}){" "}
+                        - {prod.nama_produk} (
+                        {prod.warna && prod.warna !== "Default"
+                          ? prod.warna
+                          : "Sesuai Katalog"}
+                        , {prod.ukuran || "All Size"}){" "}
                         <span className="font-bold font-mono">x{prod.qty}</span>
                       </p>
                     ))}
                   </div>
 
-                  {/* CATATAN KHUSUS PEMBELI (MOBILE) */}
                   {item.catatan && item.catatan.trim() && (
                     <div className="p-2 bg-amber-50/90 border border-amber-300/80 text-[10px] text-amber-950 rounded-2xs flex items-start gap-1.5">
                       <MessageSquareQuote className="w-3.5 h-3.5 text-amber-800 shrink-0 mt-0.5" />
@@ -813,7 +781,7 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                       Kurir: {kurirAktif}
                     </span>
                     <span className="font-mono font-bold text-amber-950 flex items-center gap-1">
-                      <Barcode className="w-3 h-3 text-stone-500" />
+                      <Barcode className="w-3.5 h-3.5 text-stone-500" />
                       {item.no_resi || "Belum Ada Resi"}
                     </span>
                   </div>
@@ -837,8 +805,10 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                     onClick={() =>
                       cetakLabelPacking(
                         item,
-                        resiInputs[item.id]?.no_resi,
-                        item.kurir || "",
+                        resiInputs[item.id]?.no_resi ||
+                          item.no_resi ||
+                          undefined,
+                        item.kurir || resiInputs[item.id]?.kurir || "REGULER",
                       )
                     }
                     className="w-full py-2 bg-white border border-stone-300 hover:bg-stone-50 text-neutral-800 text-[11px] font-bold uppercase inline-flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs rounded-2xs"
@@ -901,7 +871,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                             show: true,
                             order: item,
                             alasan: "Stok Barang Habis",
-                            catatanTambahan: "",
                             isSubmitting: false,
                           })
                         }
@@ -938,7 +907,7 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                           "Tandai Selesai",
                         )
                       }
-                      className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold uppercase inline-flex items-center justify-center gap-1.5 transition shadow-2xs text-center cursor-pointer rounded-2xs"
+                      className="w-full py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold uppercase inline-flex items-center gap-1 transition shadow-2xs text-center cursor-pointer rounded-2xs"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Tandai Selesai</span>
@@ -966,7 +935,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                 <th className="p-3.5 max-w-[240px] bg-[#FAF8F5]">
                   Rincian Item & Alamat
                 </th>
-                {/* KOLOM CATATAN SENDIRI */}
                 <th className="p-3.5 max-w-[180px] bg-[#FAF8F5]">
                   Catatan Pembeli
                 </th>
@@ -1030,7 +998,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                       </td>
 
                       <td className="p-3.5 whitespace-nowrap align-top">
-                        {/* NAMA PEMBELI DAPAT DIKLIK UNTUK LIHAT DETAIL LENGKAP */}
                         <button
                           type="button"
                           onClick={() => setSelectedBuyerDetail(item)}
@@ -1062,8 +1029,11 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                               key={prod.id}
                               className="text-neutral-900 truncate text-[11px]"
                             >
-                              - {prod.nama_produk} ({prod.ukuran || "All Size"},{" "}
-                              {prod.warna || "Default"}){" "}
+                              - {prod.nama_produk} (
+                              {prod.warna && prod.warna !== "Default"
+                                ? prod.warna
+                                : "Sesuai Katalog"}
+                              , {prod.ukuran || "All Size"}){" "}
                               <strong className="font-mono">x{prod.qty}</strong>
                             </p>
                           ))}
@@ -1077,12 +1047,11 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                         </p>
                       </td>
 
-                      {/* KOLOM CATATAN SENDIRI */}
                       <td className="p-3.5 max-w-[180px] align-top">
                         {item.catatan && item.catatan.trim() ? (
                           <div className="p-2 bg-amber-50/90 border border-amber-300/80 text-[10.5px] text-amber-950 rounded-2xs">
                             <div className="flex items-center gap-1 font-bold text-[8.5px] uppercase tracking-wider text-amber-900 mb-0.5">
-                              <MessageSquareQuote className="w-3 h-3 text-amber-700" />
+                              <MessageSquareQuote className="w-3.5 h-3.5 text-amber-700" />
                               <span>Catatan:</span>
                             </div>
                             <p className="italic leading-snug break-words">
@@ -1131,20 +1100,23 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                               onClick={() =>
                                 cetakLabelPacking(
                                   item,
-                                  resiInputs[item.id]?.no_resi,
-                                  item.kurir || "",
+                                  resiInputs[item.id]?.no_resi ||
+                                    item.no_resi ||
+                                    undefined,
+                                  item.kurir ||
+                                    resiInputs[item.id]?.kurir ||
+                                    "REGULER",
                                 )
                               }
                               className="px-2.5 py-1 bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 hover:bg-stone-50 text-[10px] font-bold uppercase transition flex items-center gap-1 cursor-pointer shadow-2xs rounded-2xs"
                               title="Cetak Label Packing Pengiriman"
                             >
-                              <Printer className="w-3 h-3 text-stone-600" />
+                              <Printer className="w-3.5 h-3.5 text-stone-600" />
                               <span>Label</span>
                             </button>
 
                             {canCancel && (
                               <>
-                                {/* TOMBOL TOLAK DENGAN PENGEMBALIAN STOK */}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1152,12 +1124,11 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                                       show: true,
                                       order: item,
                                       alasan: "Stok Barang Habis",
-                                      catatanTambahan: "",
                                       isSubmitting: false,
                                     })
                                   }
                                   className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-[10px] font-bold uppercase tracking-wider transition rounded-2xs cursor-pointer"
-                                  title="Tolak Pesanan & Kembalikan Stok"
+                                  title="Tolak Pesanan"
                                 >
                                   Tolak
                                 </button>
@@ -1268,7 +1239,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
           />
 
           <div className="relative z-10 w-full max-w-md bg-white border border-stone-200 shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200 rounded-xs">
-            {/* Header Modal */}
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="flex items-center gap-2">
                 <span className="p-1.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-2xs">
@@ -1287,7 +1257,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
               </button>
             </div>
 
-            {/* Isi Detail Pembeli */}
             <div className="space-y-3 text-xs">
               <div className="p-2.5 bg-[#FAF8F5] border border-stone-200 rounded-2xs space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
@@ -1322,7 +1291,7 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 border border-emerald-300 rounded-2xs transition"
                   >
-                    <WhatsAppIcon className="w-3 h-3 text-emerald-600" />
+                    <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Chat WA</span>
                   </a>
                 </div>
@@ -1338,7 +1307,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                 </div>
               </div>
 
-              {/* Catatan dari pembeli */}
               <div className="space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 block">
                   Catatan dari Pembeli:
@@ -1359,7 +1327,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
               </div>
             </div>
 
-            {/* Footer Modal */}
             <div className="pt-2 border-t border-stone-100 flex justify-end">
               <button
                 type="button"
@@ -1373,7 +1340,7 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
         </div>
       )}
 
-      {/* MODAL TOLAK PESANAN & KEMBALIKAN STOK */}
+      {/* MODAL TOLAK PESANAN */}
       {rejectModal.show && rejectModal.order && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
@@ -1384,15 +1351,14 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
             }
           />
 
-          <div className="relative z-10 bg-white border border-stone-200 max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 rounded-xs">
-            {/* Header Modal */}
+          <div className="relative z-10 bg-white border border-stone-200 max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 rounded-xs">
             <div className="flex items-start gap-3 border-b border-stone-100 pb-3">
               <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">
-                  Tolak Pesanan & Kembalikan Stok
+                  Tolak Pesanan & Batalkan Transfer
                 </h3>
                 <p className="text-[10.5px] text-neutral-500">
                   Invoice:{" "}
@@ -1412,7 +1378,6 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
               </button>
             </div>
 
-            {/* Peringatan Pengembalian Stok Otomatis */}
             <div className="p-2.5 bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 rounded-2xs space-y-1">
               <span className="font-bold flex items-center gap-1 text-amber-900">
                 <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />
@@ -1421,15 +1386,17 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
               <ul className="list-disc list-inside space-y-0.5 text-[10.5px] text-amber-900/90">
                 {(rejectModal.order.order_items || []).map((i, idx) => (
                   <li key={idx}>
-                    {i.nama_produk} ({i.warna || "Default"},{" "}
-                    {i.ukuran || "All Size"}) — <strong>+{i.qty} pcs</strong>{" "}
+                    {i.nama_produk} (
+                    {i.warna && i.warna !== "Default"
+                      ? i.warna
+                      : "Sesuai Katalog"}
+                    , {i.ukuran || "All Size"}) — <strong>+{i.qty} pcs</strong>{" "}
                     dikembalikan ke stok produk.
                   </li>
                 ))}
               </ul>
             </div>
 
-            {/* Pilihan Alasan Penolakan */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
                 Pilih Alasan Penolakan:
@@ -1451,30 +1418,9 @@ Pesanan Kakak sedang kami siapkan. Jika ada hal yang ingin ditanyakan, silakan b
                 <option value="Permintaan Pembatalan Oleh Pembeli">
                   Permintaan Pembatalan Oleh Pembeli
                 </option>
-                <option value="Lainnya">Alasan Lainnya</option>
               </select>
             </div>
 
-            {/* Keterangan Tambahan */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
-                Catatan Tambahan untuk Pembeli (Opsional):
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Tulis pesan jika ada penjelasan tambahan..."
-                value={rejectModal.catatanTambahan}
-                onChange={(e) =>
-                  setRejectModal({
-                    ...rejectModal,
-                    catatanTambahan: e.target.value,
-                  })
-                }
-                className="w-full bg-[#FAF8F5] border border-stone-300 p-2 text-xs text-neutral-900 rounded-2xs focus:bg-white focus:outline-none focus:border-amber-900"
-              />
-            </div>
-
-            {/* Tombol Aksi */}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
               <button
                 type="button"

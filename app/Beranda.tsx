@@ -24,6 +24,8 @@ import {
   PackageCheck,
   Maximize2,
   Eye,
+  Loader2,
+  Package,
 } from "lucide-react";
 import { useKeranjang } from "./penyimpanan/KeranjangContext";
 import { useAuth } from "./penyimpanan/authcontext";
@@ -35,6 +37,14 @@ interface ToastItem {
   title: string;
   price: number;
   image: string;
+}
+
+interface VariantItem {
+  id: number;
+  product_id: number;
+  warna: string;
+  ukuran: string;
+  stok: number;
 }
 
 export default function Beranda() {
@@ -59,8 +69,9 @@ export default function Beranda() {
   const [activeQuickProduct, setActiveQuickProduct] = useState<any | null>(
     null,
   );
+  const [quickVariants, setQuickVariants] = useState<VariantItem[]>([]);
+  const [isLoadingQuickVariants, setIsLoadingQuickVariants] = useState(false);
   const [quickColor, setQuickColor] = useState<string>("");
-  const [quickSize, setQuickSize] = useState<string>("");
   const [quickQty, setQuickQty] = useState<number>(1);
 
   const {
@@ -107,7 +118,10 @@ export default function Beranda() {
         supabase
           .from("products")
           .select(
-            "id, nama, kategori, harga, stok, berat, warna, ukuran, gambar_utama, is_grosir, min_grosir, harga_grosir",
+            `
+            id, nama, kategori, harga, stok, berat, warna, ukuran, gambar_utama, is_grosir, min_grosir, harga_grosir,
+            product_variants ( id, warna, stok )
+          `,
           )
           .order("created_at", { ascending: false }),
         supabase
@@ -119,28 +133,54 @@ export default function Beranda() {
       ]);
 
       if (!prodRes.error && prodRes.data) {
-        const mapped = prodRes.data.map((p: any) => ({
-          id: p.id,
-          nama: p.nama,
-          kategori: p.kategori,
-          harga: Number(p.harga || 0),
-          stok: Number(p.stok || 0),
-          berat: Number(p.berat || 100),
-          is_grosir: Boolean(p.is_grosir),
-          min_grosir: Number(p.min_grosir || 3),
-          harga_grosir: p.harga_grosir ? Number(p.harga_grosir) : null,
-          gambarUtama:
-            p.gambar_utama ||
-            "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=600&auto=format&fit=crop",
-          warna:
-            Array.isArray(p.warna) && p.warna.length > 0
-              ? p.warna
-              : ["Default"],
-          ukuran:
-            Array.isArray(p.ukuran) && p.ukuran.length > 0
-              ? p.ukuran
-              : ["All Size"],
-        }));
+        const mapped = prodRes.data.map((p: any) => {
+          const isGrosir = Boolean(p.is_grosir);
+          const minG = Number(p.min_grosir || 5);
+
+          let realStock = Number(p.stok || 0);
+          if (
+            Array.isArray(p.product_variants) &&
+            p.product_variants.length > 0
+          ) {
+            if (isGrosir) {
+              realStock = Number(p.stok || 0);
+            } else {
+              const sumVariant = p.product_variants.reduce(
+                (acc: number, curr: any) => acc + Number(curr.stok || 0),
+                0,
+              );
+              if (sumVariant > 0 || realStock <= 0) {
+                realStock = sumVariant;
+              }
+            }
+          }
+
+          return {
+            id: Number(p.id),
+            nama: p.nama,
+            kategori: p.kategori,
+            harga: Number(p.harga || 0),
+            stok: realStock,
+            berat: Number(p.berat || 100),
+            is_grosir: isGrosir,
+            min_grosir: minG,
+            harga_grosir: isGrosir
+              ? Number(p.harga_grosir || p.harga || 0)
+              : null,
+            gambarUtama:
+              p.gambar_utama ||
+              "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=600&auto=format&fit=crop",
+            warna:
+              Array.isArray(p.warna) && p.warna.length > 0
+                ? p.warna
+                : [isGrosir ? "Seri Mix (Campur Warna)" : "Default"],
+            ukuran:
+              Array.isArray(p.ukuran) && p.ukuran.length > 0
+                ? p.ukuran[0]
+                : "All Size",
+            product_variants: p.product_variants || [],
+          };
+        });
         setProducts(mapped);
 
         const extractedCats = Array.from(
@@ -181,23 +221,111 @@ export default function Beranda() {
   };
 
   // Buka Pop-up Quick Add
-  const handleOpenQuickModal = (item: any) => {
+  const handleOpenQuickModal = async (item: any) => {
     if (item.stok <= 0) return;
     setActiveQuickProduct(item);
-    setQuickColor(item.warna[0] || "Default");
-    setQuickSize(item.ukuran[0] || "All Size");
-    setQuickQty(1);
+    setIsLoadingQuickVariants(true);
+
+    const isGrosir = Boolean(item.is_grosir);
+    const minG = Number(item.min_grosir || 5);
+
+    if (isGrosir) {
+      setQuickColor("Seri Mix (Campur Warna)");
+      setQuickQty(minG);
+    } else {
+      const defaultColor = item.warna[0] || "Default";
+      setQuickColor(defaultColor);
+      setQuickQty(1);
+    }
+
+    try {
+      const { data: vData } = await supabase
+        .from("product_variants")
+        .select("id, product_id, warna, ukuran, stok")
+        .eq("product_id", Number(item.id));
+
+      const loadedVariants: VariantItem[] = (vData || []).map((v: any) => ({
+        id: Number(v.id),
+        product_id: Number(v.product_id),
+        warna: String(v.warna || "Default").trim(),
+        ukuran: String(v.ukuran || item.ukuran || "All Size").trim(),
+        stok: Number(v.stok ?? 0),
+      }));
+
+      setQuickVariants(loadedVariants);
+
+      if (!isGrosir) {
+        const availableColor =
+          item.warna.find((w: string) => {
+            const match = loadedVariants.find(
+              (v) => v.warna.toUpperCase() === w.trim().toUpperCase(),
+            );
+            return match ? match.stok > 0 : false;
+          }) || item.warna[0];
+
+        setQuickColor(availableColor || "Default");
+      }
+    } catch (err) {
+      console.error("Gagal load varian modal quick:", err);
+      setQuickVariants([]);
+    } finally {
+      setIsLoadingQuickVariants(false);
+    }
   };
 
-  // Konfirmasi Masuk Keranjang (Data konsisten & harga eceran dasar tetap terjaga)
-  const handleConfirmAddToCart = () => {
-    if (!activeQuickProduct || activeQuickProduct.stok <= 0) return;
+  const getQuickColorStock = (colorName: string): number => {
+    if (!quickVariants || quickVariants.length === 0) {
+      return activeQuickProduct?.stok || 0;
+    }
+    const target = colorName.trim().toUpperCase();
+    const match = quickVariants.find(
+      (v) => v.warna.trim().toUpperCase() === target,
+    );
+    return match ? Number(match.stok || 0) : 0;
+  };
 
-    const minGrosir = Number(activeQuickProduct.min_grosir || 3);
-    const isEligibleGrosir =
-      Boolean(activeQuickProduct.is_grosir) &&
-      quickQty >= minGrosir &&
-      activeQuickProduct.harga_grosir;
+  const isQuickProductGrosir = Boolean(activeQuickProduct?.is_grosir);
+  const activeColorStock = getQuickColorStock(quickColor);
+  const totalStockAll = activeQuickProduct?.stok || 0;
+  const currentAvailableStock = isQuickProductGrosir
+    ? totalStockAll
+    : activeColorStock;
+
+  const minAllowedQuickQty = isQuickProductGrosir
+    ? Number(activeQuickProduct?.min_grosir || 5)
+    : 1;
+
+  const quickStepQty = isQuickProductGrosir ? minAllowedQuickQty : 1;
+
+  useEffect(() => {
+    if (currentAvailableStock > 0) {
+      if (quickQty > currentAvailableStock) {
+        if (isQuickProductGrosir) {
+          const maxMultiples =
+            Math.floor(currentAvailableStock / minAllowedQuickQty) *
+            minAllowedQuickQty;
+          setQuickQty(Math.max(minAllowedQuickQty, maxMultiples));
+        } else {
+          setQuickQty(currentAvailableStock);
+        }
+      } else if (quickQty < minAllowedQuickQty) {
+        setQuickQty(minAllowedQuickQty);
+      }
+    }
+  }, [
+    quickColor,
+    currentAvailableStock,
+    minAllowedQuickQty,
+    isQuickProductGrosir,
+  ]);
+
+  const handleConfirmAddToCart = () => {
+    if (!activeQuickProduct || currentAvailableStock <= 0) return;
+
+    const minGrosir = Number(activeQuickProduct.min_grosir || 5);
+    const finalColor = isQuickProductGrosir
+      ? "Seri Mix (Campur Warna)"
+      : quickColor;
 
     if (typeof tambahKeKeranjang === "function") {
       tambahKeKeranjang(
@@ -205,14 +333,15 @@ export default function Beranda() {
           id: activeQuickProduct.id,
           title: activeQuickProduct.nama,
           price: Number(activeQuickProduct.harga || 0),
+          rawPrice: Number(activeQuickProduct.harga || 0),
           image: activeQuickProduct.gambarUtama,
-          size: quickSize || "All Size",
-          color: quickColor || "Default",
+          size: activeQuickProduct.ukuran || "All Size",
+          color: finalColor,
           weight: Number(activeQuickProduct.berat || 100),
-          is_grosir: Boolean(activeQuickProduct.is_grosir),
-          min_grosir: minGrosir,
-          harga_grosir: activeQuickProduct.harga_grosir
-            ? Number(activeQuickProduct.harga_grosir)
+          is_grosir: isQuickProductGrosir,
+          min_grosir: isQuickProductGrosir ? minGrosir : null,
+          harga_grosir: isQuickProductGrosir
+            ? Number(activeQuickProduct.harga)
             : null,
         },
         quickQty,
@@ -221,9 +350,7 @@ export default function Beranda() {
 
     triggerToast({
       ...activeQuickProduct,
-      harga: isEligibleGrosir
-        ? Number(activeQuickProduct.harga_grosir)
-        : Number(activeQuickProduct.harga),
+      harga: Number(activeQuickProduct.harga || 0),
     });
     setActiveQuickProduct(null);
   };
@@ -256,6 +383,7 @@ export default function Beranda() {
 
   const filteredProducts = products
     .filter((p) => {
+      const matchGrosir = !p.is_grosir;
       const matchCategory =
         selectedCategory === "Semua" ||
         p.kategori?.toLowerCase() === selectedCategory.toLowerCase();
@@ -264,7 +392,7 @@ export default function Beranda() {
         !query ||
         p.nama?.toLowerCase().includes(query) ||
         p.kategori?.toLowerCase().includes(query);
-      return matchCategory && matchSearch;
+      return matchGrosir && matchCategory && matchSearch;
     })
     .sort((a, b) => {
       if (sortOption === "price-low") return a.harga - b.harga;
@@ -440,7 +568,7 @@ export default function Beranda() {
                   onClick={(e) => handleSmoothScroll(e, "grosir-section")}
                   className="relative py-1 text-amber-900 transition-colors duration-300 hover:text-amber-950 active:scale-95 flex items-center gap-1.5 group cursor-pointer"
                 >
-                  <span>Grosir</span>
+                  <span>Katalog Grosir</span>
                   <span className="bg-amber-800 text-white text-[9px] px-1.5 py-0.2 rounded-xs font-bold tracking-wider">
                     SERI
                   </span>
@@ -561,7 +689,7 @@ export default function Beranda() {
                 onClick={(e) => handleSmoothScroll(e, "grosir-section")}
                 className="block py-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 border-b border-stone-100 active:bg-stone-50 transition-colors"
               >
-                Paket Grosir (Min. Seri)
+                Katalog Grosir (Seri Paket)
               </a>
             )}
             <a
@@ -621,7 +749,7 @@ export default function Beranda() {
         </div>
       </div>
 
-      {/* SECTION GROSIR */}
+      {/* SECTION GROSIR TERPISAH */}
       {grosirProducts.length > 0 && (
         <section
           id="grosir-section"
@@ -633,20 +761,20 @@ export default function Beranda() {
                 <div className="flex items-center gap-2 text-[10px] sm:text-[11px] uppercase tracking-wider">
                   <span className="bg-amber-900 text-amber-100 text-[9px] sm:text-[10px] font-bold px-2.5 py-0.5 tracking-widest rounded-2xs flex items-center gap-1 shadow-xs">
                     <Tag className="w-3 h-3 text-amber-300" />
-                    HARGA GROSIR / B2B
+                    KATALOG GROSIR / SERI
                   </span>
                   <span className="text-amber-800/40">•</span>
                   <span className="text-amber-900 font-bold">
-                    Lebih Murah & Hemat Seri
+                    Paket Seri Campur Warna
                   </span>
                 </div>
                 <h3 className="text-base sm:text-xl font-serif font-bold uppercase tracking-tight text-neutral-950">
-                  Katalog Paket Seri / Grosir
+                  Paket Grosir Seri Konveksi ALMACO
                 </h3>
               </div>
               <span className="text-[10px] sm:text-[11px] text-neutral-500 font-medium">
                 Menampilkan {displayedGrosir.length} dari{" "}
-                {grosirProducts.length} Produk Grosir
+                {grosirProducts.length} Produk Seri
               </span>
             </div>
 
@@ -654,73 +782,102 @@ export default function Beranda() {
               <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold text-neutral-900">
                 <PackageCheck className="w-4 h-4 text-amber-800 shrink-0" />
                 <span>
-                  Harga Grosir otomatis jauh lebih hemat dibanding satuan
+                  Paket seri otomatis mendapatkan warna berbeda/campur sesuai
+                  foto katalog
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-6">
-              {displayedGrosir.map((item, idx) => (
-                <div
-                  key={`grosir-${item.id}`}
-                  className="group bg-white border border-stone-200 overflow-hidden flex flex-col justify-between hover:shadow-md hover:border-amber-800/60 transition-all duration-300 rounded-xs"
-                >
-                  <Link
-                    href={`/product-detail?id=${item.id}`}
-                    className="block relative"
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-6">
+              {displayedGrosir.map((item, idx) => {
+                const isHabis = Number(item.stok || 0) <= 0;
+                const minG = Number(item.min_grosir || 5);
+                const jumlahSeri = Math.floor(Number(item.stok || 0) / minG);
+
+                return (
+                  <div
+                    key={`grosir-${item.id}`}
+                    className={`group bg-white border overflow-hidden flex flex-col justify-between transition-all duration-300 rounded-xs ${
+                      isHabis
+                        ? "border-stone-200 opacity-75"
+                        : "border-amber-800/30 hover:shadow-md hover:border-amber-900"
+                    }`}
                   >
-                    <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
-                      <Image
-                        src={item.gambarUtama}
-                        alt={item.nama}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
-                        priority={idx < 2}
-                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[7.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-neutral-950 text-amber-200 px-1.5 py-0.5 sm:px-2.5 sm:py-1 shadow-sm border border-amber-700/40 rounded-2xs">
-                        Min. {item.min_grosir} Pcs / Seri
-                      </span>
-                    </div>
-
-                    <div className="p-2 sm:p-4 space-y-1">
-                      <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-amber-800 font-bold block">
-                        {item.kategori}
-                      </span>
-                      <h4 className="text-[11px] sm:text-sm font-semibold text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
-                        {item.nama}
-                      </h4>
-
-                      <div className="pt-0.5 flex flex-col">
-                        <span className="text-[8.5px] sm:text-[10px] text-neutral-400 line-through">
-                          Harga Ecer: Rp {item.harga.toLocaleString("id-ID")}
-                        </span>
-                        <div className="flex items-baseline gap-0.5">
-                          <span className="text-[11px] sm:text-sm font-bold text-amber-950 font-mono tracking-tight">
-                            Grosir: Rp{" "}
-                            {Number(
-                              item.harga_grosir || item.harga,
-                            ).toLocaleString("id-ID")}
-                          </span>
-                          <span className="text-[8px] sm:text-[10px] text-neutral-500 font-normal">
-                            /pcs
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-
-                  <div className="px-2 pb-2 sm:px-4 sm:pb-4">
                     <Link
                       href={`/product-detail?id=${item.id}`}
-                      className="w-full text-[9px] sm:text-[11px] font-bold uppercase tracking-wider py-1.5 sm:py-2 bg-neutral-950 hover:bg-amber-950 text-white transition flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-[0.98] rounded-2xs"
+                      className="block relative"
                     >
-                      <span>Lihat Seri Grosir</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden">
+                        <Image
+                          src={item.gambarUtama}
+                          alt={item.nama}
+                          fill
+                          sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                          priority={idx < 2}
+                          className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                        />
+
+                        {/* BADGE MINIMAL SERI */}
+                        <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[7.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-amber-900 text-amber-100 px-2 py-0.5 shadow-sm rounded-2xs">
+                          Min. {item.min_grosir} Pcs / Seri
+                        </span>
+
+                        {/* BADGE SISA STOK GROSIR / HABIS */}
+                        <span
+                          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 text-[7.5px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 shadow-sm rounded-2xs ${
+                            isHabis
+                              ? "bg-rose-600 text-white font-black"
+                              : "bg-white/95 text-amber-950 border border-amber-200 font-mono"
+                          }`}
+                        >
+                          {isHabis
+                            ? "Habis"
+                            : `Sisa: ${item.stok} pcs (${jumlahSeri} Seri)`}
+                        </span>
+                      </div>
+
+                      <div className="p-2 sm:p-4 space-y-1">
+                        <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-amber-800 font-bold block">
+                          {item.kategori}
+                        </span>
+                        <h4 className="text-[11px] sm:text-sm font-semibold text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
+                          {item.nama}
+                        </h4>
+
+                        <div className="pt-0.5 flex flex-col">
+                          <span className="text-[8.5px] sm:text-[10px] text-neutral-500">
+                            Harga Grosir Seri:
+                          </span>
+                          <div className="flex items-baseline gap-0.5">
+                            <span className="text-[12px] sm:text-base font-bold text-amber-950 font-mono tracking-tight">
+                              Rp {item.harga.toLocaleString("id-ID")}
+                            </span>
+                            <span className="text-[8px] sm:text-[10px] text-neutral-500 font-normal">
+                              /pcs
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </Link>
+
+                    <div className="px-2 pb-2 sm:px-4 sm:pb-4 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQuickModal(item)}
+                        disabled={isHabis}
+                        className={`flex-1 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider py-1.5 sm:py-2 transition flex items-center justify-center gap-1 rounded-2xs ${
+                          isHabis
+                            ? "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
+                            : "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer shadow-2xs active:scale-[0.98]"
+                        }`}
+                      >
+                        <ShoppingBag className="w-3 h-3 text-amber-300" />
+                        <span>{isHabis ? "Stok Habis" : "Beli 1 Seri"}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {grosirProducts.length > defaultGrosirLimit && (
@@ -745,12 +902,12 @@ export default function Beranda() {
         </section>
       )}
 
-      {/* KATALOG ECER UTAMA */}
+      {/* KATALOG ECERAN UTAMA */}
       <section className="w-full px-3.5 sm:px-8 lg:px-12 py-6 sm:py-10 flex-1">
         <div className="relative flex items-center justify-center my-6 sm:my-10">
           <div className="w-full border-t border-stone-300/80" />
           <span className="absolute bg-[#FAF8F5] px-4 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-neutral-800 whitespace-nowrap">
-            SEMUA PRODUK
+            KATALOG ECERAN SATUAN
           </span>
         </div>
 
@@ -812,12 +969,12 @@ export default function Beranda() {
               <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-800">
                 {searchQuery || selectedCategory !== "Semua"
                   ? "Produk Tidak Ditemukan"
-                  : "Belum Ada Produk Tersedia"}
+                  : "Belum Ada Produk Eceran"}
               </p>
               <p className="text-[10px] sm:text-[11px] text-neutral-400">
                 {searchQuery || selectedCategory !== "Semua"
-                  ? "Tidak ada busana yang sesuai dengan pencarian atau filter ini."
-                  : "Katalog pakaian akan otomatis tampil setelah diunggah melalui Panel Admin."}
+                  ? "Tidak ada busana eceran yang sesuai dengan filter pencarian ini."
+                  : "Katalog pakaian eceran akan otomatis tampil setelah diunggah melalui Panel Admin."}
               </p>
             </div>
             {(searchQuery || selectedCategory !== "Semua") && (
@@ -834,87 +991,99 @@ export default function Beranda() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5">
-            {filteredProducts.map((item, idx) => (
-              <div
-                key={item.id}
-                className="group bg-white border border-stone-200 overflow-hidden flex flex-col justify-between hover:shadow-md transition-all duration-300 rounded-xs"
-              >
-                <div>
-                  <Link
-                    href={`/product-detail?id=${item.id}`}
-                    className="block relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden"
-                  >
-                    <Image
-                      src={item.gambarUtama}
-                      alt={item.nama}
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                      priority={idx < 4}
-                      className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider bg-white/95 px-1.5 py-0.5 sm:px-2 border border-stone-200 text-neutral-900 rounded-2xs shadow-2xs">
-                      {item.stok > 0 ? `Stok: ${item.stok}` : "Habis"}
-                    </span>
-                  </Link>
+            {filteredProducts.map((item, idx) => {
+              const isHabis = Number(item.stok || 0) <= 0;
 
-                  <div className="p-2 sm:p-3.5 space-y-0.5 sm:space-y-1">
-                    <span className="text-[7.5px] sm:text-[9px] uppercase tracking-widest text-amber-900/60 font-semibold block truncate">
-                      {item.kategori}
-                    </span>
-                    <Link href={`/product-detail?id=${item.id}`}>
-                      <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 hover:underline underline-offset-2">
-                        {item.nama}
-                      </h4>
+              return (
+                <div
+                  key={item.id}
+                  className={`group bg-white border overflow-hidden flex flex-col justify-between transition-all duration-300 rounded-xs ${
+                    isHabis
+                      ? "border-stone-200 opacity-75"
+                      : "border-stone-200 hover:shadow-md"
+                  }`}
+                >
+                  <div>
+                    <Link
+                      href={`/product-detail?id=${item.id}`}
+                      className="block relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden"
+                    >
+                      <Image
+                        src={item.gambarUtama}
+                        alt={item.nama}
+                        fill
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                        priority={idx < 4}
+                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                      />
+
+                      {/* BADGE SISA STOK ECERAN / HABIS */}
+                      <span
+                        className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs ${
+                          isHabis
+                            ? "bg-rose-600 text-white font-black"
+                            : "bg-white/95 text-neutral-900 border border-stone-200 font-mono"
+                        }`}
+                      >
+                        {isHabis ? "Habis" : `Sisa: ${item.stok} pcs`}
+                      </span>
                     </Link>
-                    <p className="text-[11px] sm:text-sm font-bold text-neutral-950 tracking-tight font-mono pt-0.5">
-                      Rp {item.harga.toLocaleString("id-ID")}
-                    </p>
+
+                    <div className="p-2 sm:p-3.5 space-y-0.5 sm:space-y-1">
+                      <span className="text-[7.5px] sm:text-[9px] uppercase tracking-widest text-amber-900/60 font-semibold block truncate">
+                        {item.kategori}
+                      </span>
+                      <Link href={`/product-detail?id=${item.id}`}>
+                        <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 hover:underline underline-offset-2">
+                          {item.nama}
+                        </h4>
+                      </Link>
+                      <p className="text-[11px] sm:text-sm font-bold text-neutral-950 tracking-tight font-mono pt-0.5">
+                        Rp {item.harga.toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 2 TOMBOL AKSI */}
+                  <div className="flex items-stretch border-t border-stone-200 bg-stone-50">
+                    <Link
+                      href={`/product-detail?id=${item.id}`}
+                      className="w-9 sm:w-11 py-2 sm:py-2.5 flex items-center justify-center text-neutral-600 hover:text-neutral-950 hover:bg-stone-100 transition border-r border-stone-200 shrink-0"
+                      title="Lihat Detail Produk"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenQuickModal(item)}
+                      disabled={isHabis}
+                      className={`flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1 min-w-0 ${
+                        isHabis
+                          ? "bg-stone-200 text-stone-400 cursor-not-allowed"
+                          : "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer active:scale-95"
+                      }`}
+                    >
+                      <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
+                      <span className="truncate">
+                        {isHabis ? "Stok Habis" : "+ Keranjang"}
+                      </span>
+                    </button>
                   </div>
                 </div>
-
-                {/* 2 TOMBOL AKSI RAMPING & PAS DI MOBILE */}
-                <div className="flex items-stretch border-t border-stone-200 bg-stone-50">
-                  <Link
-                    href={`/product-detail?id=${item.id}`}
-                    className="w-9 sm:w-11 py-2 sm:py-2.5 flex items-center justify-center text-neutral-600 hover:text-neutral-950 hover:bg-stone-100 transition border-r border-stone-200 shrink-0"
-                    title="Lihat Detail Produk"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                  </Link>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenQuickModal(item)}
-                    disabled={item.stok <= 0}
-                    className={`flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1 min-w-0 ${
-                      item.stok > 0
-                        ? "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer active:scale-95"
-                        : "bg-neutral-200 text-neutral-400 cursor-not-allowed"
-                    }`}
-                  >
-                    <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
-                    <span className="truncate">+ Keranjang</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
-      {/* MODAL POP-UP QUICK ADD TO CART DENGAN PILIHAN ECER / GROSIR */}
+      {/* MODAL POP-UP QUICK ADD TO CART */}
       {activeQuickProduct &&
         (() => {
-          const isGrosirAvailable = Boolean(activeQuickProduct.is_grosir);
-          const minGrosir = Number(activeQuickProduct.min_grosir || 3);
-          const hargaGrosir = Number(
-            activeQuickProduct.harga_grosir || activeQuickProduct.harga,
-          );
-          const hargaEcer = Number(activeQuickProduct.harga || 0);
-
-          const isGrosirMode = quickQty >= minGrosir && isGrosirAvailable;
-          const currentUnitPrice = isGrosirMode ? hargaGrosir : hargaEcer;
-          const subtotal = currentUnitPrice * quickQty;
+          const isGrosir = Boolean(activeQuickProduct.is_grosir);
+          const minGrosir = Number(activeQuickProduct.min_grosir || 5);
+          const unitPrice = Number(activeQuickProduct.harga || 0);
+          const subtotal = unitPrice * quickQty;
 
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
@@ -936,21 +1105,47 @@ export default function Beranda() {
                       />
                     </div>
                     <div className="min-w-0">
+                      <span className="text-[8.5px] uppercase font-bold tracking-wider text-amber-900 block">
+                        {isGrosir
+                          ? `Paket Seri (Min. ${minGrosir} Pcs)`
+                          : "Produk Eceran"}
+                      </span>
                       <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">
                         {activeQuickProduct.nama}
                       </h4>
 
                       <div className="flex items-baseline gap-1.5 mt-0.5">
                         <span className="text-sm font-mono font-black text-amber-950">
-                          Rp {currentUnitPrice.toLocaleString("id-ID")}
+                          Rp {unitPrice.toLocaleString("id-ID")}
                         </span>
                         <span className="text-[9px] text-neutral-500">
                           /pcs
                         </span>
                       </div>
 
-                      <span className="text-[9.5px] text-stone-500 block">
-                        Stok Tersedia: {activeQuickProduct.stok} pcs
+                      <span
+                        className={`text-[9.5px] block font-medium ${
+                          currentAvailableStock > 0
+                            ? "text-emerald-800"
+                            : "text-rose-600 font-bold"
+                        }`}
+                      >
+                        {isLoadingQuickVariants ? (
+                          <span className="inline-flex items-center gap-1 text-stone-400">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            Cek stok...
+                          </span>
+                        ) : currentAvailableStock > 0 ? (
+                          isGrosir ? (
+                            `Total Stok Seri: ${totalStockAll} pcs`
+                          ) : (
+                            `Stok Warna ${quickColor}: ${activeColorStock} pcs`
+                          )
+                        ) : isGrosir ? (
+                          "Stok Seri Habis"
+                        ) : (
+                          `Warna ${quickColor} Habis`
+                        )}
                       </span>
                     </div>
                   </div>
@@ -964,106 +1159,75 @@ export default function Beranda() {
                   </button>
                 </div>
 
-                {/* TAB PILIHAN MODE: ECER VS GROSIR */}
-                {isGrosirAvailable && (
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
-                      Tipe Pembelian:
-                    </label>
-                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#FAF8F5] border border-stone-200 rounded-2xs">
-                      {/* Tombol Ecer */}
-                      <button
-                        type="button"
-                        onClick={() => setQuickQty(1)}
-                        className={`py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider rounded-2xs transition flex flex-col items-center justify-center cursor-pointer ${
-                          !isGrosirMode
-                            ? "bg-white text-neutral-950 border border-stone-300 shadow-2xs"
-                            : "text-neutral-500 hover:text-neutral-800"
-                        }`}
-                      >
-                        <span>Ecer (Satuan)</span>
-                        <span className="text-[9px] font-mono font-normal text-neutral-600">
-                          Rp {hargaEcer.toLocaleString("id-ID")}
-                        </span>
-                      </button>
+                {/* UKURAN MODEL TUNGGAL */}
+                <div className="flex items-center justify-between p-2 bg-[#FAF8F5] border border-stone-200 text-xs rounded-2xs">
+                  <span className="text-[10px] uppercase font-bold text-neutral-500">
+                    Ukuran Model:
+                  </span>
+                  <span className="font-bold text-neutral-950 text-[11px] font-mono bg-white px-2 py-0.5 border border-stone-300 rounded-2xs">
+                    {activeQuickProduct.ukuran || "All Size"}
+                  </span>
+                </div>
 
-                      {/* Tombol Grosir */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuickQty(Math.max(minGrosir, quickQty))
-                        }
-                        className={`py-1.5 px-2 text-[10px] font-bold uppercase tracking-wider rounded-2xs transition flex flex-col items-center justify-center cursor-pointer ${
-                          isGrosirMode
-                            ? "bg-neutral-950 text-amber-200 shadow-2xs"
-                            : "text-amber-900 hover:bg-amber-50"
-                        }`}
-                      >
-                        <span className="flex items-center gap-1">
-                          <Tag className="w-2.5 h-2.5 text-amber-300" />
-                          Seri (Min. {minGrosir})
-                        </span>
-                        <span className="text-[9px] font-mono font-normal">
-                          Rp {hargaGrosir.toLocaleString("id-ID")}
-                        </span>
-                      </button>
+                {/* PILIHAN WARNA */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs uppercase">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
+                      Warna Busana:
+                    </span>
+                    <span className="text-[10px] font-bold text-neutral-900">
+                      {isGrosir ? "Seri Campur Warna Otomatis" : quickColor}
+                    </span>
+                  </div>
+
+                  {isGrosir ? (
+                    <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-2xs flex items-start gap-2">
+                      <Package className="w-3.5 h-3.5 text-amber-800 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-amber-950 leading-relaxed">
+                        Paket seri otomatis mendapatkan{" "}
+                        <strong>{minGrosir} warna berbeda/campur</strong> sesuai
+                        stok seri di katalog (tidak dapat memilih warna satuan).
+                      </p>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeQuickProduct.warna.map((warna: string) => {
+                        const stokWarna = getQuickColorStock(warna);
+                        const isHabis = stokWarna <= 0;
+                        const isSelected =
+                          quickColor.trim().toUpperCase() ===
+                          warna.trim().toUpperCase();
 
-                {/* Pilihan Warna */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
-                    Pilih Warna:{" "}
-                    <span className="text-neutral-950 font-black">
-                      {quickColor}
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeQuickProduct.warna.map((warna: string) => (
-                      <button
-                        key={warna}
-                        type="button"
-                        onClick={() => setQuickColor(warna)}
-                        className={`px-2.5 py-1 text-[10px] font-bold border transition cursor-pointer rounded-2xs ${
-                          quickColor === warna
-                            ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                            : "bg-white text-neutral-700 border-stone-300 hover:border-neutral-900"
-                        }`}
-                      >
-                        {warna}
-                      </button>
-                    ))}
-                  </div>
+                        return (
+                          <button
+                            key={warna}
+                            type="button"
+                            disabled={isHabis}
+                            onClick={() => setQuickColor(warna)}
+                            className={`px-2.5 py-1 text-[10px] font-bold border transition rounded-2xs flex items-center gap-1 ${
+                              isHabis
+                                ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed line-through opacity-60"
+                                : isSelected
+                                  ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs cursor-pointer"
+                                  : "bg-white text-neutral-700 border-stone-300 hover:border-neutral-900 cursor-pointer"
+                            }`}
+                          >
+                            <span>{warna}</span>
+                            <span
+                              className={`text-[8px] font-mono ${
+                                isSelected ? "text-amber-200" : "text-stone-400"
+                              }`}
+                            >
+                              ({isHabis ? "Habis" : stokWarna})
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                {/* Pilihan Ukuran */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
-                    Pilih Ukuran:{" "}
-                    <span className="text-neutral-950 font-black">
-                      {quickSize}
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeQuickProduct.ukuran.map((ukuran: string) => (
-                      <button
-                        key={ukuran}
-                        type="button"
-                        onClick={() => setQuickSize(ukuran)}
-                        className={`px-2.5 py-1 text-[10px] font-bold border transition cursor-pointer rounded-2xs ${
-                          quickSize === ukuran
-                            ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                            : "bg-white text-neutral-700 border-stone-300 hover:border-neutral-900"
-                        }`}
-                      >
-                        {ukuran}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Jumlah Beli / QTY & Subtotal */}
+                {/* JUMLAH PESAN & SUBTOTAL */}
                 <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
@@ -1078,48 +1242,64 @@ export default function Beranda() {
                   </div>
 
                   <div className="flex items-center gap-2 border border-stone-300 bg-stone-50 px-2 py-0.5 rounded-2xs">
+                    {/* Tombol Kurang (-) */}
                     <button
                       type="button"
+                      disabled={
+                        quickQty <= minAllowedQuickQty ||
+                        currentAvailableStock <= 0
+                      }
                       onClick={() => {
-                        if (isGrosirMode && quickQty <= minGrosir) {
-                          setQuickQty(1);
-                        } else {
-                          setQuickQty(Math.max(1, quickQty - 1));
-                        }
+                        setQuickQty((prev) =>
+                          Math.max(minAllowedQuickQty, prev - quickStepQty),
+                        );
                       }}
-                      className="p-1 hover:text-amber-900 transition cursor-pointer"
+                      className="p-1 hover:text-amber-900 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
                     <span className="w-6 text-center font-mono font-bold text-xs">
                       {quickQty}
                     </span>
+                    {/* Tombol Tambah (+) */}
                     <button
                       type="button"
-                      onClick={() =>
-                        setQuickQty(
-                          Math.min(activeQuickProduct.stok, quickQty + 1),
-                        )
+                      disabled={
+                        quickQty + quickStepQty > currentAvailableStock ||
+                        currentAvailableStock <= 0
                       }
-                      className="p-1 hover:text-amber-900 transition cursor-pointer"
+                      onClick={() => {
+                        setQuickQty((prev) =>
+                          Math.min(currentAvailableStock, prev + quickStepQty),
+                        );
+                      }}
+                      className="p-1 hover:text-amber-900 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
 
-                {/* Tombol Konfirmasi Masuk Keranjang */}
+                {/* TOMBOL KONFIRMASI MASUK KERANJANG */}
                 <button
                   type="button"
                   onClick={handleConfirmAddToCart}
-                  disabled={activeQuickProduct.stok <= 0}
-                  className="w-full py-2.5 bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider transition shadow-md rounded-2xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99]"
+                  disabled={currentAvailableStock <= 0}
+                  className={`w-full py-2.5 text-xs font-bold uppercase tracking-wider transition shadow-md rounded-2xs flex items-center justify-center gap-1.5 ${
+                    currentAvailableStock > 0
+                      ? "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer active:scale-[0.99]"
+                      : "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
+                  }`}
                 >
                   <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
                   <span>
-                    {isGrosirMode
-                      ? `Beli Seri Grosir (${quickQty} Pcs)`
-                      : "Masukkan ke Keranjang"}
+                    {currentAvailableStock <= 0
+                      ? isGrosir
+                        ? "Stok Seri Habis"
+                        : `Warna ${quickColor} Habis`
+                      : isGrosir
+                        ? `Beli Paket Seri (${quickQty} Pcs)`
+                        : "Masukkan ke Keranjang"}
                   </span>
                 </button>
               </div>
@@ -1141,7 +1321,7 @@ export default function Beranda() {
               LOKASI BUTIK & WORKSHOP
             </h2>
             <p className="text-[11px] sm:text-xs text-neutral-500 leading-relaxed">
-              Produksi langsung dari pusat konveksi kami di Tulungagung.
+              Distributor & Butik Busana Batik Indonesia kami di Tulungagung.
               Melayani pesanan ke seluruh Indonesia.
             </p>
           </div>
@@ -1159,7 +1339,7 @@ export default function Beranda() {
                         ALMACO FASHION
                       </h3>
                       <p className="text-[9px] sm:text-[10px] text-neutral-400">
-                        Konveksi & Butik Busana
+                        Distributor & Butik Busana Batik Indonesia
                       </p>
                     </div>
                   </div>

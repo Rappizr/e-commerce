@@ -34,6 +34,23 @@ interface TransaksiKas {
   rawDate?: string;
 }
 
+const formatDateDisplay = (dateString?: string): string => {
+  if (!dateString) return "Hari Ini";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  return d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getTodayDateInput = (): string => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offset).toISOString().split("T")[0];
+};
+
 export default function KeuanganComponent() {
   const [transaksi, setTransaksi] = useState<TransaksiKas[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,11 +61,12 @@ export default function KeuanganComponent() {
   const [deleteTarget, setDeleteTarget] = useState<TransaksiKas | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // State Panggilan Modal
+  // State Panggilan Modal Ekspor
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
 
   const [formKas, setFormKas] = useState({
+    tanggal: getTodayDateInput(),
     keterangan: "",
     kategori: "Bahan Baku & Kain",
     tipe: "keluar" as "masuk" | "keluar",
@@ -58,6 +76,7 @@ export default function KeuanganComponent() {
   const fetchCashFlowFromSupabase = async () => {
     setIsLoading(true);
     try {
+      // 1. Ambil mutasi kas manual
       const { data: cashData } = await supabase
         .from("cash_flow")
         .select("*")
@@ -65,26 +84,21 @@ export default function KeuanganComponent() {
 
       const manualItems: TransaksiKas[] = (cashData || []).map((c: any) => ({
         id: c.id,
-        tanggal:
-          c.tanggal ||
-          (c.created_at
-            ? new Date(c.created_at).toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })
-            : "Hari Ini"),
+        tanggal: formatDateDisplay(c.tanggal || c.created_at),
         keterangan: c.keterangan || "Catatan Kas",
         kategori: c.kategori || "Kas Umum",
-        tipe: (c.tipe || "").toLowerCase().includes("masuk")
+        tipe: String(c.tipe || "")
+          .toLowerCase()
+          .includes("masuk")
           ? "masuk"
           : "keluar",
         nominal: Number(c.nominal || 0),
         order_id: c.order_id || null,
         isOrder: false,
-        rawDate: c.created_at || c.tanggal || new Date().toISOString(),
+        rawDate: c.tanggal || c.created_at || new Date().toISOString(),
       }));
 
+      // 2. Ambil transaksi dari pesanan website yang sudah terverifikasi/dibayar
       const { data: ordersData } = await supabase
         .from("orders")
         .select(
@@ -92,10 +106,23 @@ export default function KeuanganComponent() {
         )
         .order("created_at", { ascending: false });
 
-      const paidStatuses = ["selesai", "diproses", "dikirim"];
+      const paidStatuses = [
+        "selesai",
+        "diproses",
+        "dikirim",
+        "lunas",
+        "terverifikasi",
+        "sukses",
+      ];
+
       const paidOrders = (ordersData || []).filter((ord: any) =>
-        paidStatuses.includes((ord.status || "").toLowerCase()),
+        paidStatuses.includes(
+          String(ord.status || "")
+            .trim()
+            .toLowerCase(),
+        ),
       );
+
       const recordedOrderIds = new Set(
         manualItems.filter((m) => m.order_id).map((m) => String(m.order_id)),
       );
@@ -104,19 +131,13 @@ export default function KeuanganComponent() {
         .filter((ord: any) => !recordedOrderIds.has(String(ord.id)))
         .map((ord: any) => ({
           id: "ord-" + ord.id,
-          tanggal: ord.created_at
-            ? new Date(ord.created_at).toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })
-            : "Hari Ini",
+          tanggal: formatDateDisplay(ord.created_at),
           keterangan:
             "Pesanan " +
             (ord.invoice_no || "") +
             " - " +
             (ord.nama_pembeli || "Pelanggan"),
-          kategori: "Penjualan Produk",
+          kategori: "Penjualan Web",
           tipe: "masuk",
           nominal: Number(ord.total || ord.total_harga || 0),
           order_id: ord.id,
@@ -129,6 +150,7 @@ export default function KeuanganComponent() {
           new Date(b.rawDate || "").getTime() -
           new Date(a.rawDate || "").getTime(),
       );
+
       setTransaksi(combined);
     } catch (e) {
       console.error("Fetch Supabase Cash Flow Error:", e);
@@ -151,13 +173,25 @@ export default function KeuanganComponent() {
     setFormKas((prev) => ({ ...prev, nominal: formatted }));
   };
 
+  const handleTipeChange = (newTipe: "masuk" | "keluar") => {
+    setFormKas((prev) => ({
+      ...prev,
+      tipe: newTipe,
+      kategori:
+        newTipe === "masuk" ? "Penjualan Offline / WA" : "Bahan Baku & Kain",
+    }));
+  };
+
   const handleAddTransaksi = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formKas.keterangan.trim() || !formKas.nominal) return;
-
     const nominalNum = Number(formKas.nominal.replace(/[^0-9]/g, ""));
+    if (!formKas.keterangan.trim() || nominalNum <= 0) {
+      alert("Mohon isi keterangan dan nominal transaksi dengan benar.");
+      return;
+    }
+
     const tipePayload = formKas.tipe === "masuk" ? "Masuk" : "Keluar";
-    const tanggalHariIni = new Date().toISOString().split("T")[0];
+    const tanggalSimpan = formKas.tanggal || getTodayDateInput();
 
     try {
       const { data, error } = await supabase
@@ -168,7 +202,7 @@ export default function KeuanganComponent() {
             kategori: formKas.kategori,
             tipe: tipePayload,
             nominal: nominalNum,
-            tanggal: tanggalHariIni,
+            tanggal: tanggalSimpan,
           },
         ])
         .select()
@@ -179,21 +213,18 @@ export default function KeuanganComponent() {
       if (data) {
         const newKasItem: TransaksiKas = {
           id: data.id,
-          tanggal: new Date().toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          }),
+          tanggal: formatDateDisplay(data.tanggal || data.created_at),
           keterangan: data.keterangan,
           kategori: data.kategori,
           tipe: formKas.tipe,
           nominal: nominalNum,
-          rawDate: new Date().toISOString(),
+          rawDate: data.tanggal || data.created_at || new Date().toISOString(),
         };
         setTransaksi((prev) => [newKasItem, ...prev]);
       }
 
       setFormKas({
+        tanggal: getTodayDateInput(),
         keterangan: "",
         kategori: "Bahan Baku & Kain",
         tipe: "keluar",
@@ -323,7 +354,9 @@ export default function KeuanganComponent() {
               Saldo / Laba Bersih
             </p>
             <h3
-              className={`text-lg sm:text-xl font-bold font-mono mt-1 truncate ${saldoBersih >= 0 ? "text-amber-950" : "text-rose-700"}`}
+              className={`text-lg sm:text-xl font-bold font-mono mt-1 truncate ${
+                saldoBersih >= 0 ? "text-amber-950" : "text-rose-700"
+              }`}
             >
               Rp {saldoBersih.toLocaleString("id-ID")}
             </h3>
@@ -344,7 +377,9 @@ export default function KeuanganComponent() {
             title="Refresh Data Kas"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 text-amber-900 ${isLoading ? "animate-spin" : ""}`}
+              className={`w-3.5 h-3.5 text-amber-900 ${
+                isLoading ? "animate-spin" : ""
+              }`}
             />
           </button>
 
@@ -448,7 +483,11 @@ export default function KeuanganComponent() {
                     {item.kategori}
                   </span>
                   <span
-                    className={`font-bold font-mono text-xs ${item.tipe === "masuk" ? "text-emerald-800" : "text-rose-700"}`}
+                    className={`font-bold font-mono text-xs ${
+                      item.tipe === "masuk"
+                        ? "text-emerald-800"
+                        : "text-rose-700"
+                    }`}
                   >
                     {item.tipe === "masuk" ? "+" : "-"} Rp{" "}
                     {item.nominal.toLocaleString("id-ID")}
@@ -540,7 +579,11 @@ export default function KeuanganComponent() {
                       </span>
                     </td>
                     <td
-                      className={`p-3.5 text-right font-bold font-mono whitespace-nowrap ${item.tipe === "masuk" ? "text-emerald-800" : "text-rose-700"}`}
+                      className={`p-3.5 text-right font-bold font-mono whitespace-nowrap ${
+                        item.tipe === "masuk"
+                          ? "text-emerald-800"
+                          : "text-rose-700"
+                      }`}
                     >
                       {item.tipe === "masuk" ? "+" : "-"} Rp{" "}
                       {item.nominal.toLocaleString("id-ID")}
@@ -592,7 +635,7 @@ export default function KeuanganComponent() {
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setFormKas({ ...formKas, tipe: "keluar" })}
+                  onClick={() => handleTipeChange("keluar")}
                   className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition cursor-pointer rounded-2xs ${
                     formKas.tipe === "keluar"
                       ? "bg-rose-50 border-rose-400 text-rose-700 font-black shadow-2xs"
@@ -603,7 +646,7 @@ export default function KeuanganComponent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormKas({ ...formKas, tipe: "masuk" })}
+                  onClick={() => handleTipeChange("masuk")}
                   className={`py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider border transition cursor-pointer rounded-2xs ${
                     formKas.tipe === "masuk"
                       ? "bg-emerald-50 border-emerald-400 text-emerald-700 font-black shadow-2xs"
@@ -612,6 +655,22 @@ export default function KeuanganComponent() {
                 >
                   Kas Masuk (+)
                 </button>
+              </div>
+
+              {/* INPUT TANGGAL TRANSAKSI */}
+              <div className="space-y-1">
+                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
+                  Tanggal Transaksi <span className="text-rose-600">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formKas.tanggal}
+                  onChange={(e) =>
+                    setFormKas({ ...formKas, tanggal: e.target.value })
+                  }
+                  className="w-full bg-[#FAF8F5] border border-stone-300 px-3 py-2 text-xs focus:outline-none focus:border-amber-900 focus:bg-white rounded-2xs transition-colors"
+                />
               </div>
 
               <div className="space-y-1">
@@ -632,7 +691,8 @@ export default function KeuanganComponent() {
 
               <div className="space-y-1">
                 <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                  Kategori Biaya <span className="text-rose-600">*</span>
+                  Kategori {formKas.tipe === "masuk" ? "Pemasukan" : "Biaya"}{" "}
+                  <span className="text-rose-600">*</span>
                 </label>
                 <select
                   value={formKas.kategori}
@@ -641,18 +701,41 @@ export default function KeuanganComponent() {
                   }
                   className="w-full bg-[#FAF8F5] border border-stone-300 px-3 py-2 text-xs focus:outline-none focus:border-amber-900 focus:bg-white cursor-pointer rounded-2xs transition-colors"
                 >
-                  <option value="Bahan Baku & Kain">Bahan Baku & Kain</option>
-                  <option value="Jasa Jahit & Konveksi">
-                    Jasa Jahit & Konveksi
-                  </option>
-                  <option value="Operasional & Packing">
-                    Operasional & Packing
-                  </option>
-                  <option value="Penjualan Web">Penjualan Web</option>
-                  <option value="Penjualan Offline / WA">
-                    Penjualan Offline / WA
-                  </option>
-                  <option value="Lain-lain">Lain-lain</option>
+                  {formKas.tipe === "masuk" ? (
+                    <>
+                      <option value="Penjualan Offline / WA">
+                        Penjualan Offline / WA
+                      </option>
+                      <option value="Penjualan Reseller & Dropship">
+                        Penjualan Reseller & Dropship
+                      </option>
+                      <option value="Tambahan Modal Pemilik">
+                        Tambahan Modal Pemilik
+                      </option>
+                      <option value="Pendapatan Lain-lain">
+                        Pendapatan Lain-lain
+                      </option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Bahan Baku & Kain">
+                        Bahan Baku & Kain
+                      </option>
+                      <option value="Jasa Jahit & Konveksi">
+                        Jasa Jahit & Konveksi
+                      </option>
+                      <option value="Operasional & Packing">
+                        Operasional & Packing
+                      </option>
+                      <option value="Gaji & Uang Makan Tim">
+                        Gaji & Uang Makan Tim
+                      </option>
+                      <option value="Listrik, Air & Internet">
+                        Listrik, Air & Internet
+                      </option>
+                      <option value="Biaya Lain-lain">Biaya Lain-lain</option>
+                    </>
+                  )}
                 </select>
               </div>
 

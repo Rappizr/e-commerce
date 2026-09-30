@@ -76,14 +76,14 @@ export default function ExportPDFModal({
         const tanggalBaku = formatTanggalStandar(item.tanggal, item.rawDate);
         const bgZebra = idx % 2 === 1 ? "#fafafa" : "#ffffff";
 
-        // Memberi highlight khusus jika keterangan mengandung kode invoice ORD-
+        // Highlight khusus kode invoice pesanan online
         const formattedKeterangan = item.keterangan.replace(
           /(ORD-[A-Z0-9]+)/g,
           '<span style="font-family: monospace; font-weight: 700; color: #171717; background-color: #f5f5f5; padding: 1px 4px; border: 1px solid #e5e5e5; border-radius: 2px;">$1</span>',
         );
 
         return `
-        <tr style="background-color: ${bgZebra};">
+        <tr style="background-color: ${bgZebra}; page-break-inside: avoid;">
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4;">${idx + 1}</td>
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4; white-space: nowrap; font-family: monospace; font-size: 9.5px;">${tanggalBaku}</td>
           <td style="padding: 7px 8px; border: 1px solid #d4d4d4; font-size: 9.5px; line-height: 1.4;">${formattedKeterangan}</td>
@@ -105,20 +105,27 @@ export default function ExportPDFModal({
       return;
     }
 
+    const tanggalHariIni = new Date().toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Laporan Kas ALMACO FASHION</title>
+          <meta charset="utf-8" />
+          <title>Laporan Kas ALMACO FASHION - ${filterTipe.toUpperCase()}</title>
           <style>
             @page { 
               size: A4; 
               margin: 12mm 15mm; 
             }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              box-sizing: border-box;
+            * { 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+              box-sizing: border-box; 
             }
             body { 
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
@@ -133,6 +140,7 @@ export default function ExportPDFModal({
               display: flex; 
               justify-content: space-between; 
               align-items: flex-end; 
+              page-break-inside: avoid;
             }
             .brand { 
               font-size: 20px; 
@@ -161,6 +169,7 @@ export default function ExportPDFModal({
               grid-template-columns: repeat(3, 1fr); 
               gap: 10px; 
               margin-bottom: 16px; 
+              page-break-inside: avoid;
             }
             .card { 
               border: 1px solid #d4d4d4; 
@@ -186,6 +195,12 @@ export default function ExportPDFModal({
               margin-top: 8px; 
               border: 1px solid #d4d4d4;
             }
+            thead {
+              display: table-header-group;
+            }
+            tr {
+              page-break-inside: avoid;
+            }
             th { 
               background-color: #171717 !important; 
               color: #ffffff !important; 
@@ -195,8 +210,8 @@ export default function ExportPDFModal({
               letter-spacing: 0.5px; 
               border: 1px solid #171717;
             }
-            td {
-              border: 1px solid #d4d4d4;
+            td { 
+              border: 1px solid #d4d4d4; 
             }
             @media print { 
               body { padding: 0; } 
@@ -210,7 +225,7 @@ export default function ExportPDFModal({
               <div class="sub">Laporan Buku Kas & Keuangan Toko</div>
             </div>
             <div class="info-cetak">
-              <div>Tanggal Cetak: ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
+              <div>Tanggal Cetak: ${tanggalHariIni}</div>
               <div>Filter Kas: <strong>${filterTipe.toUpperCase()}</strong></div>
             </div>
           </div>

@@ -73,12 +73,22 @@ function KonfirmasiContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Default tanggal transfer diset ke waktu sekarang (waktu lokal)
+  const getDefaultDateTime = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(now.getTime() - offset)
+      .toISOString()
+      .slice(0, 16);
+    return localISOTime;
+  };
+
   const [formData, setFormData] = useState({
     orderId: invoiceParam.trim().toUpperCase(),
     senderName: "",
     senderBank: "BCA",
     amount: "",
-    transferDate: "",
+    transferDate: getDefaultDateTime(),
   });
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -97,11 +107,23 @@ function KonfirmasiContent() {
     const fetchOrderDetails = async () => {
       setIsLoadingOrder(true);
       try {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("orders")
           .select("nama_pembeli, total, total_harga, bank_asal")
-          .eq("invoice_no", cleanInvoice)
+          .ilike("invoice_no", cleanInvoice)
           .single();
+
+        if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
+          const fallbackRes = await supabase
+            .from("orders")
+            .select("nama_pembeli, total, total_harga, bank_asal")
+            .eq("id", Number(cleanInvoice))
+            .single();
+          if (fallbackRes.data) {
+            data = fallbackRes.data;
+            error = null;
+          }
+        }
 
         if (!error && data) {
           setFormData((prev) => ({
@@ -142,7 +164,7 @@ function KonfirmasiContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanInvoiceNo = formData.orderId.trim().toUpperCase();
+    const cleanInvoiceNo = formData.orderId.trim();
 
     if (!cleanInvoiceNo) {
       setErrorMsg("Nomor Invoice / Order ID harus diisi.");
@@ -157,28 +179,63 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      const { data: existingOrder, error: checkError } = await supabase
+      // 1. Validasi keberadaan order dengan pencarian fleksibel case-insensitive
+      let { data: existingOrder, error: checkError } = await supabase
         .from("orders")
-        .select("id, invoice_no")
-        .eq("invoice_no", cleanInvoiceNo)
+        .select("id, invoice_no, total, total_harga, status")
+        .ilike("invoice_no", cleanInvoiceNo)
         .single();
+
+      // Fallback: Jika pengguna mengetik angka ID pesanan
+      if ((checkError || !existingOrder) && /^\d+$/.test(cleanInvoiceNo)) {
+        const fallbackRes = await supabase
+          .from("orders")
+          .select("id, invoice_no, total, total_harga, status")
+          .eq("id", Number(cleanInvoiceNo))
+          .single();
+        if (fallbackRes.data) {
+          existingOrder = fallbackRes.data;
+          checkError = null;
+        }
+      }
 
       if (checkError || !existingOrder) {
         throw new Error(
-          `Pesanan dengan Invoice "${cleanInvoiceNo}" tidak ditemukan.`,
+          `Pesanan dengan Invoice "${cleanInvoiceNo}" tidak ditemukan. Pastikan nomor invoice sudah sesuai.`,
         );
       }
 
-      // Update data verifikasi tanpa menimpa catatan checkout yang sudah ada
+      // 2. Format tanggal transfer dengan proteksi NaN
+      let transferTimestamp: string | null = null;
+      if (formData.transferDate) {
+        const parsedD = new Date(formData.transferDate);
+        if (!isNaN(parsedD.getTime())) {
+          transferTimestamp = parsedD.toISOString();
+        }
+      }
+
+      const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
+
+      // 3. Simpan update bukti transfer dan informasi pengirim
+      const updatePayload: any = {
+        bukti_transfer_url: previewImage,
+        bukti_transfer: previewImage,
+        nama_pengirim: formData.senderName.trim() || null,
+        bank_asal: formData.senderBank,
+        metode_pembayaran: formData.senderBank,
+        status: "Menunggu Verifikasi",
+      };
+
+      if (transferTimestamp) {
+        updatePayload.tanggal_transfer = transferTimestamp;
+      }
+      if (!isNaN(parsedAmount) && parsedAmount > 0) {
+        updatePayload.nominal_transfer = parsedAmount;
+      }
+
       const { error: updateError } = await supabase
         .from("orders")
-        .update({
-          bukti_transfer_url: previewImage,
-          bukti_transfer: previewImage,
-          nama_pengirim: formData.senderName.trim() || null,
-          bank_asal: formData.senderBank,
-          status: "Menunggu Verifikasi",
-        })
+        .update(updatePayload)
         .eq("id", existingOrder.id);
 
       if (updateError) throw updateError;
@@ -187,7 +244,7 @@ function KonfirmasiContent() {
     } catch (err: any) {
       setErrorMsg(
         err.message ||
-          "Terjadi kesalahan saat mengunggah konfirmasi pembayaran.",
+          "Terjadi kesalahan saat mengunggah konfirmasi pembayaran. Silakan coba lagi.",
       );
     } finally {
       setIsSubmitting(false);
@@ -375,7 +432,7 @@ function KonfirmasiContent() {
 
               <div>
                 <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-600 font-bold block mb-1">
-                  Tanggal Transfer <span className="text-red-500">*</span>
+                  Tanggal & Jam Transfer <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="datetime-local"

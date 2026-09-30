@@ -66,13 +66,11 @@ export default function VerifikasiBayarComponent() {
     show: boolean;
     order: VerifikasiItem | null;
     alasan: string;
-    catatanTambahan: string;
     isSubmitting: boolean;
   }>({
     show: false,
     order: null,
     alasan: "Stok Barang Habis",
-    catatanTambahan: "",
     isSubmitting: false,
   });
 
@@ -133,20 +131,17 @@ export default function VerifikasiBayarComponent() {
     fetchVerifikasiFromSupabase();
   }, []);
 
-  // Format WhatsApp untuk penolakan
-  const generateWaTolakUrl = (
-    order: VerifikasiItem,
-    alasan: string,
-    catatanTambahan: string,
-  ) => {
+  // Format WhatsApp untuk penolakan pesanan
+  const generateWaTolakUrl = (order: VerifikasiItem, alasan: string) => {
     const rawWa = order.no_hp ? String(order.no_hp).replace(/[^0-9]/g, "") : "";
     const phone = rawWa.startsWith("0") ? "62" + rawWa.slice(1) : rawWa;
 
     const itemsSummary = (order.order_items || [])
-      .map(
-        (i) =>
-          `- ${i.nama_produk} (${i.ukuran || "All Size"}, ${i.warna || "Default"}) x${i.qty}`,
-      )
+      .map((i) => {
+        const warnaLabel =
+          i.warna && i.warna !== "Default" ? i.warna : "Sesuai Katalog";
+        return `- ${i.nama_produk} (${warnaLabel}, ${i.ukuran || "All Size"}) x${i.qty}`;
+      })
       .join("\n");
 
     const totalFormat = `Rp ${Number(order.total).toLocaleString("id-ID")}`;
@@ -154,30 +149,39 @@ export default function VerifikasiBayarComponent() {
     let penjelasan = "";
     if (alasan === "Stok Barang Habis") {
       penjelasan =
-        "Mohon maaf yang sebesar-besarnya, stok busana yang Anda pesan saat ini sedang habis terjual. Jika Anda sudah terlanjur melakukan transfer dana, mohon segera kirimkan nomor rekening Anda agar dana kami kembalikan 100% (Refund).";
+        "Mohon maaf yang sebesar-besarnya, stok busana yang Anda pesan saat ini sedang habis terjual. Jika Anda sudah terlanjur melakukan transfer dana, mohon kirimkan nomor rekening Anda agar dana segera kami kembalikan penuh (Refund 100%).";
     } else if (alasan === "Bukti Transfer Tidak Valid / Tidak Masuk") {
       penjelasan =
-        "Kami telah memeriksa mutasi rekening kami, namun dana transfer Anda belum masuk atau bukti transfer yang diunggah kurang jelas/tidak valid. Mohon kirimkan ulang struk resmi mutasi bank Anda.";
+        "Kami telah memeriksa mutasi rekening resmi kami, namun dana transfer Anda belum masuk atau foto bukti transfer yang diunggah kurang jelas/tidak terbaca. Mohon kirimkan ulang foto struk mutasi bank Anda melalui chat ini.";
+    } else if (alasan === "Nominal Transfer Tidak Sesuai") {
+      penjelasan =
+        "Nominal dana yang ditransfer belum sesuai dengan total tagihan pesanan Anda. Silakan konfirmasi kekurangan transfer atau hubungi kami untuk penyesuaian pesanan.";
+    } else if (alasan === "Permintaan Pembatalan Oleh Pembeli") {
+      penjelasan =
+        "Pesanan Anda telah resmi kami batalkan sesuai dengan permintaan Anda.";
     } else {
-      penjelasan = `Keterangan: ${alasan}.${catatanTambahan ? `\nCatatan Admin: ${catatanTambahan}` : ""}`;
+      penjelasan = `Keterangan: ${alasan}. Silakan hubungi kami kembali jika ada pertanyaan.`;
     }
 
-    const text = `Halo Kak *${order.nama_pembeli}*,
+    const lines = [
+      `Halo Kak *${order.nama_pembeli}*,`,
+      "",
+      `Kami dari Admin *ALMACO FASHION* ingin menginformasikan terkait pesanan Anda:`,
+      `*No. Invoice:* ${order.invoice_no}`,
+      "",
+      `*Detail Produk:*`,
+      itemsSummary,
+      `*Total Tagihan:* ${totalFormat}`,
+      "",
+      `*Status Pesanan:* *DIBATALKAN / DITOLAK*`,
+      "",
+      `*Keterangan:*`,
+      penjelasan,
+      "",
+      `Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya Kak. Terima kasih banyak atas pengertiannya.`,
+    ];
 
-Kami dari Admin *ALMACO FASHION* ingin menginformasikan terkait pesanan Anda:
-*No. Invoice:* ${order.invoice_no}
-
-*Detail Produk:*
-${itemsSummary}
-*Total:* ${totalFormat}
-
-*Status Pesanan: DIBATALKAN / DITOLAK*
-
-*Keterangan:*
-${penjelasan}
-
-Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya Kak. Terima kasih banyak atas pengertiannya. 🙏`;
-
+    const text = lines.join("\n");
     return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   };
 
@@ -188,6 +192,7 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
     nominal: number,
   ) => {
     try {
+      // 1. Update status pesanan di tabel orders
       const { error: orderErr } = await supabase
         .from("orders")
         .update({ status: "Diproses" })
@@ -195,96 +200,66 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
 
       if (orderErr) throw orderErr;
 
-      await supabase.from("cash_flow").insert([
-        {
-          order_id: orderId,
-          tipe: "Pemasukan",
-          kategori: "Penjualan Produk",
-          nominal: nominal,
-          keterangan: `Pembayaran Lunas Invoice: ${invoiceNo}`,
-          tanggal: new Date().toISOString().split("T")[0],
-        },
-      ]);
+      // 2. Cek apakah sudah pernah masuk di cash_flow agar tidak tercatat ganda
+      const { data: existingCash } = await supabase
+        .from("cash_flow")
+        .select("id")
+        .eq("order_id", orderId)
+        .maybeSingle();
+
+      if (!existingCash) {
+        await supabase.from("cash_flow").insert([
+          {
+            order_id: orderId,
+            tipe: "Masuk",
+            kategori: "Penjualan Web",
+            nominal: Number(nominal || 0),
+            keterangan: `Pembayaran Lunas Invoice: ${invoiceNo}`,
+            tanggal: new Date().toISOString().split("T")[0],
+          },
+        ]);
+      }
 
       setKonfirmasiList((prev) => prev.filter((item) => item.id !== orderId));
       setSuccessModal({ show: true, invoiceId: invoiceNo });
       setSelectedBukti(null);
     } catch (err: any) {
       console.error("Gagal menyetujui pembayaran:", err);
-      alert("Gagal menyetujui pembayaran: " + err.message);
+      alert("Gagal menyetujui pembayaran: " + (err.message || err));
     }
   };
 
-  // Tolak Pembayaran + Kembalikan Stok Produk
+  // Tolak Pembayaran
   const handleConfirmReject = async () => {
-    const { order, alasan, catatanTambahan } = rejectModal;
+    const { order, alasan } = rejectModal;
     if (!order) return;
 
     setRejectModal((prev) => ({ ...prev, isSubmitting: true }));
 
     try {
-      // 1. KEMBALIKAN STOK KE TABEL PRODUCTS
-      for (const item of order.order_items || []) {
-        if (item.product_id) {
-          const { data: currentProduct } = await supabase
-            .from("products")
-            .select("stok")
-            .eq("id", item.product_id)
-            .single();
-
-          if (currentProduct) {
-            await supabase
-              .from("products")
-              .update({ stok: (currentProduct.stok || 0) + item.qty })
-              .eq("id", item.product_id);
-          }
-        } else {
-          const { data: currentProduct } = await supabase
-            .from("products")
-            .select("id, stok")
-            .eq("nama", item.nama_produk)
-            .single();
-
-          if (currentProduct) {
-            await supabase
-              .from("products")
-              .update({ stok: (currentProduct.stok || 0) + item.qty })
-              .eq("id", currentProduct.id);
-          }
-        }
-      }
-
-      // 2. UPDATE STATUS PESANAN JADI DIBATALKAN
-      const reasonFull = catatanTambahan
-        ? `${alasan}: ${catatanTambahan}`
-        : alasan;
-
       const { error } = await supabase
         .from("orders")
         .update({
           status: "Dibatalkan",
-          catatan: reasonFull,
+          catatan: alasan,
         })
         .eq("id", order.id);
 
       if (error) throw error;
 
-      // Hapus dari antrean verifikasi
       setKonfirmasiList((prev) => prev.filter((item) => item.id !== order.id));
       setSelectedBukti(null);
 
-      // Buka tautan WhatsApp untuk chat pembeli
-      const waUrl = generateWaTolakUrl(order, alasan, catatanTambahan);
+      const waUrl = generateWaTolakUrl(order, alasan);
       window.open(waUrl, "_blank");
     } catch (err: any) {
       console.error("Gagal menolak pesanan:", err);
-      alert("Gagal menolak pesanan: " + err.message);
+      alert("Gagal menolak pesanan: " + (err.message || err));
     } finally {
       setRejectModal({
         show: false,
         order: null,
         alasan: "Stok Barang Habis",
-        catatanTambahan: "",
         isSubmitting: false,
       });
     }
@@ -321,7 +296,9 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
             title="Refresh Data"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 text-amber-900 ${isLoading ? "animate-spin" : ""}`}
+              className={`w-3.5 h-3.5 text-amber-900 ${
+                isLoading ? "animate-spin" : ""
+              }`}
             />
           </button>
         </div>
@@ -422,7 +399,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                         show: true,
                         order: item,
                         alasan: "Stok Barang Habis",
-                        catatanTambahan: "",
                         isSubmitting: false,
                       })
                     }
@@ -525,7 +501,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                     </td>
                     <td className="p-3.5 pr-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        {/* TOMBOL TOLAK */}
                         <button
                           type="button"
                           onClick={() =>
@@ -533,17 +508,15 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                               show: true,
                               order: item,
                               alasan: "Stok Barang Habis",
-                              catatanTambahan: "",
                               isSubmitting: false,
                             })
                           }
                           className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 text-[10px] font-bold uppercase tracking-wider transition rounded-2xs cursor-pointer"
-                          title="Tolak Pesanan & Kembalikan Stok"
+                          title="Tolak Pesanan"
                         >
                           Tolak
                         </button>
 
-                        {/* TOMBOL SETUJUI */}
                         <button
                           type="button"
                           onClick={() =>
@@ -551,7 +524,7 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                           }
                           className="inline-flex items-center gap-1 px-4 py-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider transition shadow-2xs rounded-2xs cursor-pointer"
                         >
-                          <Check className="w-3 h-3 text-amber-300" />
+                          <Check className="w-3.5 h-3.5 text-amber-300" />
                           <span>Setujui</span>
                         </button>
                       </div>
@@ -619,7 +592,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                     show: true,
                     order: targetOrder,
                     alasan: "Stok Barang Habis",
-                    catatanTambahan: "",
                     isSubmitting: false,
                   });
                 }}
@@ -647,7 +619,7 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
         </div>
       )}
 
-      {/* MODAL TOLAK PESANAN & KEMBALIKAN STOK */}
+      {/* MODAL TOLAK PESANAN */}
       {rejectModal.show && rejectModal.order && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
@@ -658,8 +630,7 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
             }
           />
 
-          <div className="relative z-10 bg-white border border-stone-200 max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 rounded-xs">
-            {/* Header Modal */}
+          <div className="relative z-10 bg-white border border-stone-200 max-w-sm w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 rounded-xs">
             <div className="flex items-start gap-3 border-b border-stone-100 pb-3">
               <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -686,7 +657,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
               </button>
             </div>
 
-            {/* Peringatan Pengembalian Stok */}
             <div className="p-2.5 bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 rounded-2xs space-y-1">
               <span className="font-bold flex items-center gap-1 text-amber-900">
                 <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />
@@ -695,7 +665,7 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
               <ul className="list-disc list-inside space-y-0.5 text-[10.5px] text-amber-900/90">
                 {(rejectModal.order.order_items || []).map((i, idx) => (
                   <li key={idx}>
-                    {i.nama_produk} ({i.warna || "Default"},{" "}
+                    {i.nama_produk} ({i.warna || "Seri Mix"},{" "}
                     {i.ukuran || "All Size"}) — <strong>+{i.qty} pcs</strong>{" "}
                     dikembalikan ke stok produk.
                   </li>
@@ -703,7 +673,6 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
               </ul>
             </div>
 
-            {/* Pilihan Alasan Penolakan */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
                 Pilih Alasan Penolakan:
@@ -725,30 +694,9 @@ Jika ada pertanyaan atau butuh bantuan lebih lanjut, silakan balas pesan ini ya 
                 <option value="Permintaan Pembatalan Oleh Pembeli">
                   Permintaan Pembatalan Oleh Pembeli
                 </option>
-                <option value="Lainnya">Alasan Lainnya</option>
               </select>
             </div>
 
-            {/* Keterangan Tambahan */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
-                Catatan Tambahan untuk Pembeli (Opsional):
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Tulis pesan jika ada penjelasan tambahan..."
-                value={rejectModal.catatanTambahan}
-                onChange={(e) =>
-                  setRejectModal({
-                    ...rejectModal,
-                    catatanTambahan: e.target.value,
-                  })
-                }
-                className="w-full bg-[#FAF8F5] border border-stone-300 p-2 text-xs text-neutral-900 rounded-2xs focus:bg-white focus:outline-none focus:border-amber-900"
-              />
-            </div>
-
-            {/* Tombol Aksi */}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
               <button
                 type="button"

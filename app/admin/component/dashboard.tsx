@@ -60,53 +60,79 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
 
       const orders = ordersData || [];
 
-      // Pesanan yang benar-benar SAH & LUNAS
+      // Status pesanan yang terverifikasi dan sah
+      const validPaidStatuses = [
+        "diproses",
+        "dikirim",
+        "selesai",
+        "lunas",
+        "terverifikasi",
+        "sukses",
+      ];
+
       const paidOrders = orders.filter((o: any) =>
-        ["Diproses", "Dikirim", "Selesai"].includes(o.status),
+        validPaidStatuses.includes(
+          String(o.status || "")
+            .trim()
+            .toLowerCase(),
+        ),
       );
 
       // Pesanan yang masih pending transfer / verifikasi
-      const pendingVerif = orders.filter(
-        (o: any) =>
-          o.status === "Menunggu Verifikasi" ||
-          o.status === "Menunggu Pembayaran",
-      ).length;
+      const pendingVerif = orders.filter((o: any) => {
+        const st = String(o.status || "")
+          .trim()
+          .toLowerCase();
+        return (
+          st.includes("verifikasi") ||
+          st.includes("pembayaran") ||
+          st === "pending"
+        );
+      }).length;
 
       setPerluVerifikasiCount(pendingVerif);
       setTotalPesananCount(orders.length);
 
-      // 2. Ambil data kas masuk dan kas keluar dari tabel cash_flow
+      // 2. Ambil data kas dari tabel cash_flow
       const { data: cashData } = await supabase
         .from("cash_flow")
-        .select("tipe, nominal, tanggal, created_at");
+        .select("tipe, nominal, order_id, tanggal, created_at");
 
-      let masukDariCashFlow = 0;
-      let keluar = 0;
+      let manualMasuk = 0;
+      let totalKeluar = 0;
+      const recordedOrderIds = new Set<string>();
 
       if (cashData && cashData.length > 0) {
-        masukDariCashFlow = cashData
-          .filter((c: any) => {
-            const t = (c.tipe || "").toLowerCase();
-            return t === "pemasukan" || t === "masuk";
-          })
-          .reduce((acc: number, c: any) => acc + Number(c.nominal || 0), 0);
+        cashData.forEach((c: any) => {
+          const t = String(c.tipe || "")
+            .trim()
+            .toLowerCase();
+          const nom = Number(c.nominal || 0);
 
-        keluar = cashData
-          .filter((c: any) => {
-            const t = (c.tipe || "").toLowerCase();
-            return t === "pengeluaran" || t === "keluar";
-          })
-          .reduce((acc: number, c: any) => acc + Number(c.nominal || 0), 0);
-      } else {
-        // Fallback jika tabel cash_flow belum ada data, hitung dari pesanan yang sudah lunas
-        masukDariCashFlow = paidOrders.reduce(
+          if (c.order_id) {
+            recordedOrderIds.add(String(c.order_id));
+          }
+
+          if (t.includes("masuk")) {
+            manualMasuk += nom;
+          } else if (t.includes("keluar")) {
+            totalKeluar += nom;
+          }
+        });
+      }
+
+      // Hitung pemasukan dari orders online yang belum dicatat manual di cash_flow
+      const unrecordedOrderIncome = paidOrders
+        .filter((o: any) => !recordedOrderIds.has(String(o.id)))
+        .reduce(
           (acc: number, o: any) => acc + Number(o.total || o.total_harga || 0),
           0,
         );
-      }
 
-      setTotalPendapatan(masukDariCashFlow);
-      setTotalKasKeluar(keluar);
+      const totalPendapatanGabungan = manualMasuk + unrecordedOrderIncome;
+
+      setTotalPendapatan(totalPendapatanGabungan);
+      setTotalKasKeluar(totalKeluar);
 
       // 3. Ambil jumlah produk aktif
       const { count: productCount, error: productErr } = await supabase
@@ -117,20 +143,32 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         setTotalProdukCount(productCount);
       }
 
-      // 4. Bangun data tren omzet 7 hari terakhir (HANYA DARI PESANAN LUNAS)
+      // 4. Bangun data tren omzet 7 hari terakhir (dari pesanan lunas)
       const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
       const points: ChartPoint[] = [];
       const today = new Date();
 
       for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(today.getDate() - i);
-        const dateStr = d.toISOString().split("T")[0];
-        const dayLabel = dayNames[d.getDay()];
+        const targetDate = new Date();
+        targetDate.setDate(today.getDate() - i);
 
-        // Hitung omzet per tanggal dari pesanan yang sudah berstatus lunas
+        // Format tanggal lokal YYYY-MM-DD
+        const year = targetDate.getFullYear();
+        const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+        const day = String(targetDate.getDate()).padStart(2, "0");
+        const dateStr = `${year}-${month}-${day}`;
+        const dayLabel = dayNames[targetDate.getDay()];
+
+        // Hitung omzet per tanggal lokal
         const dayTotal = paidOrders
-          .filter((o: any) => o.created_at && o.created_at.startsWith(dateStr))
+          .filter((o: any) => {
+            if (!o.created_at) return false;
+            const orderDate = new Date(o.created_at);
+            const oYear = orderDate.getFullYear();
+            const oMonth = String(orderDate.getMonth() + 1).padStart(2, "0");
+            const oDay = String(orderDate.getDate()).padStart(2, "0");
+            return `${oYear}-${oMonth}-${oDay}` === dateStr;
+          })
           .reduce(
             (acc: number, o: any) =>
               acc + Number(o.total || o.total_harga || 0),
@@ -185,7 +223,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
     <div className="space-y-4 sm:space-y-6 w-full">
       {/* 4 KARTU STATISTIK ATAS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        {/* TOTAL PENDAPATAN (LUNAS SAJA) */}
+        {/* TOTAL PENDAPATAN */}
         <div className="bg-white border border-stone-200 p-3 sm:p-5 shadow-2xs rounded-xs flex items-center justify-between gap-1.5">
           <div className="min-w-0 flex-1">
             <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-900/70 truncate">
@@ -275,7 +313,9 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
                 title="Perbarui Statistik"
               >
                 <RefreshCw
-                  className={`w-3.5 h-3.5 text-amber-900 ${isLoading ? "animate-spin" : ""}`}
+                  className={`w-3.5 h-3.5 text-amber-900 ${
+                    isLoading ? "animate-spin" : ""
+                  }`}
                 />
               </button>
 
@@ -405,7 +445,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
           </div>
         </div>
 
-        {/* RINGKASAN ARUS KAS (SINKRON BUKU KAS) */}
+        {/* RINGKASAN ARUS KAS */}
         <div className="lg:col-span-4 bg-white border border-stone-200 p-4 sm:p-6 shadow-2xs rounded-xs space-y-4 flex flex-col justify-between">
           <div className="space-y-3 sm:space-y-4">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3 sm:pb-4">
@@ -443,7 +483,9 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
               Laba Bersih
             </span>
             <span
-              className={`font-bold font-mono text-xs sm:text-sm ${labaBersih >= 0 ? "text-amber-950" : "text-rose-700"}`}
+              className={`font-bold font-mono text-xs sm:text-sm ${
+                labaBersih >= 0 ? "text-amber-950" : "text-rose-700"
+              }`}
             >
               Rp {labaBersih.toLocaleString("id-ID")}
             </span>

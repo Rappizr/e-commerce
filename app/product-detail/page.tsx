@@ -16,22 +16,50 @@ import {
   Loader2,
   Plus,
   Minus,
-  CheckCircle2,
   Tag,
+  Palette,
+  Package,
+  Scale,
 } from "lucide-react";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
 
+interface VariantItem {
+  id: number;
+  product_id: number;
+  warna: string;
+  ukuran: string;
+  stok: number;
+}
+
+interface ProductMapped {
+  id: string;
+  title: string;
+  category: string;
+  price: string;
+  rawPrice: number;
+  stok: number;
+  weight: number;
+  desc: string;
+  is_grosir: boolean;
+  min_grosir: number;
+  harga_grosir: number | null;
+  images: string[];
+  warna: string[];
+  ukuran: string;
+  details: string[];
+}
+
 function ProductDetailContent() {
   const searchParams = useSearchParams();
   const productId = searchParams.get("id");
 
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<ProductMapped | null>(null);
+  const [variants, setVariants] = useState<VariantItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState("Default");
-  const [selectedSize, setSelectedSize] = useState("All Size");
   const [openAccordion, setOpenAccordion] = useState<string | null>("details");
   const [showCenterModal, setShowCenterModal] = useState(false);
   const [galleryModalOpen, setGalleryModalOpen] = useState(false);
@@ -49,66 +77,120 @@ function ProductDetailContent() {
     const fetchSingleProduct = async () => {
       setIsLoading(true);
       try {
+        const cleanProductId = Number(productId);
+
+        // 1. Fetch data produk utama
         const { data, error } = await supabase
           .from("products")
           .select(
             "id, nama, kategori, harga, stok, berat, deskripsi, is_grosir, min_grosir, harga_grosir, gambar_list, gambar_utama, warna, ukuran, rincian",
           )
-          .eq("id", productId)
+          .eq("id", cleanProductId)
           .single();
 
         if (data && !error) {
-          const imgList =
-            Array.isArray(data.gambar_list) && data.gambar_list.length > 0
-              ? data.gambar_list
-              : [
-                  data.gambar_utama ||
-                    "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
-                ];
+          let imgList: string[] = [];
+          if (Array.isArray(data.gambar_list) && data.gambar_list.length > 0) {
+            imgList = data.gambar_list;
+          } else if (data.gambar_utama) {
+            imgList = [data.gambar_utama];
+          } else {
+            imgList = [
+              "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
+            ];
+          }
 
-          const warnaArr =
-            Array.isArray(data.warna) && data.warna.length > 0
+          const isGrosir = Boolean(data.is_grosir);
+          const minGrosirVal = isGrosir
+            ? Math.max(2, Number(data.min_grosir) || 5)
+            : 1;
+
+          const warnaArr: string[] = isGrosir
+            ? ["Seri Mix (Campur Warna)"]
+            : Array.isArray(data.warna) && data.warna.length > 0
               ? data.warna
               : ["Default"];
-          const ukuranArr =
+
+          const ukuranTunggal =
             Array.isArray(data.ukuran) && data.ukuran.length > 0
-              ? data.ukuran
-              : ["All Size"];
-          const detailsArr =
+              ? data.ukuran[0]
+              : typeof data.ukuran === "string" && data.ukuran.trim() !== ""
+                ? data.ukuran
+                : "All Size";
+
+          const detailsArr: string[] =
             Array.isArray(data.rincian) && data.rincian.length > 0
               ? data.rincian
-              : [
-                  "Bahan premium super adem & lembut",
-                  "Jahitan rapi kelas butik",
-                ];
+              : isGrosir
+                ? [
+                    `Paket seri otomatis isi ${minGrosirVal} pcs beda warna`,
+                    "Bahan adem & jahitan konveksi rapi",
+                  ]
+                : [
+                    "Bahan premium super adem & lembut",
+                    "Jahitan rapi standar konveksi ALMACO",
+                  ];
 
-          const mapped = {
+          // 2. Fetch data varian stok
+          const { data: variantData } = await supabase
+            .from("product_variants")
+            .select("id, product_id, warna, ukuran, stok")
+            .eq("product_id", cleanProductId);
+
+          const loadedVariants: VariantItem[] = (variantData || []).map(
+            (v: any) => ({
+              id: Number(v.id),
+              product_id: Number(v.product_id),
+              warna: String(
+                v.warna || (isGrosir ? "Seri Mix (Campur Warna)" : "Default"),
+              ).trim(),
+              ukuran: String(v.ukuran || ukuranTunggal).trim(),
+              stok: Number(v.stok ?? 0),
+            }),
+          );
+
+          setVariants(loadedVariants);
+
+          const mapped: ProductMapped = {
             id: String(data.id),
             title: data.nama || "Busana Almaco",
             category: data.kategori || "Busana",
             price: `Rp ${Number(data.harga || 0).toLocaleString("id-ID")}`,
             rawPrice: Number(data.harga || 0),
             stok: typeof data.stok === "number" ? data.stok : 0,
-            weight: Number(data.berat || 350),
+            weight: Number(data.berat || 100),
             desc:
               data.deskripsi ||
-              "Busana modis berkualitas premium dari ALMACO FASHION.",
-            is_grosir: Boolean(data.is_grosir),
-            min_grosir: data.min_grosir ? Number(data.min_grosir) : null,
-            harga_grosir: data.harga_grosir ? Number(data.harga_grosir) : null,
+              (isGrosir
+                ? "Paket grosir busana seri campur warna langsung dari konveksi ALMACO FASHION."
+                : "Busana modis berkualitas premium dari ALMACO FASHION."),
+            is_grosir: isGrosir,
+            min_grosir: minGrosirVal,
+            harga_grosir: isGrosir
+              ? Number(data.harga_grosir || data.harga)
+              : null,
             images: imgList,
             warna: warnaArr,
-            ukuran: ukuranArr,
+            ukuran: ukuranTunggal,
             details: detailsArr,
           };
 
           setProduct(mapped);
-          setSelectedColor(warnaArr[0]);
-          setSelectedSize(ukuranArr[0]);
 
-          if (mapped.is_grosir && mapped.min_grosir) {
-            setQuantity(mapped.min_grosir);
+          // Inisialisasi warna & kuantitas awal
+          if (isGrosir) {
+            setSelectedColor("Seri Mix (Campur Warna)");
+            setQuantity(minGrosirVal);
           } else {
+            const initialColor =
+              warnaArr.find((w) => {
+                const matched = loadedVariants.find(
+                  (v) => v.warna.toUpperCase() === w.trim().toUpperCase(),
+                );
+                return matched ? matched.stok > 0 : true;
+              }) || warnaArr[0];
+
+            setSelectedColor(initialColor);
             setQuantity(1);
           }
         }
@@ -121,6 +203,48 @@ function ProductDetailContent() {
 
     fetchSingleProduct();
   }, [productId]);
+
+  // Fungsi cek stok warna untuk eceran
+  const getStockForColor = (colorName: string): number => {
+    if (!variants || variants.length === 0) return product?.stok || 0;
+    const target = colorName.trim().toUpperCase();
+    const match = variants.find((v) => v.warna.trim().toUpperCase() === target);
+    return match ? Number(match.stok || 0) : 0;
+  };
+
+  const isGrosir = Boolean(product?.is_grosir);
+  const minGrosir = Number(product?.min_grosir || 5);
+  const activeColorStock = getStockForColor(selectedColor);
+  const totalStokSemua = product?.stok || 0;
+  const currentAvailableStock = isGrosir ? totalStokSemua : activeColorStock;
+
+  // Step kuantitas: Grosir melompat per kelipatan seri (misal 5, 10, 15), Eceran 1 per 1 (1, 2, 3)
+  const stepQty = isGrosir ? minGrosir : 1;
+  const minAllowedQty = isGrosir ? minGrosir : 1;
+
+  // Validasi otomatis kuantitas terhadap stok dan batas bawah
+  useEffect(() => {
+    if (currentAvailableStock > 0) {
+      if (quantity > currentAvailableStock) {
+        if (isGrosir) {
+          const maxMultiples =
+            Math.floor(currentAvailableStock / minGrosir) * minGrosir;
+          setQuantity(Math.max(minGrosir, maxMultiples));
+        } else {
+          setQuantity(currentAvailableStock);
+        }
+      } else if (quantity < minAllowedQty) {
+        setQuantity(minAllowedQty);
+      }
+    }
+  }, [
+    selectedColor,
+    currentAvailableStock,
+    quantity,
+    minAllowedQty,
+    isGrosir,
+    minGrosir,
+  ]);
 
   if (isLoading) {
     return (
@@ -136,7 +260,7 @@ function ProductDetailContent() {
   if (!product) {
     return (
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-8 py-16 text-center space-y-4">
-        <div className="bg-white border border-stone-200 p-10 max-w-md mx-auto shadow-xs space-y-3">
+        <div className="bg-white border border-stone-200 p-10 max-w-md mx-auto shadow-xs space-y-3 rounded-xs">
           <ShoppingBag className="w-10 h-10 mx-auto text-stone-300" />
           <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
             Produk Tidak Ditemukan
@@ -147,7 +271,7 @@ function ProductDetailContent() {
           </p>
           <Link
             href="/"
-            className="inline-block bg-neutral-950 hover:bg-amber-950 text-white text-[11px] font-bold uppercase tracking-wider px-4 py-2 mt-2 transition"
+            className="inline-block bg-neutral-950 hover:bg-amber-950 text-white text-[11px] font-bold uppercase tracking-wider px-4 py-2 mt-2 transition rounded-2xs"
           >
             Kembali Ke Beranda
           </Link>
@@ -157,24 +281,9 @@ function ProductDetailContent() {
   }
 
   const allImages = product.images;
-  const sisaStok = product.stok;
   const rawWarnaList: string[] = product.warna;
-
-  const isQualifiedGrosir = Boolean(
-    product.is_grosir &&
-    product.min_grosir &&
-    product.harga_grosir &&
-    quantity >= product.min_grosir,
-  );
-
-  const activeUnitPrice = isQualifiedGrosir
-    ? product.harga_grosir
-    : product.rawPrice;
+  const activeUnitPrice = product.rawPrice;
   const subtotalPrice = activeUnitPrice * quantity;
-  const savingPerPcs =
-    product.is_grosir && product.harga_grosir
-      ? product.rawPrice - product.harga_grosir
-      : 0;
 
   const toggleAccordion = (section: string) => {
     setOpenAccordion(openAccordion === section ? null : section);
@@ -196,7 +305,9 @@ function ProductDetailContent() {
   };
 
   const handleAddToCart = () => {
-    if (quantity <= 0 || sisaStok <= 0) return;
+    if (quantity <= 0 || currentAvailableStock <= 0) return;
+
+    const finalColorName = isGrosir ? "Seri Mix (Campur Warna)" : selectedColor;
 
     tambahKeKeranjang(
       {
@@ -204,11 +315,11 @@ function ProductDetailContent() {
         title: product.title,
         price: activeUnitPrice,
         rawPrice: product.rawPrice,
-        is_grosir: product.is_grosir,
-        min_grosir: product.min_grosir,
-        harga_grosir: product.harga_grosir,
-        size: selectedSize,
-        color: selectedColor,
+        is_grosir: isGrosir,
+        min_grosir: isGrosir ? minGrosir : null,
+        harga_grosir: isGrosir ? activeUnitPrice : null,
+        size: product.ukuran,
+        color: finalColorName,
         weight: product.weight,
         image: allImages[0],
       },
@@ -222,13 +333,14 @@ function ProductDetailContent() {
 
   return (
     <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 relative">
+      {/* MODAL NOTIFIKASI SUKSES TAMBAH KERANJANG */}
       {showCenterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
             onClick={() => setShowCenterModal(false)}
           />
-          <div className="relative z-10 w-full max-w-sm bg-white border border-stone-200 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="relative z-10 w-full max-w-sm bg-white border border-stone-200 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200 rounded-xs">
             <button
               onClick={() => setShowCenterModal(false)}
               className="absolute top-3.5 right-3.5 p-1 text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
@@ -250,8 +362,8 @@ function ProductDetailContent() {
               </div>
             </div>
 
-            <div className="flex gap-3 items-center bg-[#FAF8F5] p-2.5 border border-stone-200">
-              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200">
+            <div className="flex gap-3 items-center bg-[#FAF8F5] p-2.5 border border-stone-200 rounded-2xs">
+              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200 rounded-2xs">
                 <Image
                   src={allImages[selectedImageIndex] || allImages[0]}
                   alt={product.title}
@@ -260,14 +372,29 @@ function ProductDetailContent() {
                 />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
-                <h4 className="text-xs font-bold uppercase tracking-wide text-neutral-900 truncate">
-                  {product.title}
-                </h4>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-[8px] font-bold px-1.5 py-0.2 rounded-2xs ${
+                      isGrosir
+                        ? "bg-amber-900 text-amber-100"
+                        : "bg-neutral-900 text-white"
+                    }`}
+                  >
+                    {isGrosir ? "GROSIR SERI" : "ECERAN"}
+                  </span>
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-neutral-900 truncate">
+                    {product.title}
+                  </h4>
+                </div>
                 <p className="text-[10px] text-neutral-500 uppercase tracking-wider truncate">
                   Ukuran:{" "}
-                  <strong className="text-neutral-800">{selectedSize}</strong> |
+                  <strong className="text-neutral-800">{product.ukuran}</strong>
+                </p>
+                <p className="text-[10px] text-neutral-500 uppercase tracking-wider truncate">
                   Warna:{" "}
-                  <strong className="text-neutral-800">{selectedColor}</strong>
+                  <strong className="text-neutral-800">
+                    {isGrosir ? "Seri Mix (Campur Warna)" : selectedColor}
+                  </strong>
                 </p>
                 <p className="text-xs font-bold text-neutral-900">
                   {quantity} pcs × Rp {activeUnitPrice.toLocaleString("id-ID")}
@@ -282,7 +409,7 @@ function ProductDetailContent() {
               <Link
                 href="/"
                 onClick={() => setShowCenterModal(false)}
-                className="w-full bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center block"
+                className="w-full bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center block rounded-2xs"
               >
                 Lanjut Belanja
               </Link>
@@ -290,7 +417,7 @@ function ProductDetailContent() {
               <Link
                 href="/keranjang"
                 onClick={() => setShowCenterModal(false)}
-                className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center flex items-center justify-center gap-1 shadow-sm"
+                className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors text-center flex items-center justify-center gap-1 shadow-sm rounded-2xs"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
                 <span>Keranjang</span>
@@ -300,6 +427,7 @@ function ProductDetailContent() {
         </div>
       )}
 
+      {/* MODAL GALERI LIGHTBOX */}
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -366,11 +494,13 @@ function ProductDetailContent() {
         </div>
       )}
 
+      {/* GRID DETAIL PRODUK */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
+        {/* KOLOM FOTO */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           <div
             onClick={() => openLightbox(selectedImageIndex)}
-            className="relative w-full aspect-[3/4] max-h-[500px] bg-neutral-100 border border-stone-200 overflow-hidden group cursor-pointer"
+            className="relative w-full aspect-[3/4] max-h-[500px] bg-neutral-100 border border-stone-200 overflow-hidden group cursor-pointer rounded-xs"
           >
             <Image
               src={allImages[selectedImageIndex] || allImages[0]}
@@ -380,19 +510,23 @@ function ProductDetailContent() {
               className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
             />
 
-            <div className="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-stone-200 shadow-2xs">
+            <div className="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-stone-200 shadow-2xs rounded-2xs">
               {product.category}
             </div>
 
-            {product.is_grosir && (
-              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-amber-200 border border-amber-700/40 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5">
+            {isGrosir ? (
+              <div className="absolute top-2.5 right-2.5 bg-amber-900 text-amber-100 border border-amber-700/40 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5 rounded-2xs">
                 <Tag className="w-3 h-3 text-amber-300" />
-                <span>GROSIR MIN. {product.min_grosir} PCS</span>
+                <span>GROSIR SERI (MIN. {minGrosir} PCS)</span>
+              </div>
+            ) : (
+              <div className="absolute top-2.5 right-2.5 bg-neutral-950 text-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider shadow-xs rounded-2xs">
+                ECERAN SATUAN
               </div>
             )}
 
             <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <div className="bg-neutral-950/90 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 flex items-center gap-1.5 shadow-lg">
+              <div className="bg-neutral-950/90 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 flex items-center gap-1.5 shadow-lg rounded-2xs">
                 <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
                 <span>Perbesar Foto</span>
               </div>
@@ -415,7 +549,7 @@ function ProductDetailContent() {
                         setSelectedImageIndex(idx);
                       }
                     }}
-                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition ${
+                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition rounded-2xs ${
                       isSelected && !isThirdAndHasMore
                         ? "border-amber-900 ring-1 ring-amber-900"
                         : "border-stone-200 hover:border-stone-400"
@@ -446,30 +580,41 @@ function ProductDetailContent() {
           )}
         </div>
 
+        {/* KOLOM INFORMASI */}
         <div className="md:col-span-6 space-y-4">
-          <div className="space-y-1 border-b border-stone-200 pb-3">
-            <div className="flex items-center gap-2 text-[10px] tracking-widest font-bold uppercase text-neutral-400">
-              <span className="text-amber-900/80 font-bold">
+          <div className="space-y-1.5 border-b border-stone-200 pb-3">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] tracking-widest font-bold uppercase text-neutral-400">
+              <span className="text-amber-900 font-bold">
                 {product.category}
               </span>
               <span className="text-stone-300">•</span>
               <span
                 className={
-                  sisaStok > 0
+                  currentAvailableStock > 0
                     ? "text-emerald-800 font-bold"
                     : "text-rose-600 font-bold"
                 }
               >
-                {sisaStok > 0 ? `STOK: ${sisaStok} PCS` : "STOK HABIS"}
+                {currentAvailableStock > 0
+                  ? isGrosir
+                    ? `TOTAL STOK SERI: ${totalStokSemua} PCS`
+                    : `STOK WARNA ${selectedColor}: ${activeColorStock} PCS`
+                  : isGrosir
+                    ? "STOK SERI HABIS"
+                    : `WARNA ${selectedColor} HABIS`}
               </span>
               <span className="text-stone-300">•</span>
-              <span>{product.weight} GRAM</span>
+              <span className="flex items-center gap-1">
+                <Scale className="w-3 h-3 text-stone-400" />
+                <span>{product.weight} GR / PCS</span>
+              </span>
             </div>
 
             <h1 className="text-xl sm:text-2xl font-serif text-neutral-900 tracking-tight leading-snug">
               {product.title}
             </h1>
 
+            {/* HARGA */}
             <div className="pt-1 flex items-baseline gap-2">
               <span className="text-xl sm:text-2xl text-neutral-950 font-black tracking-tight font-mono">
                 Rp {activeUnitPrice.toLocaleString("id-ID")}
@@ -477,221 +622,182 @@ function ProductDetailContent() {
               <span className="text-xs text-neutral-500 font-medium">
                 / pcs
               </span>
-
-              {isQualifiedGrosir && (
-                <span className="ml-2 text-xs text-neutral-400 line-through font-mono">
-                  Rp {product.rawPrice.toLocaleString("id-ID")}
+              {isGrosir && (
+                <span className="ml-2 bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-2xs">
+                  Paket Seri ({minGrosir} Pcs)
                 </span>
               )}
             </div>
           </div>
 
-          {product.is_grosir && product.harga_grosir && (
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-                <span>Pilih Tipe Pembelian</span>
-                {savingPerPcs > 0 && (
-                  <span className="text-amber-900 font-mono font-bold">
-                    Hemat Rp {savingPerPcs.toLocaleString("id-ID")} / pcs di
-                    Paket Grosir
-                  </span>
-                )}
-              </div>
+          {/* SPESIFIKASI UKURAN */}
+          <div className="space-y-1 p-2.5 bg-[#FAF8F5] border border-stone-200 rounded-2xs">
+            <div className="flex items-center justify-between text-xs tracking-wider uppercase">
+              <span className="text-neutral-500 font-bold text-[10px]">
+                Ukuran Model:
+              </span>
+              <span className="text-[10.5px] font-bold font-mono text-neutral-950 bg-white border border-stone-300 px-2 py-0.5 rounded-2xs">
+                {product.ukuran}
+              </span>
+            </div>
+            <p className="text-[9.5px] text-stone-500">
+              *1 katalog foto merupakan 1 spesifikasi ukuran standar konveksi
+              ALMACO.
+            </p>
+          </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div
-                  onClick={() => setQuantity(1)}
-                  className={`relative p-3 border transition cursor-pointer flex flex-col justify-between ${
-                    quantity < (product.min_grosir || 3)
-                      ? "border-neutral-950 bg-white ring-1 ring-neutral-950 shadow-xs"
-                      : "border-stone-200 bg-stone-50/70 hover:border-stone-300 hover:bg-white"
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600">
-                        Ecer / Satuan
-                      </span>
-                      {quantity < (product.min_grosir || 3) && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-neutral-950 shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold font-mono text-neutral-900">
-                      Rp {product.rawPrice.toLocaleString("id-ID")}
-                    </p>
-                  </div>
-                  <span className="text-[9px] text-neutral-400 font-medium mt-2 block">
-                    Beli 1 - {(product.min_grosir || 3) - 1} pcs
-                  </span>
-                </div>
-
-                <div
-                  onClick={() => setQuantity(product.min_grosir || 3)}
-                  className={`relative p-3 border transition cursor-pointer flex flex-col justify-between ${
-                    quantity >= (product.min_grosir || 3)
-                      ? "border-amber-800 bg-[#F8F5EE] ring-1 ring-amber-800 shadow-xs"
-                      : "border-stone-200 bg-stone-50/70 hover:border-stone-300 hover:bg-white"
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1">
-                        <span>Seri Grosir</span>
-                      </span>
-                      {quantity >= (product.min_grosir || 3) && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-900 shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold font-mono text-amber-950">
-                      Rp {product.harga_grosir.toLocaleString("id-ID")}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-[9px] font-medium">
-                    <span className="text-stone-500 font-mono">
-                      Min. {product.min_grosir} pcs
-                    </span>
-                    <span className="text-amber-900 font-bold font-mono bg-amber-100/90 border border-amber-300 px-1 py-0.2 rounded-2xs">
-                      LEBIH HEMAT
-                    </span>
-                  </div>
-                </div>
+          {/* PILIHAN WARNA KHUSUS ECERAN / INFO SERI GROSIR */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs uppercase">
+              <div className="flex items-center gap-1.5">
+                <Palette className="w-3.5 h-3.5 text-stone-500" />
+                <span className="text-neutral-400 font-bold tracking-wider text-[10px]">
+                  PILIHAN WARNA:
+                </span>
+                <span className="ml-1 font-bold text-neutral-900">
+                  {isGrosir ? "Seri Campur / Mix Warna" : selectedColor}
+                </span>
               </div>
             </div>
-          )}
 
-          <p className="text-xs text-neutral-600 leading-relaxed">
-            {product.desc}
-          </p>
-
-          {rawWarnaList && rawWarnaList.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center text-xs uppercase">
-                <span className="text-neutral-400 font-bold tracking-wider">
-                  WARNA:
-                </span>
-                <span className="ml-2 font-bold text-neutral-900">
-                  {selectedColor}
-                </span>
+            {isGrosir ? (
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xs space-y-1">
+                <div className="flex items-center gap-1.5 text-amber-950 font-bold text-[11px]">
+                  <Package className="w-4 h-4 text-amber-800 shrink-0" />
+                  <span>Warna Campur Otomatis Sesuai Seri Katalog</span>
+                </div>
+                <p className="text-[10px] text-amber-900/80 leading-relaxed">
+                  Paket seri grosir otomatis mendapatkan{" "}
+                  <strong>{minGrosir} warna berbeda/campur</strong> sesuai seri
+                  katalog (tidak dapat memilih warna satuan).
+                </p>
               </div>
-
+            ) : (
               <div className="flex flex-wrap items-center gap-2">
                 {rawWarnaList.map((warnaName) => {
                   const isSelected =
-                    selectedColor.toLowerCase() === warnaName.toLowerCase();
+                    selectedColor.trim().toUpperCase() ===
+                    warnaName.trim().toUpperCase();
+                  const stokWarnaIni = getStockForColor(warnaName);
+                  const isHabis = stokWarnaIni <= 0;
 
                   return (
                     <button
                       key={warnaName}
                       type="button"
+                      disabled={isHabis}
                       onClick={() => setSelectedColor(warnaName)}
-                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition border cursor-pointer ${
-                        isSelected
-                          ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                          : "bg-white text-neutral-700 border-stone-200 hover:border-stone-400"
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition border cursor-pointer rounded-2xs flex items-center gap-1.5 ${
+                        isHabis
+                          ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed line-through opacity-60"
+                          : isSelected
+                            ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
+                            : "bg-white text-neutral-700 border-stone-200 hover:border-stone-400"
                       }`}
                     >
-                      {warnaName}
+                      <span>{warnaName}</span>
+                      <span
+                        className={`text-[8.5px] font-mono ${
+                          isSelected ? "text-amber-200" : "text-stone-400"
+                        }`}
+                      >
+                        ({isHabis ? "Habis" : `${stokWarnaIni}`})
+                      </span>
                     </button>
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {product.ukuran && product.ukuran.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs tracking-wider uppercase">
-                <span className="text-neutral-400 font-bold">UKURAN</span>
-                <span className="text-[10px] text-neutral-400 font-medium tracking-widest">
-                  PILIH SALAH SATU
-                </span>
-              </div>
+          <p className="text-xs text-neutral-600 leading-relaxed">
+            {product.desc}
+          </p>
 
-              <div className="flex flex-wrap gap-2">
-                {product.ukuran.map((size: string) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => setSelectedSize(size)}
-                    className={`px-3.5 py-1.5 text-xs font-bold uppercase transition border cursor-pointer ${
-                      selectedSize === size
-                        ? "border-neutral-950 bg-neutral-950 text-white shadow-2xs"
-                        : "border-stone-200 text-neutral-700 hover:border-stone-400 bg-white"
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* INPUT QUANTITY: GROSIR MELOMPAT KELIPATAN SERI (+5, +10), ECERAN 1 PER 1 */}
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
-              Jumlah Pembelian
+              Jumlah Pesanan{" "}
+              {isGrosir ? `(Kelipatan Seri: ${minGrosir} Pcs)` : "(Pcs Satuan)"}
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex items-center border border-stone-300 bg-white">
+              <div className="flex items-center border border-stone-300 bg-white rounded-2xs">
+                {/* Tombol Kurang (-) */}
                 <button
                   type="button"
-                  onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
-                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-stone-100 transition active:scale-95 cursor-pointer"
+                  disabled={quantity <= minAllowedQty}
+                  onClick={() => {
+                    setQuantity((prev) =>
+                      Math.max(minAllowedQty, prev - stepQty),
+                    );
+                  }}
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-stone-100 transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <input
-                  type="number"
-                  min="1"
-                  max={sisaStok}
-                  value={quantity}
-                  onChange={(e) => {
-                    const val = Math.max(
-                      1,
-                      Math.min(sisaStok, Number(e.target.value) || 1),
-                    );
-                    setQuantity(val);
-                  }}
-                  className="w-12 h-9 text-center text-xs font-bold font-mono text-neutral-900 focus:outline-none border-x border-stone-200"
-                />
+
+                {/* Display Quantity */}
+                <span className="w-12 text-center text-xs font-bold font-mono text-neutral-900 border-x border-stone-200 py-2 select-none">
+                  {currentAvailableStock <= 0 ? 0 : quantity}
+                </span>
+
+                {/* Tombol Tambah (+) */}
                 <button
                   type="button"
-                  onClick={() =>
-                    setQuantity((prev) => Math.min(sisaStok, prev + 1))
+                  disabled={
+                    quantity + stepQty > currentAvailableStock ||
+                    currentAvailableStock <= 0
                   }
-                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-stone-100 transition active:scale-95 cursor-pointer"
+                  onClick={() => {
+                    setQuantity((prev) =>
+                      Math.min(currentAvailableStock, prev + stepQty),
+                    );
+                  }}
+                  className="w-9 h-9 flex items-center justify-center text-neutral-700 hover:bg-stone-100 transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <div className="text-[11px] text-neutral-500">
-                Total:{" "}
+                Subtotal:{" "}
                 <strong className="text-neutral-950 font-mono text-xs font-bold">
                   Rp {subtotalPrice.toLocaleString("id-ID")}
                 </strong>
+                {isGrosir && (
+                  <span className="ml-1 text-[10px] text-amber-900 font-semibold">
+                    ({Math.floor(quantity / minGrosir)} Seri)
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
+          {/* BUTTON ADD TO CART */}
           <div className="pt-2">
             <button
               onClick={handleAddToCart}
-              disabled={sisaStok <= 0}
-              className={`w-full text-xs tracking-[0.15em] font-bold uppercase py-3.5 transition active:scale-[0.99] shadow-sm flex items-center justify-center gap-2 ${
-                sisaStok > 0
+              disabled={currentAvailableStock <= 0}
+              className={`w-full text-xs tracking-[0.15em] font-bold uppercase py-3.5 transition active:scale-[0.99] shadow-sm flex items-center justify-center gap-2 rounded-2xs ${
+                currentAvailableStock > 0
                   ? "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer"
                   : "bg-stone-200 text-stone-400 cursor-not-allowed"
               }`}
             >
               <ShoppingBag className="w-4 h-4" />
               <span>
-                {sisaStok > 0
-                  ? `+ KERANJANG (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})`
-                  : "STOK HABIS"}
+                {currentAvailableStock > 0
+                  ? isGrosir
+                    ? `+ KERANJANG SERI (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})`
+                    : `+ KERANJANG (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})`
+                  : isGrosir
+                    ? "STOK SERI HABIS"
+                    : `WARNA ${selectedColor} HABIS`}
               </span>
             </button>
           </div>
 
+          {/* ACCORDION INFORMATION */}
           <div className="border-t border-stone-200 pt-3 space-y-2 text-xs">
             <div className="border-b border-stone-100 pb-2">
               <button
@@ -725,15 +831,17 @@ function ProductDetailContent() {
               {openAccordion === "shipping" && (
                 <div className="mt-2 text-neutral-600 space-y-1 pl-1 leading-relaxed">
                   <p>
-                    • Pengiriman langsung dari Dusun Jati, Mergayu, Bandung,
-                    Tulungagung
+                    • Pengiriman langsung dari Konveksi Dusun Jati, Mergayu,
+                    Bandung, Tulungagung
                   </p>
-                  <p>• Ekspedisi reguler: JNE, POS, TIKI, J&T</p>
+                  <p>• Ekspedisi Reguler: JNE, J&T, SiCepat, POS Indonesia</p>
                   <p>
-                    • Ekspedisi kargo (&ge;10 kg): JNE JTR, SiCepat GOKIL, J&T
+                    • Ekspedisi Kargo (≥10 kg): JNE JTR, SiCepat GOKIL, J&T
                     Cargo
                   </p>
-                  <p>• Garansi ganti baru 100% jika terdapat cacat produksi</p>
+                  <p>
+                    • Garansi ganti produk 100% jika ditemukan cacat produksi
+                  </p>
                 </div>
               )}
             </div>
@@ -765,7 +873,7 @@ export default function ProductDetailPage() {
             <div className="leading-tight">
               <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
                 <span className="font-black tracking-wider">ALMACO</span>
-                <span className="font-light text-amber-800">FASHION</span>
+                <span className="font-light text-amber-800 ml-1">FASHION</span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block">
                 Fashionable • Syari • Berkualitas

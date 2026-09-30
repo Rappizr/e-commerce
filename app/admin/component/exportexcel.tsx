@@ -24,63 +24,34 @@ interface ExportExcelModalProps {
   onSuccess: (msg: string) => void;
 }
 
+const escapeXml = (unsafe: string): string => {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+};
+
 const formatTanggalStandar = (tglStr?: string, rawDate?: string): string => {
-  if (rawDate) {
-    const d = new Date(rawDate);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
+  const dateToParse = rawDate || tglStr;
+  if (!dateToParse) return "-";
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateToParse)) return dateToParse;
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateToParse)) {
+    const parts = dateToParse.split("T")[0].split("-");
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
 
-  if (tglStr) {
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(tglStr)) return tglStr;
-    if (/^\d{4}-\d{2}-\d{2}/.test(tglStr)) {
-      const parts = tglStr.split("T")[0].split("-");
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-
-    const bulanMap: { [key: string]: string } = {
-      jan: "01",
-      feb: "02",
-      mar: "03",
-      apr: "04",
-      mei: "05",
-      may: "05",
-      jun: "06",
-      jul: "07",
-      agu: "08",
-      aug: "08",
-      sep: "09",
-      okt: "10",
-      oct: "10",
-      nov: "11",
-      des: "12",
-      dec: "12",
-    };
-
-    const cleanStr = tglStr.toLowerCase().replace(/,/g, "");
-    const tokens = cleanStr.split(/\s+/);
-    if (tokens.length >= 3) {
-      const day = tokens[0].padStart(2, "0");
-      const monthKey = tokens[1].slice(0, 3);
-      const month = bulanMap[monthKey] || "01";
-      const year = tokens[2];
-      return `${day}/${month}/${year}`;
-    }
-
-    const parsed = new Date(tglStr);
-    if (!isNaN(parsed.getTime())) {
-      const day = String(parsed.getDate()).padStart(2, "0");
-      const month = String(parsed.getMonth() + 1).padStart(2, "0");
-      const year = parsed.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
+  const d = new Date(dateToParse);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   }
 
-  return "-";
+  return dateToParse;
 };
 
 export default function ExportExcelModal({
@@ -104,16 +75,19 @@ export default function ExportExcelModal({
     const rowsHtml = data
       .map((item, idx) => {
         const tanggalBaku = formatTanggalStandar(item.tanggal, item.rawDate);
+        const cleanKeterangan = escapeXml(item.keterangan || "-");
+        const cleanKategori = escapeXml(item.kategori || "Umum");
+
         return `
-        <tr height="26">
-          <td align="center" style="border:1px solid #bfbfbf; vertical-align:middle; mso-number-format:'\\@';">${idx + 1}</td>
-          <td align="center" style="border:1px solid #bfbfbf; vertical-align:middle; mso-number-format:'\\@'; font-family:Consolas, monospace;">${tanggalBaku}</td>
-          <td align="left" style="border:1px solid #bfbfbf; vertical-align:middle; padding-left:8px; padding-right:8px; mso-number-format:'\\@'; font-family:Consolas, Arial, sans-serif;">${item.keterangan}</td>
-          <td align="center" style="border:1px solid #bfbfbf; vertical-align:middle; mso-number-format:'\\@';">${item.kategori}</td>
-          <td align="center" style="border:1px solid #bfbfbf; vertical-align:middle; font-weight:bold; color:${item.tipe === "masuk" ? "#047857" : "#be123c"}; background-color:${item.tipe === "masuk" ? "#ecfdf5" : "#fff1f2"}; mso-number-format:'\\@';">
+        <tr height="24">
+          <td align="center" style="border:1px solid #d4d4d4; vertical-align:middle; mso-number-format:'\\@';">${idx + 1}</td>
+          <td align="center" style="border:1px solid #d4d4d4; vertical-align:middle; mso-number-format:'\\@'; font-family:Consolas, monospace;">${tanggalBaku}</td>
+          <td align="left" style="border:1px solid #d4d4d4; vertical-align:middle; padding-left:8px; padding-right:8px; mso-number-format:'\\@';">${cleanKeterangan}</td>
+          <td align="center" style="border:1px solid #d4d4d4; vertical-align:middle; mso-number-format:'\\@';">${cleanKategori}</td>
+          <td align="center" style="border:1px solid #d4d4d4; vertical-align:middle; font-weight:bold; color:${item.tipe === "masuk" ? "#047857" : "#be123c"}; background-color:${item.tipe === "masuk" ? "#ecfdf5" : "#fff1f2"}; mso-number-format:'\\@';">
             ${item.tipe === "masuk" ? "MASUK" : "KELUAR"}
           </td>
-          <td align="right" style="border:1px solid #bfbfbf; vertical-align:middle; padding-right:8px; font-weight:bold; mso-number-format:'\\#\\,\\#\\#0';">
+          <td align="right" style="border:1px solid #d4d4d4; vertical-align:middle; padding-right:8px; font-weight:bold; font-family:Consolas, monospace; mso-number-format:'\\#\\,\\#\\#0';">
             ${item.nominal}
           </td>
         </tr>
@@ -154,7 +128,7 @@ export default function ExportExcelModal({
             <col width="95" />
             <col width="140" />
 
-            <!-- JUDUL BESAR -->
+            <!-- KOP TOKO -->
             <tr height="32">
               <td colspan="6" align="center" style="font-size:14pt; font-weight:bold; vertical-align:middle;">
                 LAPORAN KAS ALMACO FASHION
@@ -162,7 +136,7 @@ export default function ExportExcelModal({
             </tr>
             <tr height="18">
               <td colspan="6" align="center" style="font-size:9pt; color:#666666; vertical-align:middle;">
-                Tanggal Unduh: ${new Date().toLocaleDateString("id-ID")} | Filter: ${filterTipe.toUpperCase()}
+                Tanggal Unduh: ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} | Filter: ${filterTipe.toUpperCase()}
               </td>
             </tr>
             <tr height="12"><td colspan="6"></td></tr>
@@ -170,15 +144,15 @@ export default function ExportExcelModal({
             <!-- RINGKASAN SALDO -->
             <tr height="22">
               <td colspan="4" align="left" style="border:1px solid #bfbfbf; background-color:#f8f8f8; padding-left:8px; font-weight:bold;">Total Pemasukan</td>
-              <td colspan="2" align="right" style="border:1px solid #bfbfbf; padding-right:8px; font-weight:bold; color:#047857;">Rp ${totalMasuk.toLocaleString("id-ID")}</td>
+              <td colspan="2" align="right" style="border:1px solid #bfbfbf; padding-right:8px; font-weight:bold; color:#047857; mso-number-format:'\\#\\,\\#\\#0';">${totalMasuk}</td>
             </tr>
             <tr height="22">
               <td colspan="4" align="left" style="border:1px solid #bfbfbf; background-color:#f8f8f8; padding-left:8px; font-weight:bold;">Total Pengeluaran</td>
-              <td colspan="2" align="right" style="border:1px solid #bfbfbf; padding-right:8px; font-weight:bold; color:#be123c;">Rp ${totalKeluar.toLocaleString("id-ID")}</td>
+              <td colspan="2" align="right" style="border:1px solid #bfbfbf; padding-right:8px; font-weight:bold; color:#be123c; mso-number-format:'\\#\\,\\#\\#0';">${totalKeluar}</td>
             </tr>
             <tr height="24">
               <td colspan="4" align="left" style="border:1px solid #737373; background-color:#e5e5e5; padding-left:8px; font-weight:bold;">Saldo Bersih</td>
-              <td colspan="2" align="right" style="border:1px solid #737373; background-color:#e5e5e5; padding-right:8px; font-weight:bold; color:#171717;">Rp ${saldoBersih.toLocaleString("id-ID")}</td>
+              <td colspan="2" align="right" style="border:1px solid #737373; background-color:#e5e5e5; padding-right:8px; font-weight:bold; color:#171717; mso-number-format:'\\#\\,\\#\\#0';">${saldoBersih}</td>
             </tr>
             <tr height="14"><td colspan="6"></td></tr>
 

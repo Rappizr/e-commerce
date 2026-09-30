@@ -24,7 +24,7 @@ export interface OrderRecordResi {
   no_resi?: string | null;
   kurir?: string | null;
   berat_total?: number;
-  catatan?: string | null; // Catatan khusus dari pembeli saat checkout
+  catatan?: string | null;
   created_at: string;
   order_items: OrderItemResi[];
 }
@@ -76,7 +76,7 @@ export const cetakLabelPacking = (
         <td style="padding: 5px 3px; vertical-align: top; width: 20px;">${i + 1}.</td>
         <td style="padding: 5px 3px; vertical-align: top;">
           <div style="font-weight: bold; font-size: 11px;">${prod.nama_produk}</div>
-          <div style="font-size: 10px; color: #555555;">Varian: ${prod.warna || "-"} | Size: ${prod.ukuran || "-"}</div>
+          <div style="font-size: 10px; color: #555555;">Varian: ${prod.warna || "Default"} | Size: ${prod.ukuran || "All Size"}</div>
         </td>
         <td style="padding: 5px 3px; text-align: right; vertical-align: top; font-weight: bold; font-size: 12px; width: 35px;">
           x${prod.qty}
@@ -303,7 +303,7 @@ export const cetakLabelPacking = (
                 item.catatan && item.catatan.trim()
                   ? `
                   <div class="catatan-box">
-                    <div class="catatan-title">💬 Catatan Khusus Pembeli:</div>
+                    <div class="catatan-title">Catatan Khusus Pembeli:</div>
                     <div class="catatan-val">"${item.catatan.trim()}"</div>
                   </div>
                 `

@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   Tag,
   Layers,
+  PackageCheck,
+  ShoppingBag,
 } from "lucide-react";
 import { supabase } from "../../penyimpanan/supabase";
 
@@ -28,9 +30,9 @@ export interface ProdukItem {
   stok: number;
   berat: number;
   deskripsi: string;
-  is_grosir?: boolean;
-  min_grosir?: number | null;
-  harga_grosir?: number | null;
+  is_grosir: boolean;
+  min_grosir: number | null;
+  harga_grosir: number | null;
   rincian: string[];
   warna: string[];
   ukuran: string[];
@@ -38,10 +40,11 @@ export interface ProdukItem {
   gambarUtama: string;
 }
 
+// KOMPRESI ULTRA-RINGAN: Ukuran file menjadi ±25-45 KB per foto
 const compressImage = (
   file: File,
-  maxDimension = 700,
-  quality = 0.6,
+  maxDimension = 480,
+  quality = 0.45,
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -68,12 +71,21 @@ const compressImage = (
 
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { alpha: false });
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
+          ctx.imageSmoothingQuality = "medium";
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+
+          let compressedDataUrl = canvas.toDataURL("image/webp", quality);
+          if (!compressedDataUrl.startsWith("data:image/webp")) {
+            compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+          }
+
+          canvas.width = 0;
+          canvas.height = 0;
           resolve(compressedDataUrl);
         } else {
           resolve(event.target?.result as string);
@@ -88,6 +100,10 @@ const compressImage = (
 export default function ProdukComponent() {
   const [produk, setProduk] = useState<ProdukItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [filterTipe, setFilterTipe] = useState<"semua" | "ecer" | "grosir">(
+    "semua",
+  );
 
   const fetchProdukFromSupabase = async () => {
     setIsLoading(true);
@@ -99,7 +115,7 @@ export default function ProdukComponent() {
 
       if (data && !error) {
         const mappedProducts: ProdukItem[] = data.map((p: any) => ({
-          id: p.id,
+          id: Number(p.id),
           nama: p.nama || "Busana Almaco",
           kategori: p.kategori || "Daster",
           harga: Number(p.harga || 0),
@@ -117,7 +133,7 @@ export default function ProdukComponent() {
           ukuran:
             Array.isArray(p.ukuran) && p.ukuran.length > 0
               ? p.ukuran
-              : ["All Size"],
+              : ["All Size (LD 115 cm)"],
           gambarList: Array.isArray(p.gambar_list)
             ? p.gambar_list
             : p.gambar_utama
@@ -145,6 +161,7 @@ export default function ProdukComponent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
 
+  // DAFTAR KATEGORI
   const [kategoriList, setKategoriList] = useState<string[]>([
     "Daster",
     "Gamis",
@@ -157,44 +174,88 @@ export default function ProdukComponent() {
     string | null
   >(null);
 
+  // DAFTAR UKURAN PRESET & CUSTOM
+  const [ukuranList, setUkuranList] = useState<string[]>([
+    "All Size (LD 115 cm)",
+    "Standar (LD 105 cm)",
+    "Jumbo (LD 120 cm)",
+    "Super Jumbo (LD 130 cm)",
+    "M",
+    "L",
+    "XL",
+    "XXL",
+  ]);
+  const [newUkuranInput, setNewUkuranInput] = useState("");
+  const [showAddUkuranInput, setShowAddUkuranInput] = useState(false);
+
   const [inputWarnaBaru, setInputWarnaBaru] = useState("");
 
   const [formProduk, setFormProduk] = useState({
+    tipeProduk: "ecer" as "ecer" | "grosir",
     nama: "",
     kategori: "",
     harga: "",
-    stok: "",
     berat: "100",
+    ukuranTeks: "All Size (LD 115 cm)",
     deskripsi: "",
     rincianText: "",
-    is_grosir: false,
-    min_grosir: "",
-    harga_grosir: "",
+    min_grosir: "5",
+    stokGrosirPcs: "50",
     warnaList: [] as string[],
-    ukuranPilihan: [] as string[],
+    stokPerWarna: {} as { [warna: string]: number },
     gambarList: [] as string[],
   });
 
-  const ukuranTersedia = ["XS", "S", "M", "L", "XL", "XXL", "All Size"];
-
-  const handleOpenEdit = (item: ProdukItem) => {
+  const handleOpenEdit = async (item: ProdukItem) => {
     setIsEditMode(true);
     setEditingItem(item);
+
+    const stokWarnaMap: { [warna: string]: number } = {};
+    const itemWarna =
+      item.warna && item.warna.length > 0 ? item.warna : ["Default"];
+    const ukuranUtama =
+      item.ukuran && item.ukuran.length > 0
+        ? item.ukuran[0]
+        : "All Size (LD 115 cm)";
+
+    if (ukuranUtama && !ukuranList.includes(ukuranUtama)) {
+      setUkuranList((prev) => [...prev, ukuranUtama]);
+    }
+
+    try {
+      const { data: varData, error } = await supabase
+        .from("product_variants")
+        .select("warna, stok")
+        .eq("product_id", Number(item.id));
+
+      if (!error && varData && varData.length > 0) {
+        varData.forEach((v: any) => {
+          const w = String(v.warna || "Default")
+            .trim()
+            .toUpperCase();
+          stokWarnaMap[w] = Number(v.stok ?? 0);
+        });
+      }
+    } catch (err) {
+      console.error("Gagal load varian:", err);
+    }
+
+    const isGrosir = Boolean(item.is_grosir);
+    const hargaAktif = isGrosir ? item.harga_grosir || item.harga : item.harga;
+
     setFormProduk({
+      tipeProduk: isGrosir ? "grosir" : "ecer",
       nama: item.nama,
       kategori: item.kategori,
-      harga: item.harga ? item.harga.toLocaleString("id-ID") : "",
-      stok: String(item.stok ?? 0),
+      harga: hargaAktif ? hargaAktif.toLocaleString("id-ID") : "",
       berat: item.berat ? String(item.berat) : "100",
+      ukuranTeks: ukuranUtama,
       deskripsi: item.deskripsi || "",
       rincianText: (item.rincian || []).join("\n"),
-      is_grosir: Boolean(item.is_grosir),
-      min_grosir: item.min_grosir ? String(item.min_grosir) : "",
-      harga_grosir: item.harga_grosir
-        ? item.harga_grosir.toLocaleString("id-ID")
-        : "",
-      warnaList: item.warna || [],
-      ukuranPilihan: item.ukuran || [],
+      min_grosir: item.min_grosir ? String(item.min_grosir) : "5",
+      stokGrosirPcs: String(item.stok || 0),
+      warnaList: isGrosir ? ["Seri Mix (Campur Warna)"] : itemWarna,
+      stokPerWarna: stokWarnaMap,
       gambarList: item.gambarList || [],
     });
     setShowAddModal(true);
@@ -204,21 +265,23 @@ export default function ProdukComponent() {
     setIsEditMode(false);
     setEditingItem(null);
     setFormProduk({
+      tipeProduk: "ecer",
       nama: "",
       kategori: "",
       harga: "",
-      stok: "",
       berat: "100",
+      ukuranTeks: "All Size (LD 115 cm)",
       deskripsi: "",
       rincianText: "",
-      is_grosir: false,
-      min_grosir: "",
-      harga_grosir: "",
+      min_grosir: "5",
+      stokGrosirPcs: "50",
       warnaList: [],
-      ukuranPilihan: [],
+      stokPerWarna: {},
       gambarList: [],
     });
     setInputWarnaBaru("");
+    setShowAddKategoriInput(false);
+    setShowAddUkuranInput(false);
   };
 
   const [validationModal, setValidationModal] = useState<{
@@ -238,7 +301,7 @@ export default function ProdukComponent() {
       setValidationModal({
         show: true,
         title: "Kategori Sudah Ada",
-        message: `Kategori "${trimmed}" sudah terdaftar dalam pilihan. Silakan pilih dari daftar yang tersedia.`,
+        message: `Kategori "${trimmed}" sudah terdaftar dalam pilihan.`,
       });
       return;
     }
@@ -262,19 +325,34 @@ export default function ProdukComponent() {
     setToastMessage(`Kategori "${kat}" berhasil dihapus.`);
   };
 
+  const handleAddUkuran = () => {
+    const trimmed = newUkuranInput.trim();
+    if (!trimmed) return;
+    if (ukuranList.some((u) => u.toLowerCase() === trimmed.toLowerCase())) {
+      setValidationModal({
+        show: true,
+        title: "Ukuran Sudah Ada",
+        message: `Ukuran "${trimmed}" sudah terdaftar dalam pilihan.`,
+      });
+      return;
+    }
+    const updated = [...ukuranList, trimmed];
+    setUkuranList(updated);
+    setFormProduk((prev) => ({ ...prev, ukuranTeks: trimmed }));
+    setNewUkuranInput("");
+    setShowAddUkuranInput(false);
+    setToastMessage(`Ukuran "${trimmed}" berhasil ditambahkan!`);
+  };
+
   const handleAddCustomColor = (e?: React.SyntheticEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-    const trimmed = inputWarnaBaru.trim();
+    const trimmed = inputWarnaBaru.trim().toUpperCase();
     if (!trimmed) return;
 
-    if (
-      formProduk.warnaList.some(
-        (w) => w.toLowerCase() === trimmed.toLowerCase(),
-      )
-    ) {
+    if (formProduk.warnaList.some((w) => w.toUpperCase() === trimmed)) {
       setInputWarnaBaru("");
       return;
     }
@@ -287,10 +365,16 @@ export default function ProdukComponent() {
   };
 
   const handleRemoveColor = (warnaToRemove: string) => {
-    setFormProduk((prev) => ({
-      ...prev,
-      warnaList: prev.warnaList.filter((w) => w !== warnaToRemove),
-    }));
+    setFormProduk((prev) => {
+      const updatedList = prev.warnaList.filter((w) => w !== warnaToRemove);
+      const updatedStok = { ...prev.stokPerWarna };
+      delete updatedStok[warnaToRemove.toUpperCase()];
+      return {
+        ...prev,
+        warnaList: updatedList,
+        stokPerWarna: updatedStok,
+      };
+    });
   };
 
   const handleMultipleImageUpload = async (
@@ -312,17 +396,13 @@ export default function ProdukComponent() {
     setIsCompressing(true);
     try {
       const compressedList = await Promise.all(
-        Array.from(files).map((file) => compressImage(file, 700, 0.6)),
+        Array.from(files).map((file) => compressImage(file, 480, 0.45)),
       );
 
       setFormProduk((prev) => ({
         ...prev,
         gambarList: [...prev.gambarList, ...compressedList],
       }));
-
-      setToastMessage(
-        `${files.length} foto berhasil dioptimalkan dan ditambahkan.`,
-      );
     } catch (err) {
       console.error(err);
       setValidationModal({
@@ -366,40 +446,44 @@ export default function ProdukComponent() {
     }));
   };
 
-  const handleHargaGrosirChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/[^0-9]/g, "");
-    if (!val) {
-      setFormProduk((prev) => ({ ...prev, harga_grosir: "" }));
-      return;
-    }
+  const handleStokWarnaChange = (warna: string, rawVal: string) => {
+    const cleaned = rawVal.replace(/[^0-9]/g, "");
+    const num = cleaned === "" ? 0 : parseInt(cleaned, 10);
+    const key = warna.trim().toUpperCase();
+
     setFormProduk((prev) => ({
       ...prev,
-      harga_grosir: Number(val).toLocaleString("id-ID"),
+      stokPerWarna: {
+        ...prev.stokPerWarna,
+        [key]: num,
+      },
     }));
   };
 
-  const toggleUkuran = (size: string) => {
-    setFormProduk((prev) => {
-      const exists = prev.ukuranPilihan.includes(size);
-      if (exists) {
-        return {
-          ...prev,
-          ukuranPilihan: prev.ukuranPilihan.filter((s) => s !== size),
-        };
-      }
-      return { ...prev, ukuranPilihan: [...prev.ukuranPilihan, size] };
-    });
-  };
+  const isGrosirForm = formProduk.tipeProduk === "grosir";
+  const activeWarnaList = isGrosirForm
+    ? ["Seri Mix (Campur Warna)"]
+    : formProduk.warnaList.length > 0
+      ? formProduk.warnaList
+      : ["Default"];
+
+  const totalStokTerhitung = isGrosirForm
+    ? Number(formProduk.stokGrosirPcs.replace(/[^0-9]/g, "")) || 0
+    : activeWarnaList.reduce((acc, w) => {
+        const key = w.trim().toUpperCase();
+        return acc + (Number(formProduk.stokPerWarna[key]) || 0);
+      }, 0);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isSubmitting || isCompressing) return;
 
     if (!formProduk.nama.trim() || !formProduk.harga) {
       setValidationModal({
         show: true,
         title: "Form Belum Lengkap",
-        message:
-          "Mohon isi Nama Model Busana dan Harga Jual sebelum menyimpan.",
+        message: "Mohon isi Nama Model Busana dan Harga.",
       });
       return;
     }
@@ -408,30 +492,26 @@ export default function ProdukComponent() {
       setValidationModal({
         show: true,
         title: "Pilih Kategori Busana",
-        message:
-          "Silakan klik dan pilih salah satu Kategori Busana sebelum menyimpan produk.",
+        message: "Silakan pilih salah satu Kategori Busana.",
       });
       return;
     }
 
-    if (
-      formProduk.is_grosir &&
-      (!formProduk.min_grosir || !formProduk.harga_grosir)
-    ) {
+    if (!formProduk.ukuranTeks.trim()) {
       setValidationModal({
         show: true,
-        title: "Pengaturan Grosir Belum Lengkap",
-        message:
-          "Karena opsi Grosir diaktifkan, mohon isi Minimal Pembelian dan Harga Grosir Per Pcs.",
+        title: "Pilih Ukuran Busana",
+        message: "Silakan tentukan salah satu ukuran busana.",
       });
       return;
     }
 
+    setIsSubmitting(true);
+
     const rawHarga = Number(formProduk.harga.replace(/[^0-9]/g, "")) || 0;
-    const rawHargaGrosir =
-      formProduk.is_grosir && formProduk.harga_grosir
-        ? Number(formProduk.harga_grosir.replace(/[^0-9]/g, "")) || null
-        : null;
+    const parsedMinGrosir = isGrosirForm
+      ? Math.max(2, Number(formProduk.min_grosir) || 5)
+      : null;
 
     const parsedRincian = formProduk.rincianText
       .split("\n")
@@ -446,42 +526,45 @@ export default function ProdukComponent() {
     const parsedBerat = Number(formProduk.berat);
     const validBerat =
       !isNaN(parsedBerat) && parsedBerat > 0 ? parsedBerat : 100;
+    const cleanUkuran = formProduk.ukuranTeks.trim() || "All Size (LD 115 cm)";
 
     const payload = {
       nama: formProduk.nama.trim(),
       kategori: formProduk.kategori,
       harga: rawHarga,
-      stok: Math.max(0, Number(formProduk.stok) || 0),
+      stok: totalStokTerhitung,
       berat: validBerat,
       deskripsi:
         formProduk.deskripsi.trim() ||
-        "Busana modis berkualitas premium dari ALMACO FASHION.",
-      is_grosir: formProduk.is_grosir,
-      min_grosir:
-        formProduk.is_grosir && formProduk.min_grosir
-          ? Math.max(2, Number(formProduk.min_grosir) || 3)
-          : null,
-      harga_grosir: rawHargaGrosir,
+        (isGrosirForm
+          ? "Paket grosir busana seri campur warna langsung dari konveksi ALMACO FASHION."
+          : "Busana modis berkualitas premium dari ALMACO FASHION."),
+      is_grosir: isGrosirForm,
+      min_grosir: parsedMinGrosir,
+      harga_grosir: isGrosirForm ? rawHarga : null,
       rincian:
         parsedRincian.length > 0
           ? parsedRincian
-          : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
-      warna:
-        formProduk.warnaList.length > 0 ? formProduk.warnaList : ["Default"],
-      ukuran:
-        formProduk.ukuranPilihan.length > 0
-          ? formProduk.ukuranPilihan
-          : ["All Size"],
+          : isGrosirForm
+            ? [
+                `Paket seri otomatis isi ${parsedMinGrosir} pcs beda warna`,
+                "Bahan adem & jahitan konveksi rapi",
+              ]
+            : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
+      warna: activeWarnaList,
+      ukuran: [cleanUkuran],
       gambar_list: finalList,
       gambar_utama: finalList[0],
     };
 
     try {
+      let productId = editingItem?.id;
+
       if (isEditMode && editingItem) {
         const { error } = await supabase
           .from("products")
           .update(payload)
-          .eq("id", editingItem.id);
+          .eq("id", Number(editingItem.id));
 
         if (error) throw error;
 
@@ -498,7 +581,6 @@ export default function ProdukComponent() {
               : item,
           ),
         );
-        setToastMessage(`Produk "${payload.nama}" berhasil diperbarui!`);
       } else {
         const { data, error } = await supabase
           .from("products")
@@ -509,8 +591,9 @@ export default function ProdukComponent() {
         if (error) throw error;
 
         if (data) {
+          productId = Number(data.id);
           const newInsertedItem: ProdukItem = {
-            id: data.id,
+            id: Number(data.id),
             nama: data.nama,
             kategori: data.kategori,
             harga: Number(data.harga || 0),
@@ -528,19 +611,58 @@ export default function ProdukComponent() {
           };
           setProduk((prev) => [newInsertedItem, ...prev]);
         }
-        setToastMessage(
-          `Produk "${payload.nama}" berhasil diterbitkan ke katalog!`,
-        );
       }
+
+      if (productId) {
+        const numericId = Number(productId);
+
+        await supabase
+          .from("product_variants")
+          .delete()
+          .eq("product_id", numericId);
+
+        const variantsPayload = isGrosirForm
+          ? [
+              {
+                product_id: numericId,
+                warna: "Seri Mix (Campur Warna)",
+                ukuran: cleanUkuran,
+                stok: totalStokTerhitung,
+              },
+            ]
+          : activeWarnaList.map((w) => {
+              const key = w.trim().toUpperCase();
+              const stokVal = Number(formProduk.stokPerWarna[key]) || 0;
+              return {
+                product_id: numericId,
+                warna: w.trim(),
+                ukuran: cleanUkuran,
+                stok: stokVal,
+              };
+            });
+
+        if (variantsPayload.length > 0) {
+          await supabase.from("product_variants").insert(variantsPayload);
+        }
+      }
+
+      setToastMessage(
+        isEditMode
+          ? `Produk "${payload.nama}" berhasil diperbarui!`
+          : `Produk "${payload.nama}" berhasil diterbitkan ke katalog!`,
+      );
 
       setShowAddModal(false);
       resetForm();
     } catch (e: any) {
       console.error("Error simpan produk:", e);
-      alert("Gagal menyimpan produk: " + e.message);
+      alert("Gagal menyimpan produk: " + (e.message || JSON.stringify(e)));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  // UPDATE STOK CEPAT (+ / -) SINKRON ANTARA PRODUCTS & PRODUCT_VARIANTS
   const handleUpdateStock = async (id: number, newStock: number) => {
     if (newStock < 0) return;
     setProduk((prev) =>
@@ -548,12 +670,32 @@ export default function ProdukComponent() {
     );
 
     try {
-      const { error } = await supabase
+      await supabase
         .from("products")
         .update({ stok: newStock })
-        .eq("id", id);
+        .eq("id", Number(id));
 
-      if (error) throw error;
+      const targetProd = produk.find((p) => p.id === id);
+      if (targetProd?.is_grosir) {
+        // Grosir: samakan seluruh stok varian
+        await supabase
+          .from("product_variants")
+          .update({ stok: newStock })
+          .eq("product_id", Number(id));
+      } else {
+        // Eceran: sinkronkan jika hanya ada 1 varian default
+        const { data: vList } = await supabase
+          .from("product_variants")
+          .select("id")
+          .eq("product_id", Number(id));
+
+        if (vList && vList.length === 1) {
+          await supabase
+            .from("product_variants")
+            .update({ stok: newStock })
+            .eq("id", vList[0].id);
+        }
+      }
     } catch (err) {
       console.error("Gagal update stok:", err);
     }
@@ -561,10 +703,15 @@ export default function ProdukComponent() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    const targetId = deleteTarget.id;
+    const targetId = Number(deleteTarget.id);
     const targetName = deleteTarget.nama;
 
     try {
+      await supabase
+        .from("product_variants")
+        .delete()
+        .eq("product_id", targetId);
+
       const { error } = await supabase
         .from("products")
         .delete()
@@ -581,6 +728,12 @@ export default function ProdukComponent() {
     }
   };
 
+  const displayedProducts = produk.filter((p) => {
+    if (filterTipe === "ecer") return !p.is_grosir;
+    if (filterTipe === "grosir") return p.is_grosir;
+    return true;
+  });
+
   return (
     <div className="space-y-4 w-full relative">
       <style jsx global>{`
@@ -593,6 +746,23 @@ export default function ProdukComponent() {
           -moz-appearance: textfield !important;
         }
       `}</style>
+
+      {/* OVERLAY LOADING SAAT UPLOAD / TERBITKAN */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-stone-200 p-6 rounded-xs shadow-2xl flex flex-col items-center justify-center gap-3 max-w-xs w-full text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-amber-900" />
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                {isEditMode ? "Memperbarui Data..." : "Menerbitkan Produk..."}
+              </h4>
+              <p className="text-[10.5px] text-neutral-500">
+                Menyimpan data dan foto ke database. Mohon tunggu sebentar.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
@@ -628,32 +798,77 @@ export default function ProdukComponent() {
         </div>
       )}
 
-      {/* HEADER KONTROL PRODUK */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 border border-stone-200 shadow-2xs rounded-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-2xs">
-              <Layers className="w-4 h-4" />
-            </span>
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
-              Katalog Produk & Galeri Etalase
-            </h2>
+      {/* HEADER KONTROL PRODUK & FILTER TAB */}
+      <div className="bg-white p-4 sm:p-5 border border-stone-200 shadow-2xs rounded-xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-2xs">
+                <Layers className="w-4 h-4" />
+              </span>
+              <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900">
+                Katalog Produk (Eceran & Seri Grosir Terpisah)
+              </h2>
+            </div>
+            <p className="text-[10px] sm:text-xs text-neutral-500 mt-1">
+              Kelola etalase pakaian satuan (ecer) dan paket seri grosir
+              konveksi secara terpisah.
+            </p>
           </div>
-          <p className="text-[10px] sm:text-xs text-neutral-500 mt-1">
-            Kelola data busana, foto galeri, pengaturan grosir/ecer, variasi
-            warna & ukuran, bobot kirim, dan stok inventori.
-          </p>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-neutral-950 hover:bg-amber-950 text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition active:scale-95 shrink-0 cursor-pointer rounded-2xs"
+          >
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+            <span>Tambah Produk Baru</span>
+          </button>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowAddModal(true);
-          }}
-          className="inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-neutral-950 hover:bg-amber-950 text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider px-4 py-2.5 shadow-xs transition active:scale-95 shrink-0 cursor-pointer rounded-2xs"
-        >
-          <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
-          <span>Tambah Produk Baru</span>
-        </button>
+
+        {/* TAB FILTER TIPE */}
+        <div className="flex items-center gap-1.5 pt-1 border-t border-stone-100">
+          <button
+            type="button"
+            onClick={() => setFilterTipe("semua")}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-2xs transition cursor-pointer ${
+              filterTipe === "semua"
+                ? "bg-neutral-950 text-white shadow-2xs"
+                : "bg-stone-50 text-neutral-600 hover:bg-stone-100"
+            }`}
+          >
+            Semua ({produk.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTipe("ecer")}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-2xs transition flex items-center gap-1 cursor-pointer ${
+              filterTipe === "ecer"
+                ? "bg-neutral-950 text-white shadow-2xs"
+                : "bg-stone-50 text-neutral-600 hover:bg-stone-100"
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>
+              Eceran Satuan ({produk.filter((p) => !p.is_grosir).length})
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTipe("grosir")}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-2xs transition flex items-center gap-1 cursor-pointer ${
+              filterTipe === "grosir"
+                ? "bg-amber-900 text-white shadow-2xs"
+                : "bg-amber-50 text-amber-950 hover:bg-amber-100"
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>
+              Seri Grosir ({produk.filter((p) => p.is_grosir).length})
+            </span>
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -663,17 +878,18 @@ export default function ProdukComponent() {
             Memuat katalog produk...
           </span>
         </div>
-      ) : produk.length === 0 ? (
+      ) : displayedProducts.length === 0 ? (
         <div className="bg-white border border-stone-200 p-8 sm:p-14 text-center text-stone-400 space-y-3 shadow-2xs rounded-xs">
           <div className="w-12 h-12 sm:w-14 sm:h-14 bg-stone-100 rounded-full flex items-center justify-center mx-auto text-stone-400">
             <PackagePlus className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
           <div className="space-y-1">
             <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-800">
-              Katalog Busana Masih Kosong
+              Tidak Ada Produk {filterTipe.toUpperCase()}
             </p>
             <p className="text-[10px] sm:text-xs text-neutral-500 max-w-sm mx-auto">
-              Belum ada produk di katalog. Mulai tambahkan pakaian sekarang.
+              Belum ada produk di kategori filter ini. Mulai tambahkan busana
+              sekarang.
             </p>
           </div>
           <button
@@ -684,18 +900,18 @@ export default function ProdukComponent() {
             className="inline-flex items-center gap-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 transition shadow-xs mt-2 cursor-pointer rounded-2xs"
           >
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
-            <span>Mulai Tambah Produk</span>
+            <span>Tambah Produk</span>
           </button>
         </div>
       ) : (
         <div className="max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pb-4">
-            {produk.map((item) => (
+            {displayedProducts.map((item) => (
               <div
                 key={item.id}
                 className={`bg-white border overflow-hidden flex flex-col justify-between shadow-2xs group transition-all duration-200 rounded-xs ${
                   item.is_grosir
-                    ? "border-amber-800/30 hover:border-amber-900"
+                    ? "border-amber-800/40 hover:border-amber-900"
                     : "border-stone-200 hover:border-stone-400"
                 }`}
               >
@@ -704,19 +920,22 @@ export default function ProdukComponent() {
                     src={item.gambarUtama}
                     alt={item.nama}
                     fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                     className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
 
-                  {/* Badge Kategori */}
                   <span className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-white/95 px-2 py-0.5 border border-stone-200 text-neutral-900 shadow-2xs rounded-2xs">
                     {item.kategori}
                   </span>
 
-                  {/* Badge Grosir */}
-                  {item.is_grosir && (
-                    <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-neutral-950 text-amber-200 border border-amber-700/40 px-2 py-0.5 shadow-sm flex items-center gap-1 rounded-2xs">
+                  {item.is_grosir ? (
+                    <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-amber-900 text-amber-100 border border-amber-700/40 px-2 py-0.5 shadow-sm flex items-center gap-1 rounded-2xs">
                       <Tag className="w-2.5 h-2.5 text-amber-300" />
-                      <span>MIN {item.min_grosir || 3} PCS</span>
+                      <span>SERI ({item.min_grosir || 5} PCS)</span>
+                    </span>
+                  ) : (
+                    <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-neutral-950 text-white px-2 py-0.5 shadow-sm rounded-2xs">
+                      ECERAN
                     </span>
                   )}
 
@@ -730,38 +949,35 @@ export default function ProdukComponent() {
                     {item.nama}
                   </h4>
                   <p className="text-[9px] sm:text-[11px] text-neutral-500 line-clamp-1">
-                    {item.ukuran.join(", ")} • {item.warna.length} Warna{" "}
+                    {item.ukuran.join(", ")} •{" "}
+                    {item.is_grosir
+                      ? "Seri Campur Warna"
+                      : `${item.warna.length} Warna`}{" "}
                     {item.berat ? `• ${item.berat} gr` : ""}
                   </p>
 
-                  <div className="flex flex-col pt-0.5 space-y-0.5">
+                  <div className="pt-0.5">
                     <span className="text-[10px] sm:text-xs text-neutral-600 font-medium">
-                      Ecer:{" "}
+                      {item.is_grosir ? "Harga Seri: " : "Harga Satuan: "}
                       <strong className="text-neutral-950 font-bold font-mono">
                         Rp {item.harga.toLocaleString("id-ID")}
+                        <span className="text-[9px] font-normal text-stone-500">
+                          {" "}
+                          /pcs
+                        </span>
                       </strong>
                     </span>
-
-                    {item.is_grosir && item.harga_grosir && (
-                      <div className="bg-[#F8F5EE] border border-amber-200/90 px-2 py-1 mt-1 flex items-center justify-between text-amber-950 rounded-2xs">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-900">
-                          Grosir:
-                        </span>
-                        <span className="text-[10.5px] sm:text-xs font-bold font-mono">
-                          Rp {item.harga_grosir.toLocaleString("id-ID")}{" "}
-                          <span className="text-[8.5px] font-normal text-amber-800">
-                            /pcs
-                          </span>
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="pt-1 flex items-center justify-between">
                     <span
-                      className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 border rounded-2xs ${item.stok > 0 ? "bg-amber-50 text-amber-900 border-amber-200" : "bg-rose-50 text-rose-800 border-rose-200"}`}
+                      className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 border rounded-2xs ${
+                        item.stok > 0
+                          ? "bg-amber-50 text-amber-900 border-amber-200"
+                          : "bg-rose-50 text-rose-800 border-rose-200"
+                      }`}
                     >
-                      Stok: {item.stok}
+                      Total Stok: {item.stok} pcs
                     </span>
                   </div>
                 </div>
@@ -820,9 +1036,9 @@ export default function ProdukComponent() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
           <div
             className="fixed inset-0"
-            onClick={() => setShowAddModal(false)}
+            onClick={() => !isSubmitting && setShowAddModal(false)}
           />
-          <div className="relative z-10 bg-white border border-stone-200 max-w-lg w-full shadow-2xl animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col rounded-xs">
+          <div className="relative z-10 bg-white border border-stone-200 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col rounded-xs">
             <div className="p-3.5 sm:p-4 border-b border-stone-200 flex items-center justify-between bg-white shrink-0">
               <div>
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950 flex items-center gap-1.5">
@@ -835,8 +1051,9 @@ export default function ProdukComponent() {
                 </h3>
               </div>
               <button
+                disabled={isSubmitting}
                 onClick={() => setShowAddModal(false)}
-                className="p-1 text-stone-400 hover:text-neutral-900 transition cursor-pointer"
+                className="p-1 text-stone-400 hover:text-neutral-900 transition cursor-pointer disabled:opacity-30"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -844,8 +1061,70 @@ export default function ProdukComponent() {
 
             <form
               onSubmit={handleAddSubmit}
-              className="p-3.5 sm:p-5 overflow-y-auto space-y-3.5 flex-1 text-xs"
+              className="p-3.5 sm:p-5 overflow-y-auto space-y-4 flex-1 text-xs"
             >
+              {/* PILIHAN TIPE PRODUK */}
+              <div className="p-3 bg-[#FAF8F5] border border-stone-300 rounded-xs space-y-2">
+                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-900 block">
+                  Tipe Katalog Produk:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    className={`flex items-center gap-2 p-2.5 border rounded-2xs cursor-pointer transition ${
+                      !isGrosirForm
+                        ? "bg-white border-neutral-950 ring-1 ring-neutral-950 shadow-xs"
+                        : "bg-stone-50 border-stone-200 hover:bg-white"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="tipeProduk"
+                      value="ecer"
+                      checked={!isGrosirForm}
+                      onChange={() =>
+                        setFormProduk({ ...formProduk, tipeProduk: "ecer" })
+                      }
+                      className="accent-neutral-950"
+                    />
+                    <div>
+                      <span className="font-bold text-neutral-950 text-xs block">
+                        Produk Eceran
+                      </span>
+                      <span className="text-[9.5px] text-stone-500 block">
+                        Pembeli bisa pilih warna satuan
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-center gap-2 p-2.5 border rounded-2xs cursor-pointer transition ${
+                      isGrosirForm
+                        ? "bg-amber-50/70 border-amber-900 ring-1 ring-amber-900 shadow-xs"
+                        : "bg-stone-50 border-stone-200 hover:bg-white"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="tipeProduk"
+                      value="grosir"
+                      checked={isGrosirForm}
+                      onChange={() =>
+                        setFormProduk({ ...formProduk, tipeProduk: "grosir" })
+                      }
+                      className="accent-amber-950"
+                    />
+                    <div>
+                      <span className="font-bold text-amber-950 text-xs block">
+                        Produk Seri Grosir
+                      </span>
+                      <span className="text-[9.5px] text-amber-800/80 block">
+                        Paket campur warna (kelipatan seri)
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {/* UPLOAD FOTO MULTIPLE */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -854,7 +1133,7 @@ export default function ProdukComponent() {
                   </label>
                   {isCompressing ? (
                     <span className="text-[10px] font-bold text-amber-900 flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Memproses
+                      <Loader2 className="w-3 h-3 animate-spin" /> Mengompres
                       Foto...
                     </span>
                   ) : (
@@ -882,6 +1161,7 @@ export default function ProdukComponent() {
                         src={imgSrc}
                         alt={`Foto ${idx + 1}`}
                         fill
+                        sizes="(max-width: 640px) 25vw, 120px"
                         className="object-cover"
                       />
                       {idx === 0 ? (
@@ -934,7 +1214,11 @@ export default function ProdukComponent() {
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Daster Midi Floral Rayon Adem"
+                  placeholder={
+                    isGrosirForm
+                      ? "Contoh: [SERI 5 PCS] Daster Midi Rayon Adem"
+                      : "Contoh: Daster Midi Rayon Adem Satuan"
+                  }
                   value={formProduk.nama}
                   onChange={(e) =>
                     setFormProduk({ ...formProduk, nama: e.target.value })
@@ -943,46 +1227,71 @@ export default function ProdukComponent() {
                 />
               </div>
 
-              {/* BARIS HARGA, STOK, DAN BERAT */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                <div className="space-y-1">
+              {/* PILIHAN UKURAN */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
-                    <span>Harga Ecer (Rp)</span>
+                    <span>Pilih Ukuran Busana (1 Katalog 1 Ukuran)</span>
                     <span className="text-rose-600 font-bold">*</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    inputMode="numeric"
-                    placeholder="Cth: 85000"
-                    value={formProduk.harga}
-                    onChange={handleHargaChange}
-                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAddUkuranInput(!showAddUkuranInput)}
+                    className="text-[10px] font-bold text-amber-900 hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{showAddUkuranInput ? "Tutup" : "Ukuran Baru"}</span>
+                  </button>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
-                    <span>Stok</span>
-                    <span className="text-rose-600 font-bold">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    placeholder="Cth: 50"
-                    value={formProduk.stok}
-                    onChange={(e) =>
-                      setFormProduk({ ...formProduk, stok: e.target.value })
-                    }
-                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
-                  />
-                </div>
+                {showAddUkuranInput && (
+                  <div className="flex gap-1.5 p-1.5 bg-[#FAF8F5] border border-stone-200 rounded-2xs">
+                    <input
+                      type="text"
+                      placeholder="Cth: Jumbo (LD 125 cm)..."
+                      value={newUkuranInput}
+                      onChange={(e) => setNewUkuranInput(e.target.value)}
+                      className="flex-1 bg-white border border-stone-300 px-2.5 py-1 text-xs focus:outline-none focus:border-amber-900 rounded-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddUkuran}
+                      className="px-3 py-1 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase cursor-pointer rounded-2xs transition"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                )}
 
+                <div className="flex flex-wrap gap-1.5">
+                  {ukuranList.map((uk) => {
+                    const isSelected = formProduk.ukuranTeks === uk;
+                    return (
+                      <button
+                        key={uk}
+                        type="button"
+                        onClick={() =>
+                          setFormProduk({ ...formProduk, ukuranTeks: uk })
+                        }
+                        className={`px-3 py-1.5 border text-[10px] font-bold uppercase tracking-wider cursor-pointer transition select-none rounded-2xs ${
+                          isSelected
+                            ? "bg-neutral-950 text-amber-100 border-neutral-950 shadow-2xs"
+                            : "bg-[#FAF8F5] text-neutral-700 border-stone-200 hover:border-stone-400 hover:bg-white"
+                        }`}
+                      >
+                        {uk}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BOBOT & HARGA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1 whitespace-nowrap">
                     <Scale className="w-3 h-3 text-stone-500 shrink-0" />
-                    <span>Berat (Gram)</span>
+                    <span>Berat Kirim Per Pcs (Gram)</span>
                   </label>
                   <input
                     type="number"
@@ -995,43 +1304,46 @@ export default function ProdukComponent() {
                     className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
                   />
                 </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-0.5 whitespace-nowrap">
+                    <span>
+                      {isGrosirForm
+                        ? "Harga Grosir / Pcs (Rp)"
+                        : "Harga Eceran Satuan (Rp)"}
+                    </span>
+                    <span className="text-rose-600 font-bold">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    placeholder={isGrosirForm ? "Cth: 55000" : "Cth: 85000"}
+                    value={formProduk.harga}
+                    onChange={handleHargaChange}
+                    className="w-full bg-[#FAF8F5] border border-stone-300 px-2.5 py-2 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-bold font-mono rounded-2xs transition-colors"
+                  />
+                </div>
               </div>
 
-              {/* FORM PENGATURAN GROSIR */}
-              <div className="p-3 bg-[#F8F5EE] border border-amber-800/30 rounded-xs space-y-2.5">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={formProduk.is_grosir}
-                    onChange={(e) =>
-                      setFormProduk((prev) => ({
-                        ...prev,
-                        is_grosir: e.target.checked,
-                        min_grosir: e.target.checked
-                          ? prev.min_grosir || "3"
-                          : "",
-                        harga_grosir: e.target.checked ? prev.harga_grosir : "",
-                      }))
-                    }
-                    className="w-4 h-4 accent-amber-950 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5 text-amber-800" />
-                    <span>Aktifkan Harga Grosir / Seri</span>
-                  </span>
-                </label>
+              {/* KETENTUAN SERI GROSIR */}
+              {isGrosirForm && (
+                <div className="p-3 bg-amber-50/70 border border-amber-300 rounded-xs space-y-2.5">
+                  <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs uppercase tracking-wider">
+                    <PackageCheck className="w-4 h-4 text-amber-800" />
+                    <span>Ketentuan Paket Seri Grosir</span>
+                  </div>
 
-                {formProduk.is_grosir && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-amber-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-0.5">
-                        <span>Min. Pembelian Seri (Pcs)</span>
+                        <span>Isi 1 Seri (Min. Pcs)</span>
                         <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="number"
                         min="2"
-                        placeholder="Cth: 3"
+                        placeholder="Cth: 5"
                         value={formProduk.min_grosir}
                         onChange={(e) =>
                           setFormProduk({
@@ -1040,28 +1352,38 @@ export default function ProdukComponent() {
                           })
                         }
                         className="w-full bg-white border border-amber-300 px-2.5 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
-                        required={formProduk.is_grosir}
+                        required
                       />
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-0.5">
-                        <span>Harga Grosir / Pcs (Rp)</span>
+                        <span>Total Stok Grosir (Pcs)</span>
                         <span className="text-rose-600">*</span>
                       </label>
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Cth: 55000"
-                        value={formProduk.harga_grosir}
-                        onChange={handleHargaGrosirChange}
+                        type="number"
+                        min="0"
+                        placeholder="Cth: 50"
+                        value={formProduk.stokGrosirPcs}
+                        onChange={(e) =>
+                          setFormProduk({
+                            ...formProduk,
+                            stokGrosirPcs: e.target.value,
+                          })
+                        }
                         className="w-full bg-white border border-amber-300 px-2.5 py-1.5 text-xs text-neutral-900 font-mono font-bold focus:outline-none focus:border-amber-950 rounded-2xs"
-                        required={formProduk.is_grosir}
+                        required
                       />
                     </div>
                   </div>
-                )}
-              </div>
+                  <p className="text-[9.5px] text-amber-900/80">
+                    *Warna otomatis tercatat sebagai "Seri Mix (Campur Warna)"
+                    dan pembeli langsung membeli kelipatan{" "}
+                    {formProduk.min_grosir} pcs.
+                  </p>
+                </div>
+              )}
 
               {/* KATEGORI */}
               <div className="space-y-1.5">
@@ -1135,87 +1457,129 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* VARIASI WARNA */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
-                    <Palette className="w-3.5 h-3.5 text-stone-500" />
-                    <span>
-                      Variasi Warna ({formProduk.warnaList.length} Terpilih)
-                    </span>
-                  </label>
-                </div>
+              {/* INPUT WARNA KHUSUS ECERAN */}
+              {!isGrosirForm && (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1">
+                        <Palette className="w-3.5 h-3.5 text-stone-500" />
+                        <span>
+                          Pilihan Warna Satuan ({formProduk.warnaList.length}{" "}
+                          Terdaftar)
+                        </span>
+                      </label>
+                    </div>
 
-                {formProduk.warnaList.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 p-2 bg-[#FAF8F5] border border-stone-200 rounded-2xs">
-                    {formProduk.warnaList.map((warna) => (
-                      <span
-                        key={warna}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-stone-300 text-neutral-900 text-[10px] font-bold uppercase shadow-2xs rounded-2xs"
-                      >
-                        <span>{warna}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveColor(warna)}
-                          className="text-stone-400 hover:text-rose-600 p-0.5 cursor-pointer"
-                        >
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                    {formProduk.warnaList.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 p-2 bg-[#FAF8F5] border border-stone-200 rounded-2xs">
+                        {formProduk.warnaList.map((warna) => (
+                          <span
+                            key={warna}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-stone-300 text-neutral-900 text-[10px] font-bold uppercase shadow-2xs rounded-2xs"
+                          >
+                            <span>{warna}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveColor(warna)}
+                              className="text-stone-400 hover:text-rose-600 p-0.5 cursor-pointer"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="Ketik nama warna baru (cth: Biru, Hitam)..."
-                    value={inputWarnaBaru}
-                    onChange={(e) => setInputWarnaBaru(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddCustomColor();
-                      }
-                    }}
-                    className="flex-1 bg-[#FAF8F5] border border-stone-300 px-2.5 py-1.5 text-xs focus:bg-white focus:outline-none focus:border-amber-900 rounded-2xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddCustomColor()}
-                    className="px-3 py-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider transition shrink-0 flex items-center gap-1 cursor-pointer rounded-2xs"
-                  >
-                    <Plus className="w-3 h-3 text-amber-300" />
-                    <span>Tambah</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* PILIHAN UKURAN */}
-              <div className="space-y-1">
-                <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                  Pilihan Ukuran
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {ukuranTersedia.map((sz) => {
-                    const isChecked = formProduk.ukuranPilihan.includes(sz);
-                    return (
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Ketik nama warna satuan (cth: Hitam, Merah, Navy, Kubus)..."
+                        value={inputWarnaBaru}
+                        onChange={(e) => setInputWarnaBaru(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomColor();
+                          }
+                        }}
+                        className="flex-1 bg-[#FAF8F5] border border-stone-300 px-2.5 py-1.5 text-xs focus:bg-white focus:outline-none focus:border-amber-900 rounded-2xs uppercase"
+                      />
                       <button
-                        key={sz}
                         type="button"
-                        onClick={() => toggleUkuran(sz)}
-                        className={`px-3 py-1 text-[10px] font-bold border transition cursor-pointer rounded-2xs ${
-                          isChecked
-                            ? "bg-neutral-950 text-white border-neutral-950 shadow-2xs"
-                            : "bg-white text-neutral-700 border-stone-200 hover:border-stone-400"
-                        }`}
+                        onClick={() => handleAddCustomColor()}
+                        className="px-3 py-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider transition shrink-0 flex items-center gap-1 cursor-pointer rounded-2xs"
                       >
-                        {sz}
+                        <Plus className="w-3 h-3 text-amber-300" />
+                        <span>Tambah</span>
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
+                    </div>
+                  </div>
+
+                  {/* TABEL STOK PER WARNA */}
+                  <div className="space-y-2 p-3 bg-stone-50 border border-stone-200 rounded-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-800">
+                        Input Stok Satuan ({formProduk.ukuranTeks || "All Size"}
+                        )
+                      </label>
+                      <span className="text-[10.5px] font-bold text-amber-950 font-mono">
+                        Total: {totalStokTerhitung} pcs
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto border border-stone-200 rounded-2xs bg-white">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#FAF8F5] border-b border-stone-200 text-[10px] font-bold uppercase text-neutral-600">
+                          <tr>
+                            <th className="p-2.5 pl-3">Warna Busana</th>
+                            <th className="p-2.5 text-center w-28">
+                              Jumlah Stok (Pcs)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {activeWarnaList.map((warna) => {
+                            const key = warna.trim().toUpperCase();
+                            const val = formProduk.stokPerWarna[key];
+                            return (
+                              <tr key={warna} className="hover:bg-[#FCFAF7]">
+                                <td className="p-2 pl-3 font-bold uppercase text-neutral-900 whitespace-nowrap">
+                                  {warna}
+                                </td>
+                                <td className="p-2 text-center">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="0"
+                                    value={
+                                      val === 0 || val === undefined
+                                        ? "0"
+                                        : String(val)
+                                    }
+                                    onFocus={(e) => {
+                                      if (e.target.value === "0") {
+                                        handleStokWarnaChange(warna, "");
+                                      }
+                                    }}
+                                    onChange={(e) =>
+                                      handleStokWarnaChange(
+                                        warna,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className="w-20 bg-[#FAF8F5] border border-stone-300 text-center py-1 text-xs font-mono font-bold text-neutral-900 focus:bg-white focus:outline-none focus:border-amber-900 rounded-2xs mx-auto"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* DESKRIPSI */}
               <div className="space-y-1">
@@ -1247,7 +1611,7 @@ export default function ProdukComponent() {
                       rincianText: e.target.value,
                     })
                   }
-                  placeholder={`Contoh:\nBahan rayon adem & lembut\nJahitan rapi butik`}
+                  placeholder={`Contoh:\nBahan rayon adem & lembut\nJahitan rapi kelas butik`}
                   className="w-full bg-[#FAF8F5] border border-stone-300 p-2.5 text-xs focus:bg-white focus:outline-none focus:border-amber-900 font-mono rounded-2xs transition-colors"
                 />
               </div>
@@ -1256,18 +1620,30 @@ export default function ProdukComponent() {
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200 sticky bottom-0 bg-white">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-white border border-stone-300 text-neutral-700 text-xs font-bold uppercase tracking-wider hover:bg-stone-50 transition cursor-pointer rounded-2xs"
+                  className="px-4 py-2 bg-white border border-stone-300 text-neutral-700 text-xs font-bold uppercase tracking-wider hover:bg-stone-50 transition cursor-pointer rounded-2xs disabled:opacity-40"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isCompressing}
-                  className="px-5 py-2 bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5 transition cursor-pointer rounded-2xs"
+                  disabled={isSubmitting || isCompressing}
+                  className="px-5 py-2 bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-1.5 transition cursor-pointer rounded-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-3.5 h-3.5 text-amber-300" />
-                  <span>{isEditMode ? "Simpan Perubahan" : "Terbitkan"}</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-amber-300" />
+                      <span>
+                        {isEditMode ? "Simpan Perubahan" : "Terbitkan"}
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1361,6 +1737,7 @@ export default function ProdukComponent() {
                   src={deleteTarget.gambarUtama}
                   alt={deleteTarget.nama}
                   fill
+                  sizes="40px"
                   className="object-cover"
                 />
               </div>
@@ -1369,7 +1746,7 @@ export default function ProdukComponent() {
                   {deleteTarget.nama}
                 </p>
                 <p className="text-[10px] text-neutral-500 font-mono">
-                  Rp {deleteTarget.harga.toLocaleString("id-ID")} • Stok:{" "}
+                  Rp {deleteTarget.harga.toLocaleString("id-ID")} • Total Stok:{" "}
                   {deleteTarget.stok}{" "}
                   {deleteTarget.berat
                     ? `• Berat: ${deleteTarget.berat} gr`

@@ -39,20 +39,30 @@ export default function PembayaranComponent({
   const [livePenerima, setLivePenerima] = useState<string>(namaPenerima || "");
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
 
-  const { removeItem } = (useKeranjang() as any) || {};
+  const { removeItem, hapusItem, hapusItemDaftar } =
+    (useKeranjang() as any) || {};
 
+  // Pembersihan item yang berhasil di-checkout dari session storage dan keranjang
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
         const checkoutSessionItems = sessionStorage.getItem(
           "almaco_checkout_items",
         );
-        if (checkoutSessionItems && typeof removeItem === "function") {
+        if (checkoutSessionItems) {
           const parsed = JSON.parse(checkoutSessionItems);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((item: any) => {
-              removeItem(item.id, item.size, item.color);
-            });
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            if (typeof hapusItemDaftar === "function") {
+              hapusItemDaftar(parsed);
+            } else {
+              parsed.forEach((item: any) => {
+                if (typeof removeItem === "function") {
+                  removeItem(item.id, item.size, item.color);
+                } else if (typeof hapusItem === "function") {
+                  hapusItem(item.id, item.size, item.color);
+                }
+              });
+            }
           }
           sessionStorage.removeItem("almaco_checkout_items");
         }
@@ -60,19 +70,35 @@ export default function PembayaranComponent({
         console.error("Error clearing checked-out items:", e);
       }
     }
-  }, [removeItem]);
+  }, [removeItem, hapusItem, hapusItemDaftar]);
 
+  // Sinkronisasi live data dengan database orders
   useEffect(() => {
     if (!invoiceId) return;
 
     const fetchOrderDetails = async () => {
       setIsLoadingOrder(true);
       try {
-        const { data, error } = await supabase
+        const cleanInvoice = invoiceId.trim();
+        let { data, error } = await supabase
           .from("orders")
-          .select("total, total_harga, kurir, nama_pembeli")
-          .eq("invoice_no", invoiceId)
-          .single();
+          .select("id, invoice_no, total, total_harga, kurir, nama_pembeli")
+          .ilike("invoice_no", cleanInvoice)
+          .maybeSingle();
+
+        // Fallback jika invoiceId berupa ID numerik
+        if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
+          const fallbackRes = await supabase
+            .from("orders")
+            .select("id, invoice_no, total, total_harga, kurir, nama_pembeli")
+            .eq("id", Number(cleanInvoice))
+            .maybeSingle();
+
+          if (fallbackRes.data) {
+            data = fallbackRes.data;
+            error = null;
+          }
+        }
 
         if (!error && data) {
           const nominalDb = Number(data.total || data.total_harga || 0);
@@ -110,10 +136,16 @@ export default function PembayaranComponent({
   };
 
   const handleCopyNominal = () => {
-    navigator.clipboard.writeText(String(liveAmount || totalAmount));
+    const nominalToCopy = String(liveAmount || totalAmount || 0).replace(
+      /[^0-9]/g,
+      "",
+    );
+    navigator.clipboard.writeText(nominalToCopy);
     setCopiedNominal(true);
     setTimeout(() => setCopiedNominal(false), 2000);
   };
+
+  const nominalDisplay = liveAmount > 0 ? liveAmount : totalAmount;
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-neutral-900 flex flex-col font-sans selection:bg-amber-900 selection:text-white justify-between overflow-x-hidden">
@@ -156,7 +188,6 @@ export default function PembayaranComponent({
 
       {/* MAIN CONTAINER COMPACT */}
       <main className="flex-1 max-w-lg w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-8">
-        {/* JUDUL COMPACT */}
         <div className="text-center space-y-1 mb-3.5 sm:mb-5">
           <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-[0.2em] text-amber-900 block">
             Pesanan Telah Tercatat
@@ -186,7 +217,7 @@ export default function PembayaranComponent({
             </span>
           </div>
 
-          {/* DETAIL RINGKAS PENERIMA & EKSPEDISI (1 BARIS DUA KOLOM) */}
+          {/* DETAIL RINGKAS PENERIMA & EKSPEDISI */}
           {(livePenerima || liveKurir) && (
             <div className="grid grid-cols-2 gap-2 p-2.5 bg-[#FAF8F5] border border-stone-200 text-xs rounded-2xs">
               {livePenerima && (
@@ -242,7 +273,7 @@ export default function PembayaranComponent({
                     Memuat...
                   </span>
                 ) : (
-                  `Rp ${Number(liveAmount || totalAmount).toLocaleString("id-ID")}`
+                  `Rp ${nominalDisplay.toLocaleString("id-ID")}`
                 )}
               </p>
             </div>

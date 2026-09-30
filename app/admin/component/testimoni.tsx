@@ -50,6 +50,7 @@ export default function TestimoniComponent() {
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const initialPan = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const cropFrameRef = useRef<HTMLDivElement | null>(null);
@@ -110,20 +111,32 @@ export default function TestimoniComponent() {
       };
       reader.readAsDataURL(file);
     }
+    if (e.target) {
+      e.target.value = "";
+    }
   };
 
-  const clampPan = (newX: number, newY: number, currentZoom: number) => {
+  const clampPan = (
+    newX: number,
+    newY: number,
+    currentZoom: number,
+    currentRotation: number,
+  ) => {
     if (!cropFrameRef.current || !imgRef.current) return { x: newX, y: newY };
 
     const frame = cropFrameRef.current.getBoundingClientRect();
-    const naturalRatio =
-      imgRef.current.naturalWidth / (imgRef.current.naturalHeight || 1);
+    const natW = imgRef.current.naturalWidth || frame.width;
+    const natH = imgRef.current.naturalHeight || frame.height;
+    const isSideways = currentRotation % 180 !== 0;
 
-    const imgW = frame.width * currentZoom;
-    const imgH = imgW / naturalRatio;
+    const baseW = isSideways ? frame.height : frame.width;
+    const baseH = (baseW * natH) / natW;
 
-    const maxPanX = Math.max(0, (imgW - frame.width) / 2);
-    const maxPanY = Math.max(0, (imgH - frame.height) / 2);
+    const scaledW = baseW * currentZoom;
+    const scaledH = baseH * currentZoom;
+
+    const maxPanX = Math.max(0, (scaledW - frame.width) / 2);
+    const maxPanY = Math.max(0, (scaledH - frame.height) / 2);
 
     return {
       x: Math.max(-maxPanX, Math.min(newX, maxPanX)),
@@ -149,7 +162,7 @@ export default function TestimoniComponent() {
     const targetX = initialPan.current.x + dx;
     const targetY = initialPan.current.y + dy;
 
-    setPan(clampPan(targetX, targetY, zoom));
+    setPan(clampPan(targetX, targetY, zoom, rotation));
   };
 
   const handlePointerUp = () => {
@@ -159,7 +172,13 @@ export default function TestimoniComponent() {
   const adjustZoom = (delta: number) => {
     const newZoom = Math.min(Math.max(1, +(zoom + delta).toFixed(2)), 3);
     setZoom(newZoom);
-    setPan((prev) => clampPan(prev.x, prev.y, newZoom));
+    setPan((prev) => clampPan(prev.x, prev.y, newZoom, rotation));
+  };
+
+  const handleRotate = () => {
+    const newRot = (rotation + 90) % 360;
+    setRotation(newRot);
+    setPan((prev) => clampPan(prev.x, prev.y, zoom, newRot));
   };
 
   const handleCropExecute = () => {
@@ -185,8 +204,10 @@ export default function TestimoniComponent() {
     ctx.translate(targetW / 2, targetH / 2);
     ctx.rotate((rotation * Math.PI) / 180);
 
-    const renderW = targetW * zoom;
-    const naturalRatio = img.naturalWidth / img.naturalHeight;
+    const isSideways = rotation % 180 !== 0;
+    const baseW = isSideways ? targetH : targetW;
+    const naturalRatio = img.naturalWidth / (img.naturalHeight || 1);
+    const renderW = baseW * zoom;
     const renderH = renderW / naturalRatio;
 
     const drawX = pan.x * scaleFactor;
@@ -200,7 +221,7 @@ export default function TestimoniComponent() {
       renderH,
     );
 
-    const croppedBase64 = canvas.toDataURL("image/jpeg", 0.88);
+    const croppedBase64 = canvas.toDataURL("image/jpeg", 0.85);
     setPreviewFoto(croppedBase64);
   };
 
@@ -422,9 +443,7 @@ export default function TestimoniComponent() {
         </div>
       )}
 
-      {/* ========================================================
-          MODAL CROP 9:16 (UKURAN COMPACT - PAS LAYAR HP)
-         ======================================================== */}
+      {/* MODAL CROP 9:16 (COMPACT PAS DI LAYAR) */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3">
           <div
@@ -433,7 +452,7 @@ export default function TestimoniComponent() {
           />
 
           <div className="relative z-10 bg-white border border-stone-200 w-full max-w-[340px] shadow-2xl rounded-xs flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            {/* Header Ringkas */}
+            {/* Header */}
             <div className="px-3.5 py-2.5 border-b border-stone-200 flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-1.5">
                 <Smartphone className="w-3.5 h-3.5 text-amber-900" />
@@ -454,7 +473,7 @@ export default function TestimoniComponent() {
               </button>
             </div>
 
-            {/* BODY KONTEN */}
+            {/* Content */}
             <div className="bg-[#FAF8F5] p-3 flex flex-col items-center">
               {/* TAHAP 1: UPLOAD */}
               {!rawImageSrc && (
@@ -470,6 +489,7 @@ export default function TestimoniComponent() {
                       Maksimal 12 MB
                     </span>
                     <input
+                      ref={fileInputRef}
                       type="file"
                       accept="image/*"
                       onChange={handleFotoUpload}
@@ -479,10 +499,9 @@ export default function TestimoniComponent() {
                 </div>
               )}
 
-              {/* TAHAP 2: VIEWPORT KANVAS 9:16 COMPACT */}
+              {/* TAHAP 2: VIEWPORT KANVAS 9:16 */}
               {rawImageSrc && !previewFoto && (
                 <div className="w-full space-y-2.5 flex flex-col items-center">
-                  {/* BINGKAI KANVAS DIKUNCI 170px X 302px (RASIO 9:16) */}
                   <div
                     ref={cropFrameRef}
                     onMouseDown={handlePointerDown}
@@ -501,7 +520,7 @@ export default function TestimoniComponent() {
                       alt="Crop Source"
                       draggable={false}
                       style={{
-                        width: "100%",
+                        width: rotation % 180 !== 0 ? "302px" : "170px",
                         maxWidth: "none",
                         height: "auto",
                         transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`,
@@ -528,11 +547,11 @@ export default function TestimoniComponent() {
 
                     <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/75 px-2 py-0.5 rounded-full text-[8px] text-stone-200 pointer-events-none flex items-center gap-1 whitespace-nowrap">
                       <Move className="w-2.5 h-2.5 text-amber-300" />
-                      <span>Geser atas/bawah</span>
+                      <span>Geser posisi foto</span>
                     </div>
                   </div>
 
-                  {/* TOOLBAR ZOOM & ROTASI SATU BARIS */}
+                  {/* Toolbar Zoom & Rotasi */}
                   <div className="w-full bg-white border border-stone-200 px-2 py-1.5 rounded-2xs flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1 flex-1">
                       <button
@@ -553,7 +572,9 @@ export default function TestimoniComponent() {
                         onChange={(e) => {
                           const newZ = parseFloat(e.target.value);
                           setZoom(newZ);
-                          setPan((prev) => clampPan(prev.x, prev.y, newZ));
+                          setPan((prev) =>
+                            clampPan(prev.x, prev.y, newZ, rotation),
+                          );
                         }}
                         className="w-full accent-amber-900 cursor-pointer h-1.5 bg-stone-200 rounded-lg appearance-none"
                       />
@@ -571,7 +592,7 @@ export default function TestimoniComponent() {
                     <div className="flex items-center gap-1 shrink-0 border-l border-stone-200 pl-1.5">
                       <button
                         type="button"
-                        onClick={() => setRotation((prev) => (prev + 90) % 360)}
+                        onClick={handleRotate}
                         className="w-6 h-6 rounded-2xs bg-stone-100 hover:bg-stone-200 text-neutral-800 flex items-center justify-center cursor-pointer"
                         title="Putar 90°"
                       >
@@ -582,14 +603,14 @@ export default function TestimoniComponent() {
                         type="button"
                         onClick={resetTransform}
                         className="w-6 h-6 rounded-2xs bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center cursor-pointer"
-                        title="Reset"
+                        title="Reset Transform"
                       >
                         <RotateCcw className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
 
-                  {/* TOMBOL AKSI BAWAH */}
+                  {/* Tombol Aksi */}
                   <div className="w-full flex items-center gap-2 pt-1">
                     <button
                       type="button"
@@ -653,7 +674,7 @@ export default function TestimoniComponent() {
         </div>
       )}
 
-      {/* MODAL ZOOM PREVIEW FULL (9:16) */}
+      {/* MODAL ZOOM PREVIEW FULL */}
       {zoomFoto && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="fixed inset-0" onClick={() => setZoomFoto(null)} />

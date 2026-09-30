@@ -35,17 +35,14 @@ interface RajaOngkirCity {
   postal_code?: string;
 }
 
-// --- FUNGSI GENERATOR INVOICE RESMI (Contoh: ORD-2026091901FYP) ---
 async function generateInvoiceNumber(): Promise<string> {
   const now = new Date();
 
-  // 1. Ambil Tahun, Bulan, Tanggal (YYYYMMDD)
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   const dateStr = `${year}${month}${day}`;
 
-  // 2. Rentang awal & akhir hari ini untuk menghitung urutan transaksi harian
   const startOfDay = new Date(
     now.getFullYear(),
     now.getMonth(),
@@ -79,10 +76,8 @@ async function generateInvoiceNumber(): Promise<string> {
     console.error("Gagal menghitung urutan order harian:", err);
   }
 
-  // Format 2 digit urutan (01, 02, dst)
   const sequenceStr = String(nextSequence).padStart(2, "0");
 
-  // 3 Karakter acak kapital sebagai pembeda unik anti bentrok
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let randomSuffix = "";
   for (let i = 0; i < 3; i++) {
@@ -121,12 +116,13 @@ export default function CheckoutPage() {
   const [isLoadingShipping, setIsLoadingShipping] = useState(false);
   const [showCourierDropdown, setShowCourierDropdown] = useState(false);
 
-  // STATE PRODUK YANG DI-CHECKOUT & CONTEXT KERANJANG
+  // STATE PRODUK CHECKOUT & CONTEXT KERANJANG
   const [checkoutItems, setCheckoutItems] = useState<any[]>([]);
   const {
     cartItems: fullCartItems = [],
     hapusItemDaftar,
     kosongkanKeranjang,
+    updateQty: updateQtyContext,
   } = (useKeranjang() as any) || {};
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -138,6 +134,7 @@ export default function CheckoutPage() {
     setIsClient(true);
   }, []);
 
+  // LOAD PERTAMA KALI SAJA: ISOLASI DARI RE-TRIGGER CONTEXT
   useEffect(() => {
     try {
       const savedCheckoutItems = sessionStorage.getItem(
@@ -146,7 +143,13 @@ export default function CheckoutPage() {
       if (savedCheckoutItems) {
         const parsed = JSON.parse(savedCheckoutItems);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setCheckoutItems(parsed);
+          const sanitized = parsed.map((item: any) => ({
+            ...item,
+            qty: Math.max(1, parseInt(String(item.qty || 1), 10)),
+            min_grosir: Math.max(1, parseInt(String(item.min_grosir || 5), 10)),
+            price: Number(item.price || item.rawPrice || 0),
+          }));
+          setCheckoutItems(sanitized);
           return;
         }
       }
@@ -154,78 +157,140 @@ export default function CheckoutPage() {
       console.error("Gagal membaca item checkout dari session storage:", e);
     }
 
-    setCheckoutItems(fullCartItems);
-  }, [fullCartItems]);
+    if (fullCartItems && fullCartItems.length > 0) {
+      const sanitized = fullCartItems.map((item: any) => ({
+        ...item,
+        qty: Math.max(1, parseInt(String(item.qty || 1), 10)),
+        min_grosir: Math.max(1, parseInt(String(item.min_grosir || 5), 10)),
+        price: Number(item.price || item.rawPrice || 0),
+      }));
+      setCheckoutItems(sanitized);
+    }
+  }, []);
 
+  // Kalkulasi Subtotal & Berat
   const subtotal = checkoutItems.reduce((acc: number, item: any) => {
-    return acc + (Number(item.price) || 0) * item.qty;
+    const price = Number(item.price || item.rawPrice || 0);
+    const qty = Math.max(1, parseInt(String(item.qty || 1), 10));
+    return acc + price * qty;
   }, 0);
 
   const totalWeight = checkoutItems.reduce((acc: number, item: any) => {
-    return acc + (Number(item.weight) || 350) * item.qty;
+    const weight = Number(item.weight || 100);
+    const qty = Math.max(1, parseInt(String(item.qty || 1), 10));
+    return acc + weight * qty;
   }, 0);
 
   const totalWeightKg =
     totalWeight > 0 ? Math.max(1, Math.ceil(totalWeight / 1000)) : 1;
   const packingFee = checkoutItems.length > 0 ? totalWeightKg * 3000 : 0;
-  const shippingFee = selectedCourier ? selectedCourier.price : 0;
+  const shippingFee = selectedCourier ? Number(selectedCourier.price || 0) : 0;
   const total = subtotal + shippingFee + packingFee;
 
+  // Handler Hapus Item Checkout
   const handleRemoveCheckoutItem = (
     id: string | number,
     size?: string,
     color?: string,
   ) => {
-    const updated = checkoutItems.filter((item: any) => {
-      if (size && color) {
-        return !(
-          String(item.id) === String(id) &&
-          item.size === size &&
-          item.color === color
+    setCheckoutItems((prevItems) => {
+      const updated = prevItems.filter((item: any) => {
+        if (size && color) {
+          return !(
+            String(item.id) === String(id) &&
+            String(item.size || "")
+              .trim()
+              .toUpperCase() ===
+              String(size || "")
+                .trim()
+                .toUpperCase() &&
+            String(item.color || "")
+              .trim()
+              .toUpperCase() ===
+              String(color || "")
+                .trim()
+                .toUpperCase()
+          );
+        }
+        return String(item.id) !== String(id);
+      });
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(
+          "almaco_checkout_items",
+          JSON.stringify(updated),
         );
       }
-      return String(item.id) !== String(id);
+      return updated;
     });
 
-    setCheckoutItems(updated);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("almaco_checkout_items", JSON.stringify(updated));
+    if (typeof hapusItemDaftar === "function") {
+      hapusItemDaftar([{ id, size, color }]);
     }
   };
 
-  const handleUpdateQtyCheckout = (item: any, change: number) => {
-    const newQty = item.qty + change;
-    if (newQty <= 0) {
-      handleRemoveCheckoutItem(item.id, item.size, item.color);
-      return;
-    }
+  // Handler Update Qty Checkout (MURNI MODIFIKASI LOKAL CHECKOUT)
+  const handleUpdateQtyCheckout = (item: any, direction: number) => {
+    const isGrosir = Boolean(item.is_grosir);
+    const minGrosir = Math.max(1, parseInt(String(item.min_grosir || 5), 10));
 
-    const ecerPrice = Number(
-      item.rawPrice || item.harga_ecer || item.harga || item.price,
-    );
-    const minGrosir = Number(item.min_grosir || 0);
-    const hargaGrosir = Number(item.harga_grosir || 0);
+    setCheckoutItems((prevItems) => {
+      const updated = prevItems
+        .map((i: any) => {
+          const isSame =
+            String(i.id) === String(item.id) &&
+            String(i.size || "")
+              .trim()
+              .toUpperCase() ===
+              String(item.size || "")
+                .trim()
+                .toUpperCase() &&
+            String(i.color || "")
+              .trim()
+              .toUpperCase() ===
+              String(item.color || "")
+                .trim()
+                .toUpperCase();
 
-    let activePrice = ecerPrice;
-    if (item.is_grosir && minGrosir > 0 && hargaGrosir > 0) {
-      activePrice = newQty >= minGrosir ? hargaGrosir : ecerPrice;
-    }
+          if (!isSame) return i;
 
-    const updated = checkoutItems.map((i: any) => {
-      if (
-        String(i.id) === String(item.id) &&
-        i.size === item.size &&
-        i.color === item.color
-      ) {
-        return { ...i, qty: newQty, price: activePrice };
+          const currentQty = Math.max(1, parseInt(String(i.qty || 1), 10));
+          let nextQty = currentQty;
+
+          if (isGrosir) {
+            // GROSIR: Melompat persis 1 seri (misal min_grosir 5 -> +5 / -5)
+            const step = minGrosir;
+            nextQty = direction > 0 ? currentQty + step : currentQty - step;
+
+            if (nextQty < minGrosir) {
+              nextQty = minGrosir;
+            }
+          } else {
+            // ECERAN: Bertambah/berkurang 1
+            nextQty = direction > 0 ? currentQty + 1 : currentQty - 1;
+
+            if (nextQty <= 0) {
+              return null;
+            }
+          }
+
+          // Update pula ke Context secara aman
+          if (typeof updateQtyContext === "function") {
+            updateQtyContext(i.id, nextQty, i.size, i.color);
+          }
+
+          return { ...i, qty: nextQty };
+        })
+        .filter(Boolean);
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(
+          "almaco_checkout_items",
+          JSON.stringify(updated),
+        );
       }
-      return i;
+      return updated;
     });
-
-    setCheckoutItems(updated);
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("almaco_checkout_items", JSON.stringify(updated));
-    }
   };
 
   useEffect(() => {
@@ -264,7 +329,8 @@ export default function CheckoutPage() {
 
       const calculatedWeight = checkoutItems.reduce(
         (acc: number, item: any) =>
-          acc + (Number(item.weight) || 350) * item.qty,
+          acc +
+          Number(item.weight || 100) * parseInt(String(item.qty || 1), 10),
         0,
       );
 
@@ -311,7 +377,7 @@ export default function CheckoutPage() {
     if (selectedCityId && checkoutItems.length > 0) {
       fetchRates(selectedCityId);
     }
-  }, [checkoutItems, selectedCityId, fetchRates]);
+  }, [selectedCityId, fetchRates]);
 
   const handleCitySearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -357,9 +423,11 @@ export default function CheckoutPage() {
     fetchRates(city.city_id);
   };
 
-  // Submit pesanan ke Supabase
+  // Submit Pesanan Ke Supabase
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingOrder) return;
+
     if (!nama.trim() || !whatsapp.trim() || !selectedCityId || !alamat.trim()) {
       alert("Mohon lengkapi data penerima dan kota tujuan.");
       return;
@@ -377,7 +445,7 @@ export default function CheckoutPage() {
 
     setIsSubmittingOrder(true);
 
-    const calculatedShipping = selectedCourier.price || 0;
+    const calculatedShipping = Number(selectedCourier.price || 0);
     const calculatedPacking = packingFee;
     const calculatedTotalOngkir = calculatedShipping + calculatedPacking;
     const calculatedTotal = subtotal + calculatedTotalOngkir;
@@ -416,10 +484,8 @@ export default function CheckoutPage() {
       : namaKurirBersih;
 
     try {
-      // 1. Buat kode invoice berformat tanggal & urutan (Contoh: ORD-2026091901FYP)
       const inv = await generateInvoiceNumber();
 
-      // 2. Simpan ke tabel orders
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert([
@@ -436,6 +502,7 @@ export default function CheckoutPage() {
             kurir: kurirFinalSimpan,
             bank_asal: selectedBank.toUpperCase(),
             catatan: catatan.trim() || null,
+            berat_total: totalWeight,
           },
         ])
         .select()
@@ -443,27 +510,59 @@ export default function CheckoutPage() {
 
       if (orderError) throw orderError;
 
-      // 3. Simpan setiap item checkout ke order_items
       if (orderData) {
-        const orderItemsPayload = checkoutItems.map((item: any) => ({
-          order_id: orderData.id,
-          product_id: typeof item.id === "number" ? item.id : null,
-          nama_produk: item.title,
-          harga: item.price,
-          qty: item.qty,
-          warna: item.color || null,
-          ukuran: item.size || null,
-          gambar: item.image || null,
-          subtotal: item.price * item.qty,
-        }));
+        const orderItemsPayload = checkoutItems.map((item: any) => {
+          const itemPrice = Number(item.price || item.rawPrice || 0);
+          const itemQty = parseInt(String(item.qty || 1), 10);
+          return {
+            order_id: orderData.id,
+            product_id: item.id ? Number(item.id) : null,
+            nama_produk: item.title,
+            harga: itemPrice,
+            qty: itemQty,
+            warna: item.color || null,
+            ukuran: item.size || null,
+            gambar: item.image || null,
+            subtotal: itemPrice * itemQty,
+          };
+        });
 
         const { error: itemsError } = await supabase
           .from("order_items")
           .insert(orderItemsPayload);
         if (itemsError) throw itemsError;
+
+        for (const item of checkoutItems) {
+          if (item.id) {
+            const isGrosir = Boolean(item.is_grosir);
+            const itemQty = parseInt(String(item.qty || 1), 10);
+            const cleanColor = String(item.color || "Default")
+              .replace(/\(.*\)/g, "")
+              .trim();
+
+            // JIKA GROSIR & DATABASE SUDAH PUNYA TRIGGER INSERT ORDER_ITEMS:
+            // Panggilan RPC ini dilewati agar stok grosir tidak terpotong 2x.
+            // Jika di database belum ada trigger otomatis, panggil RPC secara khusus:
+            if (!isGrosir) {
+              await supabase.rpc("rpc_kurangi_stok", {
+                p_product_id: Number(item.id),
+                p_qty: itemQty,
+                p_warna: cleanColor,
+              });
+            } else {
+              // Panggilan khusus Grosir jika TIDAK MENGGUNAKAN TRIGGER DATABASE:
+              // (Buka komentar di bawah ini hanya jika database Anda TIDAK memiliki Trigger)
+              /*
+      await supabase.rpc("rpc_kurangi_stok_grosir", {
+        p_product_id: Number(item.id),
+        p_qty: itemQty,
+      });
+      */
+            }
+          }
+        }
       }
 
-      // 4. Bersihkan item keranjang
       if (typeof hapusItemDaftar === "function") {
         hapusItemDaftar(checkoutItems);
       } else if (typeof kosongkanKeranjang === "function") {
@@ -477,7 +576,7 @@ export default function CheckoutPage() {
       }
       setIsSubmitted(true);
     } catch (err: any) {
-      console.error("Gagal membuat pesanan ke database:", err);
+      console.error("Gagal membuat pesanan:", err);
       alert(
         "Terjadi kesalahan saat menyimpan pesanan: " +
           (err.message || "Silakan coba lagi."),
@@ -522,8 +621,10 @@ export default function CheckoutPage() {
             </div>
             <div className="leading-tight">
               <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span>
-                <span className="font-light text-neutral-500">FASHION</span>
+                <span className="font-black">ALMACO</span>{" "}
+                <span className="font-light text-neutral-500 ml-1">
+                  FASHION
+                </span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block">
                 Fashionable • Syari • Berkualitas
@@ -533,7 +634,7 @@ export default function CheckoutPage() {
 
           <Link
             href="/keranjang"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0 rounded-2xs"
           >
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Kembali Ke Keranjang</span>
@@ -553,7 +654,7 @@ export default function CheckoutPage() {
           className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start"
         >
           <div className="lg:col-span-7 space-y-6">
-            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs">
+            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs rounded-xs">
               <div className="flex items-center gap-2 border-b border-neutral-100 pb-3">
                 <User className="w-4 h-4 text-neutral-800" />
                 <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900">
@@ -572,7 +673,7 @@ export default function CheckoutPage() {
                     value={nama}
                     onChange={(e) => setNama(e.target.value)}
                     placeholder="Nama Lengkap"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
                   />
                 </div>
                 <div className="space-y-1">
@@ -585,7 +686,7 @@ export default function CheckoutPage() {
                     value={whatsapp}
                     onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="081234567890"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
                   />
                 </div>
               </div>
@@ -605,7 +706,7 @@ export default function CheckoutPage() {
                       cityResults.length > 0 && setShowCityDropdown(true)
                     }
                     placeholder="Contoh: Kecamatan / Kabupaten / Kota"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 pr-9"
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 pr-9 rounded-2xs"
                   />
                   {isSearchingCity && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -615,7 +716,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {showCityDropdown && cityResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-neutral-300 shadow-xl z-50 max-h-52 overflow-y-auto">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-neutral-300 shadow-xl z-50 max-h-52 overflow-y-auto rounded-2xs">
                     {cityResults.map((c, idx) => (
                       <div
                         key={`${c.city_id}-${idx}`}
@@ -646,12 +747,12 @@ export default function CheckoutPage() {
                   value={alamat}
                   onChange={(e) => setAlamat(e.target.value)}
                   placeholder="Nama jalan, nomor bangunan, patokan..."
-                  className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
+                  className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
                 />
               </div>
             </div>
 
-            <div className="bg-white border border-neutral-200 shadow-xs">
+            <div className="bg-white border border-neutral-200 shadow-xs rounded-xs overflow-hidden">
               <div className="bg-[#F1F3F5] p-4 sm:p-5 border-b border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs text-neutral-800">
                   <span>
@@ -664,7 +765,7 @@ export default function CheckoutPage() {
 
                 <div className="relative" ref={courierDropdownRef}>
                   {!isClient ? (
-                    <div className="bg-neutral-400 text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px]">
+                    <div className="bg-neutral-400 text-white text-xs font-bold px-4 py-2.5 rounded-2xs flex items-center justify-between gap-3 min-w-[200px]">
                       <span>PILIH JASA KIRIM</span>
                       <ChevronDown className="w-4 h-4 shrink-0" />
                     </div>
@@ -677,7 +778,7 @@ export default function CheckoutPage() {
                       onClick={() =>
                         setShowCourierDropdown(!showCourierDropdown)
                       }
-                      className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-sm flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
+                      className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-2xs flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
                     >
                       {isLoadingShipping ? (
                         <div className="flex items-center gap-2 mx-auto">
@@ -704,7 +805,7 @@ export default function CheckoutPage() {
                   )}
 
                   {showCourierDropdown && shippingOptions.length > 0 && (
-                    <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 max-w-[90vw] bg-white border border-neutral-300 shadow-2xl rounded-sm z-50 py-1 max-h-64 overflow-y-auto">
+                    <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 max-w-[90vw] bg-white border border-neutral-300 shadow-2xl rounded-2xs z-50 py-1 max-h-64 overflow-y-auto">
                       {shippingOptions.map((opt, idx) => (
                         <div
                           key={`${opt.company}-${opt.courier_service_name}-${idx}`}
@@ -728,7 +829,7 @@ export default function CheckoutPage() {
                               {opt.courier_service_name} ({opt.duration})
                             </p>
                           </div>
-                          <span className="font-bold shrink-0 ml-2 text-neutral-950">
+                          <span className="font-bold shrink-0 ml-2 text-neutral-950 font-mono">
                             Rp {opt.price.toLocaleString("id-ID")}
                           </span>
                         </div>
@@ -738,78 +839,95 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* LIST ITEM PRODUK DARI CHECKOUTITEMS */}
+              {/* LIST ITEM PRODUK */}
               <div className="p-4 sm:p-6 space-y-4">
                 {checkoutItems.length === 0 ? (
                   <p className="text-xs text-neutral-500 text-center py-4">
                     Tidak ada produk terpilih untuk di-checkout.
                   </p>
                 ) : (
-                  checkoutItems.map((item: any) => (
-                    <div
-                      key={`${item.id}-${item.size}-${item.color}`}
-                      className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0"
-                    >
-                      <div className="flex gap-3 items-center min-w-0">
-                        <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden">
-                          <Image
-                            src={item.image}
-                            alt={item.title}
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-                        <div className="space-y-0.5 min-w-0">
-                          <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">
-                            {item.title}
-                          </h4>
-                          <p className="text-[11px] text-neutral-500">
-                            {item.size || "All Size"} ({item.color || "Default"}
-                            )
-                          </p>
-                          <p className="text-xs font-bold text-red-600 font-mono">
-                            Rp {Number(item.price).toLocaleString("id-ID")}
-                          </p>
-                        </div>
-                      </div>
+                  checkoutItems.map((item: any) => {
+                    const isGrosir = Boolean(item.is_grosir);
+                    const minGrosir = Math.max(
+                      1,
+                      parseInt(String(item.min_grosir || 5), 10),
+                    );
+                    const currentQty = Math.max(
+                      1,
+                      parseInt(String(item.qty || 1), 10),
+                    );
+                    const minAllowed = isGrosir ? minGrosir : 1;
 
-                      <div className="flex items-center gap-3 self-end sm:self-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleRemoveCheckoutItem(
-                              item.id,
-                              item.size,
-                              item.color,
-                            )
-                          }
-                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center transition cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                    return (
+                      <div
+                        key={`${item.id}-${item.size}-${item.color}`}
+                        className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0"
+                      >
+                        <div className="flex gap-3 items-center min-w-0">
+                          <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden rounded-2xs">
+                            <Image
+                              src={item.image}
+                              alt={item.title}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">
+                              {item.title}
+                            </h4>
+                            <p className="text-[11px] text-neutral-500">
+                              {item.size || "All Size"} (
+                              {item.color || "Default"})
+                            </p>
+                            <p className="text-xs font-bold text-amber-950 font-mono">
+                              Rp{" "}
+                              {Number(item.price || 0).toLocaleString("id-ID")}
+                            </p>
+                          </div>
+                        </div>
 
-                        <div className="flex items-center border border-neutral-300 rounded bg-white">
+                        <div className="flex items-center gap-3 self-end sm:self-center">
                           <button
                             type="button"
-                            onClick={() => handleUpdateQtyCheckout(item, -1)}
-                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300 cursor-pointer"
+                            onClick={() =>
+                              handleRemoveCheckoutItem(
+                                item.id,
+                                item.size,
+                                item.color,
+                              )
+                            }
+                            className="w-8 h-8 bg-rose-500 hover:bg-rose-600 text-white rounded-2xs flex items-center justify-center transition cursor-pointer"
+                            title="Hapus dari Checkout"
                           >
-                            <Minus className="w-3 h-3" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                          <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">
-                            {item.qty}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQtyCheckout(item, 1)}
-                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300 cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
+
+                          {/* Tombol Kurang & Tambah Qty */}
+                          <div className="flex items-center border border-neutral-300 rounded-2xs bg-white">
+                            <button
+                              type="button"
+                              disabled={currentQty <= minAllowed}
+                              onClick={() => handleUpdateQtyCheckout(item, -1)}
+                              className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">
+                              {currentQty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQtyCheckout(item, 1)}
+                              className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300 cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
 
                 <div className="pt-2">
@@ -818,7 +936,7 @@ export default function CheckoutPage() {
                     value={catatan}
                     onChange={(e) => setCatatan(e.target.value)}
                     placeholder="Tulis Catatan Buat Penjual..."
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-800 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-sm"
+                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-800 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
                   />
                 </div>
               </div>
@@ -826,17 +944,17 @@ export default function CheckoutPage() {
           </div>
 
           <div className="lg:col-span-5 space-y-6">
-            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs sticky top-24">
+            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs sticky top-24 rounded-xs">
               <h3 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900 border-b border-neutral-100 pb-3">
                 METODE PEMBAYARAN
               </h3>
 
               <div
                 onClick={() => setSelectedBank("bca")}
-                className="flex items-center justify-between p-3.5 border-2 border-neutral-950 bg-neutral-50 shadow-xs cursor-pointer"
+                className="flex items-center justify-between p-3.5 border-2 border-neutral-950 bg-neutral-50 shadow-xs cursor-pointer rounded-2xs"
               >
                 <div className="flex items-center gap-3">
-                  <div className="relative w-12 h-6 shrink-0 bg-white border border-neutral-200 flex items-center justify-center">
+                  <div className="relative w-12 h-6 shrink-0 bg-white border border-neutral-200 flex items-center justify-center rounded-2xs">
                     <Image
                       src="/BCA.png"
                       alt="Bank BCA"
@@ -919,7 +1037,7 @@ export default function CheckoutPage() {
               </div>
 
               {!isClient ? (
-                <div className="w-full bg-neutral-400 text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md text-center">
+                <div className="w-full bg-neutral-400 text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md text-center rounded-2xs">
                   MEMPROSES PESANAN...
                 </div>
               ) : (
@@ -931,13 +1049,13 @@ export default function CheckoutPage() {
                     isSubmittingOrder ||
                     checkoutItems.length === 0
                   }
-                  className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 ${
+                  className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 rounded-2xs ${
                     !selectedCourier ||
                     isLoadingShipping ||
                     isSubmittingOrder ||
                     checkoutItems.length === 0
                       ? "bg-neutral-400 cursor-not-allowed"
-                      : "bg-neutral-950 hover:bg-black cursor-pointer"
+                      : "bg-neutral-950 hover:bg-black cursor-pointer active:scale-[0.99]"
                   }`}
                 >
                   {isSubmittingOrder && (

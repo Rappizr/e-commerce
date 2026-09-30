@@ -14,12 +14,13 @@ import {
   Scale,
   CheckSquare,
   Square,
-  Tag,
-  Sparkles,
-  Info,
+  AlertTriangle,
+  Package,
+  AlertCircle,
 } from "lucide-react";
 import Footer from "../Footer";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
+import { supabase } from "../penyimpanan/supabase";
 
 export default function KeranjangPage() {
   const router = useRouter();
@@ -29,27 +30,126 @@ export default function KeranjangPage() {
     updateQty,
     removeItem,
     hapusItem,
+    hapusItemDaftar,
   } = (useKeranjang() as any) || {};
 
   const [selectedItemKeys, setSelectedItemKeys] = useState<string[]>([]);
+  const [stockMap, setStockMap] = useState<{ [key: string]: number }>({});
+  const [validProductIds, setValidProductIds] = useState<number[]>([]);
+  const [isVerifyingStocks, setIsVerifyingStocks] = useState(true);
+  const [stockWarning, setStockWarning] = useState<string | null>(null);
 
+  const getItemKey = (item: any) =>
+    `${item.id}-${item.size}-${item.color}-${item.is_grosir ? "grosir" : "ecer"}`;
+
+  // Validasi real-time status produk dan ketersediaan stok
   useEffect(() => {
-    if (cartItems.length > 0) {
-      const allKeys = cartItems.map(
-        (item: any) => `${item.id}-${item.size}-${item.color}`,
-      );
-      setSelectedItemKeys((prev) =>
-        prev.filter((key) => allKeys.includes(key)),
-      );
-    } else {
-      setSelectedItemKeys([]);
+    if (!cartItems || cartItems.length === 0) {
+      setStockMap({});
+      setValidProductIds([]);
+      setIsVerifyingStocks(false);
+      return;
     }
+
+    const verifyCartWithDatabase = async () => {
+      setIsVerifyingStocks(true);
+      try {
+        const productIds = Array.from(
+          new Set(
+            cartItems.map((item: any) => Number(item.id)).filter(Boolean),
+          ),
+        );
+
+        if (productIds.length === 0) {
+          setIsVerifyingStocks(false);
+          return;
+        }
+
+        // 1. Cek keberadaan produk di tabel products
+        const { data: activeProducts } = await supabase
+          .from("products")
+          .select("id, stok")
+          .in("id", productIds);
+
+        const existingIds = (activeProducts || []).map((p: any) =>
+          Number(p.id),
+        );
+        setValidProductIds(existingIds);
+
+        // 2. Ambil data stok varian terbaru
+        const { data: variantsData } = await supabase
+          .from("product_variants")
+          .select("product_id, warna, ukuran, stok")
+          .in("product_id", productIds);
+
+        const map: { [key: string]: number } = {};
+
+        cartItems.forEach((item: any) => {
+          const itemKey = getItemKey(item);
+          const pId = Number(item.id);
+
+          if (!existingIds.includes(pId)) {
+            map[itemKey] = 0;
+            return;
+          }
+
+          const isGrosir = Boolean(item.is_grosir);
+
+          if (isGrosir) {
+            // KHUSUS GROSIR: Ambil stok langsung dari data master products (tidak di-reduce)
+            const matchedProd = (activeProducts || []).find(
+              (p: any) => Number(p.id) === pId,
+            );
+            map[itemKey] = Number(matchedProd?.stok ?? item.stok ?? 0);
+          } else {
+            // KHUSUS ECERAN: TETAP PERSIS SEPERTI SEBELUMNYA (TIDAK DIUBAH)
+            const targetColor = String(item.color || "Default")
+              .trim()
+              .toUpperCase();
+            const targetSize = String(item.size || "All Size")
+              .trim()
+              .toUpperCase();
+
+            const match = (variantsData || []).find(
+              (v: any) =>
+                Number(v.product_id) === pId &&
+                String(v.ukuran || "")
+                  .trim()
+                  .toUpperCase() === targetSize &&
+                (String(v.warna || "")
+                  .trim()
+                  .toUpperCase() === targetColor ||
+                  String(v.warna || "")
+                    .trim()
+                    .toUpperCase() === "DEFAULT"),
+            );
+
+            map[itemKey] = match ? Number(match.stok ?? 0) : 0;
+          }
+        });
+
+        setStockMap(map);
+
+        setSelectedItemKeys((prev) =>
+          prev.filter((key) => {
+            const item = cartItems.find((ci: any) => getItemKey(ci) === key);
+            if (!item) return false;
+            const stock = map[key] ?? 0;
+            const isExist = existingIds.includes(Number(item.id));
+            return isExist && stock > 0;
+          }),
+        );
+      } catch (err) {
+        console.error("Gagal memeriksa stok database:", err);
+      } finally {
+        setIsVerifyingStocks(false);
+      }
+    };
+
+    verifyCartWithDatabase();
   }, [cartItems]);
 
   const handleDelete = (id: string | number, size?: string, color?: string) => {
-    const key = `${id}-${size}-${color}`;
-    setSelectedItemKeys((prev) => prev.filter((k) => k !== key));
-
     if (typeof hapusItem === "function") {
       hapusItem(id, size, color);
     } else if (typeof removeItem === "function") {
@@ -57,146 +157,142 @@ export default function KeranjangPage() {
     }
   };
 
-  const getEcerPrice = (item: any) => {
-    const raw = Number(item.rawPrice || item.harga_ecer || item.harga || 0);
-    if (raw > 0) return raw;
-    return Number(item.price || 0);
+  const handleClearUnavailableItems = () => {
+    const unavailableItems = cartItems.filter((item: any) => {
+      const itemKey = getItemKey(item);
+      const isExist = validProductIds.includes(Number(item.id));
+      const available = stockMap[itemKey] ?? 0;
+      return !isExist || available <= 0;
+    });
+
+    if (typeof hapusItemDaftar === "function") {
+      hapusItemDaftar(unavailableItems);
+    } else {
+      unavailableItems.forEach((i: any) => handleDelete(i.id, i.size, i.color));
+    }
+    setSelectedItemKeys([]);
   };
 
-  const handleUpdateQty = (item: any, change: number) => {
+  // Penambahan dan pengurangan kuantitas:
+  // Grosir melompat kelipatan seri (+min_grosir / -min_grosir), Eceran 1 per 1
+  const handleUpdateQty = (item: any, direction: number) => {
+    const itemKey = getItemKey(item);
+    const currentAvailableStock = stockMap[itemKey] ?? 0;
+    const isGrosir = Boolean(item.is_grosir);
+    const minGrosir = Number(item.min_grosir || 5);
+    const stepChange = isGrosir ? minGrosir : 1;
+    const minAllowed = isGrosir ? minGrosir : 1;
+
+    const change = direction > 0 ? stepChange : -stepChange;
     const targetQty = item.qty + change;
-    if (targetQty <= 0) {
-      handleDelete(item.id, item.size, item.color);
+
+    // Jika di bawah batas minimum
+    if (targetQty < minAllowed) {
+      if (!isGrosir && targetQty <= 0) {
+        handleDelete(item.id, item.size, item.color);
+      }
       return;
     }
 
-    const ecerPrice = getEcerPrice(item);
-    const minGrosir = Number(item.min_grosir || 0);
-    const hargaGrosir = Number(item.harga_grosir || 0);
-
-    let calculatedPrice = ecerPrice;
-
-    if (item.is_grosir && minGrosir > 0 && hargaGrosir > 0) {
-      if (targetQty >= minGrosir) {
-        calculatedPrice = hargaGrosir;
-      } else {
-        calculatedPrice = ecerPrice;
-      }
+    if (direction > 0 && targetQty > currentAvailableStock) {
+      setStockWarning(
+        `Stok untuk ${item.title} ${isGrosir ? "(Seri)" : `(${item.color})`} hanya tersisa ${currentAvailableStock} pcs.`,
+      );
+      return;
     }
 
+    const price = Number(item.price || item.rawPrice || 0);
     if (typeof updateQty === "function") {
-      updateQty(item.id, item.size, item.color, targetQty, calculatedPrice);
+      updateQty(item.id, item.size, item.color, targetQty, price);
     }
   };
 
-  const toggleSelectItem = (key: string) => {
+  const toggleSelectItem = (key: string, isAvailable: boolean) => {
+    if (!isAvailable) return;
     setSelectedItemKeys((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
   };
 
+  const availableItemsCount = cartItems.filter((item: any) => {
+    const key = getItemKey(item);
+    return (
+      validProductIds.includes(Number(item.id)) && (stockMap[key] ?? 0) > 0
+    );
+  }).length;
+
   const isAllSelected =
-    cartItems.length > 0 && selectedItemKeys.length === cartItems.length;
+    availableItemsCount > 0 && selectedItemKeys.length === availableItemsCount;
 
   const toggleSelectAll = () => {
     if (isAllSelected) {
       setSelectedItemKeys([]);
     } else {
-      const allKeys = cartItems.map(
-        (item: any) => `${item.id}-${item.size}-${item.color}`,
-      );
-      setSelectedItemKeys(allKeys);
+      const validKeys = cartItems
+        .filter((item: any) => {
+          const key = getItemKey(item);
+          return (
+            validProductIds.includes(Number(item.id)) &&
+            (stockMap[key] ?? 0) > 0
+          );
+        })
+        .map(getItemKey);
+      setSelectedItemKeys(validKeys);
     }
   };
 
-  const handleDeleteSelected = () => {
-    cartItems.forEach((item: any) => {
-      const key = `${item.id}-${item.size}-${item.color}`;
-      if (selectedItemKeys.includes(key)) {
-        if (typeof hapusItem === "function") {
-          hapusItem(item.id, item.size, item.color);
-        } else if (typeof removeItem === "function") {
-          removeItem(item.id, item.size, item.color);
-        }
-      }
-    });
-    setSelectedItemKeys([]);
-  };
-
   const selectedCartItems = cartItems.filter((item: any) => {
-    const key = `${item.id}-${item.size}-${item.color}`;
+    const key = getItemKey(item);
     return selectedItemKeys.includes(key);
   });
 
   const selectedSubtotal = selectedCartItems.reduce(
-    (acc: number, item: any) => {
-      const ecerPrice = getEcerPrice(item);
-      const minGrosir = Number(item.min_grosir || 0);
-      const hargaGrosir = Number(item.harga_grosir || 0);
-
-      const isGrosirActive = Boolean(
-        item.is_grosir &&
-        minGrosir > 0 &&
-        hargaGrosir > 0 &&
-        item.qty >= minGrosir,
-      );
-      const activeUnitPrice = isGrosirActive
-        ? hargaGrosir
-        : item.price || ecerPrice;
-      return acc + activeUnitPrice * item.qty;
-    },
-    0,
-  );
-
-  const totalGrosirSavings = selectedCartItems.reduce(
-    (acc: number, item: any) => {
-      const ecerPrice = getEcerPrice(item);
-      const minGrosir = Number(item.min_grosir || 0);
-      const hargaGrosir = Number(item.harga_grosir || 0);
-
-      const isGrosirActive = Boolean(
-        item.is_grosir &&
-        minGrosir > 0 &&
-        hargaGrosir > 0 &&
-        item.qty >= minGrosir,
-      );
-      if (isGrosirActive && ecerPrice > hargaGrosir) {
-        return acc + (ecerPrice - hargaGrosir) * item.qty;
-      }
-      return acc;
-    },
+    (acc: number, item: any) => acc + Number(item.price || 0) * item.qty,
     0,
   );
 
   const selectedTotalWeight = selectedCartItems.reduce(
-    (acc: number, item: any) => acc + (Number(item.weight) || 350) * item.qty,
+    (acc: number, item: any) => acc + (Number(item.weight) || 100) * item.qty,
     0,
   );
+
+  const hasUnavailableItems = cartItems.some((item: any) => {
+    const key = getItemKey(item);
+    return (
+      !validProductIds.includes(Number(item.id)) || (stockMap[key] ?? 0) <= 0
+    );
+  });
 
   const handleProceedToCheckout = () => {
     if (selectedCartItems.length === 0) return;
 
-    const itemsToPass = selectedCartItems.map((item: any) => {
-      const ecerPrice = getEcerPrice(item);
-      const minGrosir = Number(item.min_grosir || 0);
-      const hargaGrosir = Number(item.harga_grosir || 0);
+    for (const item of selectedCartItems) {
+      const itemKey = getItemKey(item);
+      const isExist = validProductIds.includes(Number(item.id));
+      const available = stockMap[itemKey] ?? 0;
 
-      const isGrosirActive = Boolean(
-        item.is_grosir &&
-        minGrosir > 0 &&
-        hargaGrosir > 0 &&
-        item.qty >= minGrosir,
-      );
-      return {
-        ...item,
-        price: isGrosirActive ? hargaGrosir : ecerPrice,
-      };
-    });
+      if (!isExist) {
+        setStockWarning(`Produk "${item.title}" sudah tidak tersedia di toko.`);
+        return;
+      }
+
+      if (available <= 0) {
+        setStockWarning(`Stok untuk "${item.title}" sudah habis terjual.`);
+        return;
+      }
+
+      if (item.qty > available) {
+        setStockWarning(
+          `Jumlah pesanan untuk ${item.title} ${item.is_grosir ? "(Seri)" : `(${item.color})`} melebihi sisa stok (${available} pcs). Mohon kurangi jumlahnya.`,
+        );
+        return;
+      }
+    }
 
     if (typeof window !== "undefined") {
       sessionStorage.setItem(
         "almaco_checkout_items",
-        JSON.stringify(itemsToPass),
+        JSON.stringify(selectedCartItems),
       );
     }
 
@@ -205,8 +301,45 @@ export default function KeranjangPage() {
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-neutral-900 flex flex-col font-sans selection:bg-amber-900 selection:text-white justify-between overflow-x-hidden">
+      {/* POPUP PERINGATAN */}
+      {stockWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={() => setStockWarning(null)}
+          />
+          <div className="relative z-10 w-full max-w-sm bg-white border border-stone-200 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200 rounded-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4 text-amber-800" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-950">
+                  Perhatian Stok
+                </h3>
+                <p className="text-[10px] text-neutral-400 uppercase tracking-wider">
+                  Informasi Ketersediaan
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-neutral-600 leading-relaxed bg-[#FAF8F5] p-3 border border-stone-200 rounded-2xs">
+              {stockWarning}
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setStockWarning(null)}
+                className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase tracking-wider py-2.5 transition rounded-2xs cursor-pointer"
+              >
+                Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
-      <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-stone-200">
+      <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-stone-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link
             href="/"
@@ -223,8 +356,10 @@ export default function KeranjangPage() {
             </div>
             <div className="leading-tight truncate">
               <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black tracking-wider">ALMACO</span>
-                <span className="font-light text-nuetral-800">FASHION</span>
+                <span className="font-black tracking-wider">ALMACO</span>{" "}
+                <span className="font-light text-neutral-800 ml-1">
+                  FASHION
+                </span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
@@ -254,6 +389,26 @@ export default function KeranjangPage() {
           </h1>
         </div>
 
+        {/* NOTIFIKASI JIKA ADA BARANG HABIS / DIHAPUS */}
+        {!isVerifyingStocks && hasUnavailableItems && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-950">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-800 shrink-0" />
+              <span>
+                Beberapa produk di keranjang Anda <strong>sudah habis</strong>{" "}
+                atau <strong>tidak lagi tersedia</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearUnavailableItems}
+              className="self-start sm:self-auto px-3 py-1.5 bg-amber-900 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider rounded-2xs transition shrink-0 cursor-pointer"
+            >
+              Hapus Barang Tidak Tersedia
+            </button>
+          </div>
+        )}
+
         {cartItems.length === 0 ? (
           <div className="bg-white border border-stone-200 p-8 sm:p-14 text-center space-y-4 my-6 shadow-xs">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
@@ -264,8 +419,8 @@ export default function KeranjangPage() {
                 Keranjang Belanja Anda Kosong
               </h2>
               <p className="text-[11px] sm:text-xs text-neutral-500 max-w-sm mx-auto">
-                Temukan berbagai koleksi daster, gamis, setcel, dan busana
-                muslimah elegan kami.
+                Temukan berbagai koleksi daster, gamis, setcel, dan paket seri
+                grosir kami.
               </p>
             </div>
             <Link
@@ -284,7 +439,8 @@ export default function KeranjangPage() {
                 <button
                   type="button"
                   onClick={toggleSelectAll}
-                  className="flex items-center gap-2.5 hover:text-amber-900 transition cursor-pointer select-none"
+                  disabled={availableItemsCount === 0}
+                  className="flex items-center gap-2.5 hover:text-amber-900 transition cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isAllSelected ? (
                     <CheckSquare className="w-4 h-4 text-amber-900" />
@@ -292,14 +448,27 @@ export default function KeranjangPage() {
                     <Square className="w-4 h-4 text-stone-400" />
                   )}
                   <span>
-                    Pilih Semua ({selectedItemKeys.length}/{cartItems.length})
+                    Pilih Semua ({selectedItemKeys.length}/{availableItemsCount}
+                    )
                   </span>
                 </button>
 
                 {selectedItemKeys.length > 0 && (
                   <button
                     type="button"
-                    onClick={handleDeleteSelected}
+                    onClick={() => {
+                      const selectedItems = cartItems.filter((i: any) =>
+                        selectedItemKeys.includes(getItemKey(i)),
+                      );
+                      if (typeof hapusItemDaftar === "function") {
+                        hapusItemDaftar(selectedItems);
+                      } else {
+                        selectedItems.forEach((i: any) =>
+                          handleDelete(i.id, i.size, i.color),
+                        );
+                      }
+                      setSelectedItemKeys([]);
+                    }}
                     className="text-rose-600 hover:text-rose-800 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -310,43 +479,43 @@ export default function KeranjangPage() {
 
               {/* LIST PRODUK */}
               {cartItems.map((item: any) => {
-                const itemKey = `${item.id}-${item.size}-${item.color}`;
+                const itemKey = getItemKey(item);
                 const isSelected = selectedItemKeys.includes(itemKey);
-                const itemUnitWeight = Number(item.weight) || 350;
-                const itemTotalWeight = itemUnitWeight * item.qty;
+                const itemUnitWeight = Number(item.weight) || 100;
 
-                const ecerPrice = getEcerPrice(item);
-                const minGrosir = Number(item.min_grosir || 0);
-                const hargaGrosir = Number(item.harga_grosir || 0);
-
-                const isGrosirActive = Boolean(
-                  item.is_grosir &&
-                  minGrosir > 0 &&
-                  hargaGrosir > 0 &&
-                  item.qty >= minGrosir,
+                const isProductExist = validProductIds.includes(
+                  Number(item.id),
                 );
+                const availableStock = stockMap[itemKey] ?? (item.stok || 0);
+                const isStockEmpty = !isProductExist || availableStock <= 0;
 
-                const activeUnitPrice = isGrosirActive
-                  ? hargaGrosir
-                  : item.price || ecerPrice;
-                const itemSubtotal = activeUnitPrice * item.qty;
-                const qtyNeededForGrosir = minGrosir ? minGrosir - item.qty : 0;
+                const isGrosir = Boolean(item.is_grosir);
+                const minGrosir = Number(item.min_grosir || 5);
+                const minAllowed = isGrosir ? minGrosir : 1;
+                const unitPrice = Number(item.price || 0);
+                const itemSubtotal = unitPrice * item.qty;
 
                 return (
                   <div
                     key={itemKey}
-                    className={`bg-white border transition-all p-3.5 sm:p-5 flex flex-col space-y-3 shadow-2xs ${
-                      isSelected
-                        ? "border-amber-900 ring-1 ring-amber-900/20"
-                        : "border-stone-200 opacity-85"
+                    className={`bg-white border transition-all p-3.5 sm:p-5 flex flex-col space-y-3 shadow-2xs rounded-xs ${
+                      isStockEmpty
+                        ? "border-stone-200 bg-stone-50/60 opacity-60"
+                        : isSelected
+                          ? "border-amber-900 ring-1 ring-amber-900/20"
+                          : "border-stone-200"
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                       <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto min-w-0">
+                        {/* Checkbox */}
                         <button
                           type="button"
-                          onClick={() => toggleSelectItem(itemKey)}
-                          className="p-1 text-neutral-700 hover:text-amber-900 transition shrink-0 cursor-pointer"
+                          disabled={isStockEmpty}
+                          onClick={() =>
+                            toggleSelectItem(itemKey, !isStockEmpty)
+                          }
+                          className="p-1 text-neutral-700 hover:text-amber-900 transition shrink-0 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           {isSelected ? (
                             <CheckSquare className="w-5 h-5 text-amber-900" />
@@ -355,7 +524,7 @@ export default function KeranjangPage() {
                           )}
                         </button>
 
-                        <div className="relative w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 shrink-0 overflow-hidden border border-stone-200">
+                        <div className="relative w-16 h-20 sm:w-20 sm:h-24 bg-neutral-100 shrink-0 overflow-hidden border border-stone-200 rounded-2xs">
                           <Image
                             src={
                               item.image ||
@@ -365,12 +534,31 @@ export default function KeranjangPage() {
                             fill
                             className="object-cover"
                           />
+                          {isStockEmpty && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-1 text-center">
+                              <span className="text-[9px] font-bold text-white uppercase tracking-wider">
+                                {!isProductExist ? "Dihapus" : "Habis"}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-1 min-w-0 flex-1">
-                          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900 line-clamp-1">
-                            {item.title}
-                          </h3>
+                          <div className="flex items-center gap-1.5">
+                            {isGrosir ? (
+                              <span className="bg-amber-900 text-amber-100 text-[8px] font-bold px-1.5 py-0.2 rounded-2xs">
+                                SERI GROSIR
+                              </span>
+                            ) : (
+                              <span className="bg-neutral-900 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-2xs">
+                                ECERAN
+                              </span>
+                            )}
+                            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-900 line-clamp-1">
+                              {item.title}
+                            </h3>
+                          </div>
+
                           <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-wider">
                             Ukuran:{" "}
                             <strong className="text-neutral-800">
@@ -382,36 +570,36 @@ export default function KeranjangPage() {
                             </strong>
                           </p>
 
-                          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-neutral-600">
-                            <Scale className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                            <span>
-                              Berat:{" "}
-                              <strong className="text-neutral-900 font-mono">
-                                {itemUnitWeight} gr
-                              </strong>{" "}
-                              / pcs
-                              {item.qty > 1 && (
-                                <span className="text-neutral-500 font-mono">
-                                  {" "}
-                                  (Total: {itemTotalWeight} gr)
+                          <div className="flex items-center gap-2 text-[10px] sm:text-[11px]">
+                            {!isProductExist ? (
+                              <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                Produk Tidak Tersedia di Katalog
+                              </span>
+                            ) : isStockEmpty ? (
+                              <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                Stok Habis
+                              </span>
+                            ) : (
+                              <>
+                                <span className="text-neutral-600 font-mono">
+                                  Tersedia: {availableStock} pcs
                                 </span>
-                              )}
-                            </span>
+                                <span className="text-stone-300">•</span>
+                                <span className="flex items-center gap-1 text-neutral-500">
+                                  <Scale className="w-3 h-3 text-stone-400" />
+                                  <span>{itemUnitWeight} gr/pcs</span>
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           <div className="pt-0.5 flex items-baseline gap-2">
                             <span className="text-xs sm:text-sm font-bold text-neutral-950 font-mono">
-                              Rp {activeUnitPrice.toLocaleString("id-ID")}
+                              Rp {unitPrice.toLocaleString("id-ID")}
                             </span>
                             <span className="text-[10px] text-neutral-400 font-normal">
                               / pcs
                             </span>
-
-                            {isGrosirActive && ecerPrice > hargaGrosir && (
-                              <span className="text-[10px] text-neutral-400 line-through font-mono">
-                                Rp {ecerPrice.toLocaleString("id-ID")}
-                              </span>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -421,8 +609,9 @@ export default function KeranjangPage() {
                         <div className="flex items-center border border-stone-300 rounded-xs bg-white">
                           <button
                             type="button"
+                            disabled={isStockEmpty || item.qty <= minAllowed}
                             onClick={() => handleUpdateQty(item, -1)}
-                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-stone-300 cursor-pointer active:bg-stone-100"
+                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-stone-300 cursor-pointer active:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
@@ -431,8 +620,13 @@ export default function KeranjangPage() {
                           </span>
                           <button
                             type="button"
+                            disabled={
+                              isStockEmpty ||
+                              item.qty + (isGrosir ? minGrosir : 1) >
+                                availableStock
+                            }
                             onClick={() => handleUpdateQty(item, 1)}
-                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-stone-300 cursor-pointer active:bg-stone-100"
+                            className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-stone-300 cursor-pointer active:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -448,54 +642,27 @@ export default function KeranjangPage() {
                             handleDelete(item.id, item.size, item.color)
                           }
                           className="text-stone-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                          title="Hapus dari Keranjang"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    {/* BADGE INDIKATOR STATUS GROSIR */}
-                    {item.is_grosir && minGrosir > 0 && (
-                      <div className="pt-2">
-                        {isGrosirActive ? (
-                          <div className="p-2 bg-amber-50/80 border border-amber-200/90 rounded-xs flex items-center justify-between text-amber-950 text-[10px] font-bold uppercase tracking-wider">
-                            <div className="flex items-center gap-1.5">
-                              <span>
-                                Paket Grosir Aktif! Hemat Rp{" "}
-                                {(ecerPrice - hargaGrosir).toLocaleString(
-                                  "id-ID",
-                                )}{" "}
-                                / pcs
-                              </span>
-                            </div>
-                            <span className="bg-amber-900 text-amber-100 px-2 py-0.5 rounded-2xs font-mono text-[9px]">
-                              GROSIR ({item.qty} PCS)
+                    {isGrosir && !isStockEmpty && (
+                      <div className="pt-1">
+                        <div className="p-2 bg-amber-50/80 border border-amber-200/90 rounded-xs flex items-center justify-between text-amber-950 text-[10px] font-bold uppercase tracking-wider">
+                          <div className="flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-amber-800" />
+                            <span>
+                              Paket Seri Grosir Otomatis Campur Warna (
+                              {item.qty} Pcs)
                             </span>
                           </div>
-                        ) : (
-                          <div className="p-2 bg-[#FAF8F5] border border-stone-200 rounded-xs flex items-center justify-between text-neutral-600 text-[10px]">
-                            <div className="flex items-center gap-1.5">
-                              <Info className="w-3.5 h-3.5 text-amber-800 shrink-0" />
-                              <span>
-                                Harga Eceran. Tambah{" "}
-                                <strong className="text-neutral-950 font-bold font-mono">
-                                  {qtyNeededForGrosir} pcs lagi
-                                </strong>{" "}
-                                untuk Harga Grosir (Rp{" "}
-                                {hargaGrosir.toLocaleString("id-ID")}/pcs)
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateQty(item, qtyNeededForGrosir)
-                              }
-                              className="text-[9px] font-bold uppercase tracking-wider bg-neutral-950 hover:bg-amber-950 text-white px-2 py-1 transition cursor-pointer shrink-0 ml-2 shadow-2xs"
-                            >
-                              + {qtyNeededForGrosir} PCS
-                            </button>
-                          </div>
-                        )}
+                          <span className="bg-amber-900 text-amber-100 px-2 py-0.5 rounded-2xs font-mono text-[9px]">
+                            MIN. {minGrosir} PCS
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -504,7 +671,7 @@ export default function KeranjangPage() {
             </div>
 
             {/* RINGKASAN BELANJA KANAN */}
-            <div className="lg:col-span-4 bg-white border border-stone-200 p-5 sm:p-6 space-y-5 shadow-xs sticky top-24">
+            <div className="lg:col-span-4 bg-white border border-stone-200 p-5 sm:p-6 space-y-5 shadow-xs sticky top-24 rounded-xs">
               <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900 border-b border-stone-100 pb-3 sm:pb-4">
                 RINGKASAN BELANJA
               </h2>
@@ -523,18 +690,6 @@ export default function KeranjangPage() {
                     Rp {selectedSubtotal.toLocaleString("id-ID")}
                   </span>
                 </div>
-
-                {totalGrosirSavings > 0 && (
-                  <div className="flex justify-between text-amber-900 font-bold bg-amber-50 p-2 border border-amber-200/90 rounded-xs text-[11px]">
-                    <span className="flex items-center gap-1">
-                      <Tag className="w-3 h-3 text-amber-700" />
-                      <span>Total Hemat Grosir</span>
-                    </span>
-                    <span className="font-mono">
-                      - Rp {totalGrosirSavings.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                )}
 
                 <div className="flex justify-between items-center">
                   <span className="flex items-center gap-1 text-[11px]">
@@ -563,7 +718,7 @@ export default function KeranjangPage() {
                 type="button"
                 onClick={handleProceedToCheckout}
                 disabled={selectedItemKeys.length === 0}
-                className={`w-full text-xs tracking-[0.2em] font-bold uppercase py-3.5 sm:py-4 flex items-center justify-center gap-2 transition shadow-md text-center ${
+                className={`w-full text-xs tracking-[0.2em] font-bold uppercase py-3.5 sm:py-4 flex items-center justify-center gap-2 transition shadow-md text-center rounded-2xs ${
                   selectedItemKeys.length > 0
                     ? "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer"
                     : "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
