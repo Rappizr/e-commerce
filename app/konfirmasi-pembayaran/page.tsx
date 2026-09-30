@@ -73,7 +73,13 @@ function KonfirmasiContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Default tanggal transfer diset ke waktu sekarang (waktu lokal)
+  // Helper formatting angka ke ribuan (misal: 419000 -> 419.000)
+  const formatRupiah = (val: string | number) => {
+    const rawNumber = String(val).replace(/[^0-9]/g, "");
+    if (!rawNumber) return "";
+    return Number(rawNumber).toLocaleString("id-ID");
+  };
+
   const getDefaultDateTime = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
@@ -126,11 +132,12 @@ function KonfirmasiContent() {
         }
 
         if (!error && data) {
+          const rawTotal = String(data.total || data.total_harga || "");
           setFormData((prev) => ({
             ...prev,
             orderId: cleanInvoice.toUpperCase(),
             senderName: data.nama_pembeli || "",
-            amount: String(data.total || data.total_harga || ""),
+            amount: formatRupiah(rawTotal),
             senderBank: data.bank_asal || "BCA",
           }));
         }
@@ -179,14 +186,12 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      // 1. Validasi keberadaan order dengan pencarian fleksibel case-insensitive
       let { data: existingOrder, error: checkError } = await supabase
         .from("orders")
         .select("id, invoice_no, total, total_harga, status")
         .ilike("invoice_no", cleanInvoiceNo)
         .single();
 
-      // Fallback: Jika pengguna mengetik angka ID pesanan
       if ((checkError || !existingOrder) && /^\d+$/.test(cleanInvoiceNo)) {
         const fallbackRes = await supabase
           .from("orders")
@@ -205,32 +210,20 @@ function KonfirmasiContent() {
         );
       }
 
-      // 2. Format tanggal transfer dengan proteksi NaN
-      let transferTimestamp: string | null = null;
-      if (formData.transferDate) {
-        const parsedD = new Date(formData.transferDate);
-        if (!isNaN(parsedD.getTime())) {
-          transferTimestamp = parsedD.toISOString();
-        }
-      }
-
       const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
 
-      // 3. Simpan update bukti transfer dan informasi pengirim
+      // Payload murni disesuaikan dengan skema tabel orders Supabase Anda
       const updatePayload: any = {
         bukti_transfer_url: previewImage,
         bukti_transfer: previewImage,
         nama_pengirim: formData.senderName.trim() || null,
         bank_asal: formData.senderBank,
-        metode_pembayaran: formData.senderBank,
         status: "Menunggu Verifikasi",
       };
 
-      if (transferTimestamp) {
-        updatePayload.tanggal_transfer = transferTimestamp;
-      }
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
-        updatePayload.nominal_transfer = parsedAmount;
+        updatePayload.total = parsedAmount;
+        updatePayload.total_harga = parsedAmount;
       }
 
       const { error: updateError } = await supabase
@@ -419,12 +412,15 @@ function KonfirmasiContent() {
                   Jumlah Transfer (Rp) <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   required
-                  placeholder="Contoh: 130000"
+                  placeholder="Contoh: 130.000"
                   value={formData.amount}
                   onChange={(e) =>
-                    setFormData({ ...formData, amount: e.target.value })
+                    setFormData({
+                      ...formData,
+                      amount: formatRupiah(e.target.value),
+                    })
                   }
                   className="w-full bg-neutral-50 border border-neutral-300 px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-neutral-900 focus:bg-white font-bold rounded-2xs"
                 />

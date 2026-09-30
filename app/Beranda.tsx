@@ -818,28 +818,34 @@ export default function Beranda() {
                         />
 
                         {/* BADGE MINIMAL SERI */}
-                        <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[7.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-amber-900 text-amber-100 px-2 py-0.5 shadow-sm rounded-2xs">
-                          Min. {item.min_grosir} Pcs / Seri
+                        <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[7.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-amber-900 text-amber-100 px-2 py-0.5 shadow-sm rounded-2xs z-10">
+                          Min. {item.min_grosir} Pcs
                         </span>
 
                         {/* BADGE SISA STOK GROSIR / HABIS */}
                         <span
-                          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 text-[7.5px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 shadow-sm rounded-2xs ${
+                          className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 text-[7.5px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 shadow-sm rounded-2xs z-10 ${
                             isHabis
                               ? "bg-rose-600 text-white font-black"
                               : "bg-white/95 text-amber-950 border border-amber-200 font-mono"
                           }`}
                         >
-                          {isHabis
-                            ? "Habis"
-                            : `Sisa: ${item.stok} pcs (${jumlahSeri} Seri)`}
+                          {isHabis ? "Habis" : `Stok: ${item.stok} pcs`}
                         </span>
                       </div>
 
                       <div className="p-2 sm:p-4 space-y-1">
-                        <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-amber-800 font-bold block">
-                          {item.kategori}
-                        </span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-amber-800 font-bold block truncate">
+                            {item.kategori}
+                          </span>
+                          {!isHabis && (
+                            <span className="text-[8px] sm:text-[9.5px] font-bold text-neutral-500 font-mono shrink-0">
+                              ({jumlahSeri} Seri Available)
+                            </span>
+                          )}
+                        </div>
+
                         <h4 className="text-[11px] sm:text-sm font-semibold text-neutral-900 line-clamp-1 group-hover:underline underline-offset-2">
                           {item.nama}
                         </h4>
@@ -1019,7 +1025,7 @@ export default function Beranda() {
 
                       {/* BADGE SISA STOK ECERAN / HABIS */}
                       <span
-                        className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs ${
+                        className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs z-10 ${
                           isHabis
                             ? "bg-rose-600 text-white font-black"
                             : "bg-white/95 text-neutral-900 border border-stone-200 font-mono"

@@ -51,12 +51,15 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
   const fetchDashboardStats = async () => {
     setIsLoading(true);
     try {
-      // 1. Ambil data pesanan (orders)
+      // 1. Ambil data pesanan secara aman
       const { data: ordersData, error: ordersErr } = await supabase
         .from("orders")
-        .select("id, status, total, total_harga, created_at");
+        .select("*");
 
-      if (ordersErr) throw ordersErr;
+      if (ordersErr) {
+        console.error("Orders Fetch Error Detail:", ordersErr);
+        throw ordersErr;
+      }
 
       const orders = ordersData || [];
 
@@ -86,7 +89,9 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         return (
           st.includes("verifikasi") ||
           st.includes("pembayaran") ||
-          st === "pending"
+          st.includes("pending") ||
+          st.includes("konfirmasi") ||
+          st.includes("menunggu")
         );
       }).length;
 
@@ -94,9 +99,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
       setTotalPesananCount(orders.length);
 
       // 2. Ambil data kas dari tabel cash_flow
-      const { data: cashData } = await supabase
-        .from("cash_flow")
-        .select("tipe, nominal, order_id, tanggal, created_at");
+      const { data: cashData } = await supabase.from("cash_flow").select("*");
 
       let manualMasuk = 0;
       let totalKeluar = 0;
@@ -121,29 +124,38 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         });
       }
 
-      // Hitung pemasukan dari orders online yang belum dicatat manual di cash_flow
-      const unrecordedOrderIncome = paidOrders
+      // Hitung order online yang belum sempat dicatat ke cash_flow
+      let unrecordedOrderIncome = 0;
+      let unrecordedOngkirKeluar = 0;
+
+      paidOrders
         .filter((o: any) => !recordedOrderIds.has(String(o.id)))
-        .reduce(
-          (acc: number, o: any) => acc + Number(o.total || o.total_harga || 0),
-          0,
-        );
+        .forEach((o: any) => {
+          const grandTotal = Number(o.total || o.total_harga || 0);
+          const ongkirVal = Number(o.ongkir || o.biaya_ongkir || 0);
+
+          unrecordedOrderIncome += grandTotal;
+          if (ongkirVal > 0) {
+            unrecordedOngkirKeluar += ongkirVal;
+          }
+        });
 
       const totalPendapatanGabungan = manualMasuk + unrecordedOrderIncome;
+      const totalKasKeluarGabungan = totalKeluar + unrecordedOngkirKeluar;
 
       setTotalPendapatan(totalPendapatanGabungan);
-      setTotalKasKeluar(totalKeluar);
+      setTotalKasKeluar(totalKasKeluarGabungan);
 
       // 3. Ambil jumlah produk aktif
-      const { count: productCount, error: productErr } = await supabase
+      const { count: productCount } = await supabase
         .from("products")
         .select("*", { count: "exact", head: true });
 
-      if (!productErr && productCount !== null) {
+      if (productCount !== null && productCount !== undefined) {
         setTotalProdukCount(productCount);
       }
 
-      // 4. Bangun data tren omzet 7 hari terakhir (dari pesanan lunas)
+      // 4. Bangun data tren omzet 7 hari terakhir
       const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
       const points: ChartPoint[] = [];
       const today = new Date();
@@ -152,14 +164,12 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         const targetDate = new Date();
         targetDate.setDate(today.getDate() - i);
 
-        // Format tanggal lokal YYYY-MM-DD
         const year = targetDate.getFullYear();
         const month = String(targetDate.getMonth() + 1).padStart(2, "0");
         const day = String(targetDate.getDate()).padStart(2, "0");
         const dateStr = `${year}-${month}-${day}`;
         const dayLabel = dayNames[targetDate.getDay()];
 
-        // Hitung omzet per tanggal lokal
         const dayTotal = paidOrders
           .filter((o: any) => {
             if (!o.created_at) return false;
@@ -227,7 +237,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
         <div className="bg-white border border-stone-200 p-3 sm:p-5 shadow-2xs rounded-xs flex items-center justify-between gap-1.5">
           <div className="min-w-0 flex-1">
             <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-amber-900/70 truncate">
-              Total Pendapatan
+              Total Pendapatan (Gross)
             </p>
             <h3 className="text-xs xs:text-sm sm:text-lg lg:text-xl font-bold font-mono text-neutral-950 mt-1 tracking-tight break-all">
               {isLoading
@@ -459,7 +469,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
               <div className="p-3 sm:p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xs">
                 <div className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold uppercase text-emerald-800 mb-0.5">
                   <ArrowDownRight className="w-3.5 h-3.5" />
-                  <span>Kas Masuk (Penjualan)</span>
+                  <span>Kas Masuk (Gross)</span>
                 </div>
                 <p className="text-sm sm:text-base font-bold font-mono text-emerald-950">
                   Rp {totalPendapatan.toLocaleString("id-ID")}
@@ -469,7 +479,7 @@ export default function DashboardComponent({ onNavigate }: DashboardProps) {
               <div className="p-3 sm:p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xs">
                 <div className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold uppercase text-rose-800 mb-0.5">
                   <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Kas Keluar (Operasional)</span>
+                  <span>Kas Keluar (Inc. Ongkir)</span>
                 </div>
                 <p className="text-sm sm:text-base font-bold font-mono text-rose-950">
                   Rp {totalKasKeluar.toLocaleString("id-ID")}

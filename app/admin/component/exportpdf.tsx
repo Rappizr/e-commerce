@@ -10,6 +10,8 @@ interface TransaksiKas {
   kategori: string;
   tipe: "masuk" | "keluar";
   nominal: number;
+  ongkir?: number;
+  biaya_packing?: number;
   rawDate?: string;
 }
 
@@ -82,11 +84,27 @@ export default function ExportPDFModal({
           '<span style="font-family: monospace; font-weight: 700; color: #171717; background-color: #f5f5f5; padding: 1px 4px; border: 1px solid #e5e5e5; border-radius: 2px;">$1</span>',
         );
 
+        // Sub-detail ongkir dan biaya packing apabila tersedia
+        const hasSubDetails =
+          (item.ongkir && item.ongkir > 0) ||
+          (item.biaya_packing && item.biaya_packing > 0);
+
+        const subDetailsHtml = hasSubDetails
+          ? `<div style="font-size: 8.5px; color: #525252; margin-top: 2px; font-family: monospace;">
+              ${item.ongkir ? `Ongkir: Rp ${item.ongkir.toLocaleString("id-ID")}` : ""} 
+              ${item.ongkir && item.biaya_packing ? " | " : ""}
+              ${item.biaya_packing ? `Packing: Rp ${item.biaya_packing.toLocaleString("id-ID")}` : ""}
+            </div>`
+          : "";
+
         return `
         <tr style="background-color: ${bgZebra}; page-break-inside: avoid;">
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4;">${idx + 1}</td>
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4; white-space: nowrap; font-family: monospace; font-size: 9.5px;">${tanggalBaku}</td>
-          <td style="padding: 7px 8px; border: 1px solid #d4d4d4; font-size: 9.5px; line-height: 1.4;">${formattedKeterangan}</td>
+          <td style="padding: 7px 8px; border: 1px solid #d4d4d4; font-size: 9.5px; line-height: 1.4;">
+            ${formattedKeterangan}
+            ${subDetailsHtml}
+          </td>
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4; font-size: 9.5px;">${item.kategori}</td>
           <td style="text-align: center; padding: 7px 5px; border: 1px solid #d4d4d4; font-weight: bold; font-size: 9.5px; color: ${item.tipe === "masuk" ? "#047857" : "#be123c"};">
             ${item.tipe === "masuk" ? "Masuk" : "Keluar"}

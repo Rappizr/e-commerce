@@ -70,20 +70,24 @@ export const cetakLabelPacking = (
   const noResiAktif = customResi || item.no_resi;
 
   const rowsItemsHtml = (item.order_items || [])
-    .map(
-      (prod, i) => `
+    .map((prod, i) => {
+      const warnaVal =
+        prod.warna && prod.warna !== "Default" ? prod.warna : "Sesuai Katalog";
+      const ukuranVal = prod.ukuran || "All Size";
+
+      return `
       <tr style="border-bottom: 1px dashed #cccccc;">
         <td style="padding: 5px 3px; vertical-align: top; width: 20px;">${i + 1}.</td>
         <td style="padding: 5px 3px; vertical-align: top;">
           <div style="font-weight: bold; font-size: 11px;">${prod.nama_produk}</div>
-          <div style="font-size: 10px; color: #555555;">Varian: ${prod.warna || "Default"} | Size: ${prod.ukuran || "All Size"}</div>
+          <div style="font-size: 10px; color: #555555;">Varian: ${warnaVal} | Size: ${ukuranVal}</div>
         </td>
         <td style="padding: 5px 3px; text-align: right; vertical-align: top; font-weight: bold; font-size: 12px; width: 35px;">
           x${prod.qty}
         </td>
       </tr>
-    `,
-    )
+    `;
+    })
     .join("");
 
   printWindow.document.write(`
@@ -102,28 +106,34 @@ export const cetakLabelPacking = (
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 100mm;
+            height: 150mm;
+          }
           body {
             font-family: Arial, Helvetica, sans-serif;
-            margin: 0;
-            padding: 10px;
+            padding: 8px;
             color: #000000;
             font-size: 11px;
             line-height: 1.3;
           }
           .container {
             border: 2px solid #000000;
-            padding: 10px;
+            padding: 8px;
             height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            page-break-inside: avoid;
           }
           .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 2px solid #000000;
-            padding-bottom: 8px;
+            padding-bottom: 6px;
           }
           .brand-box {
             display: flex;
@@ -131,25 +141,25 @@ export const cetakLabelPacking = (
             gap: 8px;
           }
           .logo-img {
-            width: 38px;
-            height: 38px;
+            width: 36px;
+            height: 36px;
             object-fit: contain;
           }
           .brand-title {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 900;
             letter-spacing: 0.5px;
             line-height: 1.1;
           }
           .brand-sub {
-            font-size: 9px;
+            font-size: 8.5px;
             color: #555555;
           }
           .invoice-box {
             text-align: right;
           }
           .invoice-label {
-            font-size: 8.5px;
+            font-size: 8px;
             text-transform: uppercase;
             color: #666666;
             font-weight: bold;
@@ -161,12 +171,12 @@ export const cetakLabelPacking = (
           }
           .resi-box {
             border-bottom: 2px dashed #000000;
-            padding: 10px 8px;
+            padding: 8px 4px;
             text-align: center;
           }
           .tempel-area {
             border: 1.5px dashed #666666;
-            padding: 10px;
+            padding: 8px;
             font-size: 10px;
             font-weight: bold;
             color: #333333;
@@ -176,15 +186,15 @@ export const cetakLabelPacking = (
           }
           .info-grid {
             border-bottom: 2px solid #000000;
-            padding: 8px 0;
+            padding: 6px 0;
           }
           .meta-bar {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr 1.2fr;
             background: #f0f0f0;
-            padding: 5px 6px;
+            padding: 4px 5px;
             border: 1px solid #000000;
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: bold;
             margin-bottom: 6px;
             text-align: center;
@@ -205,7 +215,7 @@ export const cetakLabelPacking = (
             margin-bottom: 4px;
           }
           .buyer-address {
-            font-size: 10.5px;
+            font-size: 10px;
             line-height: 1.35;
           }
           .catatan-box {
@@ -222,7 +232,7 @@ export const cetakLabelPacking = (
             color: #92400e;
           }
           .catatan-val {
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: bold;
             font-style: italic;
             color: #1c1917;
@@ -230,7 +240,7 @@ export const cetakLabelPacking = (
             line-height: 1.3;
           }
           .items-box {
-            padding: 8px 0;
+            padding: 6px 0;
             flex: 1;
           }
           table {
@@ -240,13 +250,13 @@ export const cetakLabelPacking = (
           }
           .footer {
             border-top: 2px solid #000000;
-            padding-top: 6px;
+            padding-top: 5px;
             display: flex;
             justify-content: space-between;
-            font-size: 9px;
+            font-size: 8.5px;
           }
           @media print {
-            body { padding: 6px; }
+            body { padding: 4px; }
           }
         </style>
       </head>

@@ -10,6 +10,8 @@ interface TransaksiKas {
   kategori: string;
   tipe: "masuk" | "keluar";
   nominal: number;
+  ongkir?: number;
+  biaya_packing?: number;
   rawDate?: string;
 }
 
@@ -75,7 +77,25 @@ export default function ExportExcelModal({
     const rowsHtml = data
       .map((item, idx) => {
         const tanggalBaku = formatTanggalStandar(item.tanggal, item.rawDate);
-        const cleanKeterangan = escapeXml(item.keterangan || "-");
+        let ketText = item.keterangan || "-";
+
+        // Tambah catatan ongkir & packing di keterangan Excel jika tersedia
+        const hasSubDetails =
+          (item.ongkir && item.ongkir > 0) ||
+          (item.biaya_packing && item.biaya_packing > 0);
+
+        if (hasSubDetails) {
+          const subText = [];
+          if (item.ongkir)
+            subText.push(`Ongkir: Rp ${item.ongkir.toLocaleString("id-ID")}`);
+          if (item.biaya_packing)
+            subText.push(
+              `Packing: Rp ${item.biaya_packing.toLocaleString("id-ID")}`,
+            );
+          ketText += ` (${subText.join(" | ")})`;
+        }
+
+        const cleanKeterangan = escapeXml(ketText);
         const cleanKategori = escapeXml(item.kategori || "Umum");
 
         return `

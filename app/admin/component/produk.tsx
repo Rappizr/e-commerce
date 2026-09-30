@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Tag,
   Layers,
-  PackageCheck,
   ShoppingBag,
 } from "lucide-react";
 import { supabase } from "../../penyimpanan/supabase";
@@ -662,45 +661,6 @@ export default function ProdukComponent() {
     }
   };
 
-  // UPDATE STOK CEPAT (+ / -) SINKRON ANTARA PRODUCTS & PRODUCT_VARIANTS
-  const handleUpdateStock = async (id: number, newStock: number) => {
-    if (newStock < 0) return;
-    setProduk((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, stok: newStock } : p)),
-    );
-
-    try {
-      await supabase
-        .from("products")
-        .update({ stok: newStock })
-        .eq("id", Number(id));
-
-      const targetProd = produk.find((p) => p.id === id);
-      if (targetProd?.is_grosir) {
-        // Grosir: samakan seluruh stok varian
-        await supabase
-          .from("product_variants")
-          .update({ stok: newStock })
-          .eq("product_id", Number(id));
-      } else {
-        // Eceran: sinkronkan jika hanya ada 1 varian default
-        const { data: vList } = await supabase
-          .from("product_variants")
-          .select("id")
-          .eq("product_id", Number(id));
-
-        if (vList && vList.length === 1) {
-          await supabase
-            .from("product_variants")
-            .update({ stok: newStock })
-            .eq("id", vList[0].id);
-        }
-      }
-    } catch (err) {
-      console.error("Gagal update stok:", err);
-    }
-  };
-
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const targetId = Number(deleteTarget.id);
@@ -982,48 +942,26 @@ export default function ProdukComponent() {
                   </div>
                 </div>
 
-                <div className="p-2 sm:p-3 bg-[#FAF8F5] border-t border-stone-200 flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 hidden sm:inline">
-                      Stok:
-                    </span>
-                    <button
-                      onClick={() =>
-                        handleUpdateStock(item.id, Math.max(0, item.stok - 1))
-                      }
-                      className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer rounded-2xs active:bg-stone-100"
-                    >
-                      -
-                    </button>
-                    <button
-                      onClick={() => handleUpdateStock(item.id, item.stok + 1)}
-                      className="w-5 h-5 sm:w-6 sm:h-6 bg-white border border-stone-300 hover:border-neutral-900 text-neutral-800 font-bold text-xs flex items-center justify-center transition cursor-pointer rounded-2xs active:bg-stone-100"
-                    >
-                      +
-                    </button>
-                  </div>
+                <div className="p-2 sm:p-3 bg-[#FAF8F5] border-t border-stone-200 flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(item)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-neutral-950 text-white hover:bg-amber-950 text-[10px] font-bold uppercase transition shadow-2xs cursor-pointer rounded-2xs"
+                    title="Edit Produk"
+                  >
+                    <Pencil className="w-3 h-3 text-amber-300" />
+                    <span>Edit</span>
+                  </button>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEdit(item)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral-950 text-white hover:bg-amber-950 text-[9px] sm:text-[10px] font-bold uppercase transition shadow-2xs cursor-pointer rounded-2xs"
-                      title="Edit Produk"
-                    >
-                      <Pencil className="w-3 h-3 text-amber-300" />
-                      <span>Edit</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(item)}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[9px] sm:text-[10px] font-bold uppercase transition shadow-2xs cursor-pointer rounded-2xs"
-                      title="Hapus Produk"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span className="hidden xs:inline">Hapus</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(item)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-600 hover:text-white text-[10px] font-bold uppercase transition shadow-2xs cursor-pointer rounded-2xs"
+                    title="Hapus Produk"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden xs:inline">Hapus</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -1330,7 +1268,6 @@ export default function ProdukComponent() {
               {isGrosirForm && (
                 <div className="p-3 bg-amber-50/70 border border-amber-300 rounded-xs space-y-2.5">
                   <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs uppercase tracking-wider">
-                    <PackageCheck className="w-4 h-4 text-amber-800" />
                     <span>Ketentuan Paket Seri Grosir</span>
                   </div>
 

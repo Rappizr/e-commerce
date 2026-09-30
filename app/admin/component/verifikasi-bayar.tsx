@@ -21,6 +21,8 @@ interface VerifikasiItem {
   nama_pembeli: string;
   no_hp: string;
   bank_asal: string;
+  subtotal?: number;
+  ongkir?: number;
   total: number;
   bukti_transfer_url: string;
   status: string;
@@ -81,17 +83,7 @@ export default function VerifikasiBayarComponent() {
         .from("orders")
         .select(
           `
-          id,
-          invoice_no,
-          nama_pembeli,
-          no_hp,
-          bank_asal,
-          total,
-          total_harga,
-          bukti_transfer_url,
-          bukti_transfer,
-          status,
-          created_at,
+          *,
           order_items (
             product_id,
             nama_produk,
@@ -101,20 +93,39 @@ export default function VerifikasiBayarComponent() {
           )
         `,
         )
-        .or("status.eq.Menunggu Verifikasi,status.eq.Menunggu Pembayaran")
         .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        const mapped: VerifikasiItem[] = data.map((item: any) => ({
+      if (error) throw error;
+
+      if (data) {
+        // Status yang TIDAK perlu masuk verifikasi (karena sudah selesai/diproses/batal)
+        const excludeStatuses = [
+          "diproses",
+          "dikirim",
+          "selesai",
+          "dibatalkan",
+          "batal",
+        ];
+
+        const pendingOrders = data.filter((item: any) => {
+          const st = String(item.status || "")
+            .trim()
+            .toLowerCase();
+          return !excludeStatuses.includes(st);
+        });
+
+        const mapped: VerifikasiItem[] = pendingOrders.map((item: any) => ({
           id: item.id,
           invoice_no: item.invoice_no,
           nama_pembeli: item.nama_pembeli,
           no_hp: item.no_hp || "",
           bank_asal: item.bank_asal || "BCA",
+          subtotal: Number(item.subtotal || 0),
+          ongkir: Number(item.ongkir || item.biaya_ongkir || 0),
           total: Number(item.total || item.total_harga || 0),
           bukti_transfer_url:
             item.bukti_transfer_url || item.bukti_transfer || "",
-          status: item.status,
+          status: item.status || "Menunggu Verifikasi",
           created_at: item.created_at,
           order_items: item.order_items || [],
         }));
@@ -186,42 +197,58 @@ export default function VerifikasiBayarComponent() {
   };
 
   // Setujui Pembayaran
-  const handleApprove = async (
-    orderId: number,
-    invoiceNo: string,
-    nominal: number,
-  ) => {
+  const handleApprove = async (orderItem: VerifikasiItem) => {
     try {
       // 1. Update status pesanan di tabel orders
       const { error: orderErr } = await supabase
         .from("orders")
         .update({ status: "Diproses" })
-        .eq("id", orderId);
+        .eq("id", orderItem.id);
 
       if (orderErr) throw orderErr;
 
-      // 2. Cek apakah sudah pernah masuk di cash_flow agar tidak tercatat ganda
+      const grandTotal = Number(orderItem.total || 0);
+      const ongkirVal = Number(orderItem.ongkir || 0);
+      const tanggalHariIni = new Date().toISOString().split("T")[0];
+
+      // 2. Cek apakah sudah pernah masuk di cash_flow
       const { data: existingCash } = await supabase
         .from("cash_flow")
         .select("id")
-        .eq("order_id", orderId)
-        .maybeSingle();
+        .eq("order_id", orderItem.id);
 
-      if (!existingCash) {
+      if (!existingCash || existingCash.length === 0) {
+        // A. Catat KAS MASUK Gross (Total Pembayaran Pembeli)
         await supabase.from("cash_flow").insert([
           {
-            order_id: orderId,
+            order_id: orderItem.id,
             tipe: "Masuk",
             kategori: "Penjualan Web",
-            nominal: Number(nominal || 0),
-            keterangan: `Pembayaran Lunas Invoice: ${invoiceNo}`,
-            tanggal: new Date().toISOString().split("T")[0],
+            nominal: grandTotal,
+            keterangan: `Pembayaran Lunas Invoice: ${orderItem.invoice_no} (${orderItem.nama_pembeli})`,
+            tanggal: tanggalHariIni,
           },
         ]);
+
+        // B. Jika terdapat ongkir, otomatis catat KAS KELUAR untuk Biaya Kurir
+        if (ongkirVal > 0) {
+          await supabase.from("cash_flow").insert([
+            {
+              order_id: orderItem.id,
+              tipe: "Keluar",
+              kategori: "Top-Up & Biaya Ekspedisi / Kurir",
+              nominal: ongkirVal,
+              keterangan: `Biaya Ongkir Kurir Invoice: ${orderItem.invoice_no}`,
+              tanggal: tanggalHariIni,
+            },
+          ]);
+        }
       }
 
-      setKonfirmasiList((prev) => prev.filter((item) => item.id !== orderId));
-      setSuccessModal({ show: true, invoiceId: invoiceNo });
+      setKonfirmasiList((prev) =>
+        prev.filter((item) => item.id !== orderItem.id),
+      );
+      setSuccessModal({ show: true, invoiceId: orderItem.invoice_no });
       setSelectedBukti(null);
     } catch (err: any) {
       console.error("Gagal menyetujui pembayaran:", err);
@@ -229,7 +256,7 @@ export default function VerifikasiBayarComponent() {
     }
   };
 
-  // Tolak Pembayaran
+  // Tolak Pembayaran (Trigger Supabase otomatis mengembalikan stok)
   const handleConfirmReject = async () => {
     const { order, alasan } = rejectModal;
     if (!order) return;
@@ -241,7 +268,7 @@ export default function VerifikasiBayarComponent() {
         .from("orders")
         .update({
           status: "Dibatalkan",
-          catatan: alasan,
+          catatan: `Dibatalkan: ${alasan}`,
         })
         .eq("id", order.id);
 
@@ -370,7 +397,7 @@ export default function VerifikasiBayarComponent() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">Total:</span>
+                    <span className="text-neutral-500">Total Tagihan:</span>
                     <span className="font-bold text-amber-950 font-mono">
                       Rp {item.total?.toLocaleString("id-ID")}
                     </span>
@@ -410,9 +437,7 @@ export default function VerifikasiBayarComponent() {
 
                   <button
                     type="button"
-                    onClick={() =>
-                      handleApprove(item.id, item.invoice_no, item.total)
-                    }
+                    onClick={() => handleApprove(item)}
                     className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider transition shadow-2xs rounded-2xs cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5 shrink-0 text-amber-300" />
@@ -519,9 +544,7 @@ export default function VerifikasiBayarComponent() {
 
                         <button
                           type="button"
-                          onClick={() =>
-                            handleApprove(item.id, item.invoice_no, item.total)
-                          }
+                          onClick={() => handleApprove(item)}
                           className="inline-flex items-center gap-1 px-4 py-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-[10px] font-bold uppercase tracking-wider transition shadow-2xs rounded-2xs cursor-pointer"
                         >
                           <Check className="w-3.5 h-3.5 text-amber-300" />
@@ -602,13 +625,7 @@ export default function VerifikasiBayarComponent() {
 
               <button
                 type="button"
-                onClick={() =>
-                  handleApprove(
-                    selectedBukti.id,
-                    selectedBukti.invoice_no,
-                    selectedBukti.total,
-                  )
-                }
+                onClick={() => handleApprove(selectedBukti)}
                 className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-xs font-bold uppercase py-2.5 transition text-center shadow-xs flex items-center justify-center gap-1.5 cursor-pointer rounded-2xs"
               >
                 <Check className="w-3.5 h-3.5 text-amber-300" />
@@ -754,8 +771,8 @@ export default function VerifikasiBayarComponent() {
                 <strong className="text-neutral-900 font-mono break-all">
                   {successModal.invoiceId}
                 </strong>{" "}
-                telah diverifikasi dan kas pemasukan otomatis tercatat di buku
-                kas.
+                telah diverifikasi. Kas masuk gross dan pengeluaran ongkir kurir
+                otomatis dicatat di buku kas.
               </p>
             </div>
 

@@ -229,59 +229,49 @@ export default function CheckoutPage() {
     }
   };
 
-  // Handler Update Qty Checkout (MURNI MODIFIKASI LOKAL CHECKOUT)
+  // VERSI PERBAIKAN:
   const handleUpdateQtyCheckout = (item: any, direction: number) => {
     const isGrosir = Boolean(item.is_grosir);
     const minGrosir = Math.max(1, parseInt(String(item.min_grosir || 5), 10));
 
+    const currentQty = Math.max(1, parseInt(String(item.qty || 1), 10));
+    let nextQty = currentQty;
+
+    if (isGrosir) {
+      const step = minGrosir;
+      nextQty = direction > 0 ? currentQty + step : currentQty - step;
+      if (nextQty < minGrosir) nextQty = minGrosir;
+    } else {
+      nextQty = direction > 0 ? currentQty + 1 : currentQty - 1;
+      if (nextQty <= 0) return;
+    }
+
+    // 1. Update Context secara terpisah (Aman dari bentrokan render React)
+    if (typeof updateQtyContext === "function") {
+      updateQtyContext(item.id, nextQty, item.size, item.color);
+    }
+
+    // 2. Update State Checkout Lokal
     setCheckoutItems((prevItems) => {
-      const updated = prevItems
-        .map((i: any) => {
-          const isSame =
-            String(i.id) === String(item.id) &&
-            String(i.size || "")
+      const updated = prevItems.map((i: any) => {
+        const isSame =
+          String(i.id) === String(item.id) &&
+          String(i.size || "")
+            .trim()
+            .toUpperCase() ===
+            String(item.size || "")
               .trim()
-              .toUpperCase() ===
-              String(item.size || "")
-                .trim()
-                .toUpperCase() &&
-            String(i.color || "")
+              .toUpperCase() &&
+          String(i.color || "")
+            .trim()
+            .toUpperCase() ===
+            String(item.color || "")
               .trim()
-              .toUpperCase() ===
-              String(item.color || "")
-                .trim()
-                .toUpperCase();
+              .toUpperCase();
 
-          if (!isSame) return i;
-
-          const currentQty = Math.max(1, parseInt(String(i.qty || 1), 10));
-          let nextQty = currentQty;
-
-          if (isGrosir) {
-            // GROSIR: Melompat persis 1 seri (misal min_grosir 5 -> +5 / -5)
-            const step = minGrosir;
-            nextQty = direction > 0 ? currentQty + step : currentQty - step;
-
-            if (nextQty < minGrosir) {
-              nextQty = minGrosir;
-            }
-          } else {
-            // ECERAN: Bertambah/berkurang 1
-            nextQty = direction > 0 ? currentQty + 1 : currentQty - 1;
-
-            if (nextQty <= 0) {
-              return null;
-            }
-          }
-
-          // Update pula ke Context secara aman
-          if (typeof updateQtyContext === "function") {
-            updateQtyContext(i.id, nextQty, i.size, i.color);
-          }
-
-          return { ...i, qty: nextQty };
-        })
-        .filter(Boolean);
+        if (!isSame) return i;
+        return { ...i, qty: nextQty };
+      });
 
       if (typeof window !== "undefined") {
         sessionStorage.setItem(

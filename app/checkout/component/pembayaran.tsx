@@ -7,7 +7,7 @@ import {
   Copy,
   Check,
   ArrowRight,
-  ShoppingBag,
+  ArrowLeft,
   Clock,
   FileCheck,
   Loader2,
@@ -178,10 +178,11 @@ export default function PembayaranComponent({
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-stone-300 hover:border-neutral-950 px-2.5 sm:px-3 py-1.5 transition-all shadow-2xs shrink-0 rounded-2xs"
+            className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs uppercase tracking-wider font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-stone-300 hover:border-neutral-950 px-2.5 sm:px-3.5 py-1.5 transition-all shadow-2xs shrink-0 rounded-2xs"
+            title="Kembali ke Beranda"
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline">Beranda</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Beranda</span>
           </Link>
         </div>
       </header>

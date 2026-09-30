@@ -76,7 +76,7 @@ export default function KeuanganComponent() {
   const fetchCashFlowFromSupabase = async () => {
     setIsLoading(true);
     try {
-      // 1. Ambil mutasi kas manual
+      // 1. Ambil mutasi kas dari tabel cash_flow
       const { data: cashData } = await supabase
         .from("cash_flow")
         .select("*")
@@ -94,15 +94,15 @@ export default function KeuanganComponent() {
           : "keluar",
         nominal: Number(c.nominal || 0),
         order_id: c.order_id || null,
-        isOrder: false,
+        isOrder: Boolean(c.order_id),
         rawDate: c.tanggal || c.created_at || new Date().toISOString(),
       }));
 
-      // 2. Ambil transaksi dari pesanan website yang sudah terverifikasi/dibayar
+      // 2. Ambil pesanan online terverifikasi/dibayar
       const { data: ordersData } = await supabase
         .from("orders")
         .select(
-          "id, invoice_no, nama_pembeli, status, total, total_harga, created_at",
+          "id, invoice_no, nama_pembeli, status, total, total_harga, ongkir, biaya_ongkir, created_at",
         )
         .order("created_at", { ascending: false });
 
@@ -127,25 +127,49 @@ export default function KeuanganComponent() {
         manualItems.filter((m) => m.order_id).map((m) => String(m.order_id)),
       );
 
-      const orderIncomeItems: TransaksiKas[] = paidOrders
-        .filter((ord: any) => !recordedOrderIds.has(String(ord.id)))
-        .map((ord: any) => ({
-          id: "ord-" + ord.id,
-          tanggal: formatDateDisplay(ord.created_at),
-          keterangan:
-            "Pesanan " +
-            (ord.invoice_no || "") +
-            " - " +
-            (ord.nama_pembeli || "Pelanggan"),
-          kategori: "Penjualan Web",
-          tipe: "masuk",
-          nominal: Number(ord.total || ord.total_harga || 0),
-          order_id: ord.id,
-          isOrder: true,
-          rawDate: ord.created_at || new Date().toISOString(),
-        }));
+      // 3. Untuk order yang BELUM sempat dicatat di cash_flow via tombol Verifikasi (Fallback)
+      const unrecordedOrderItems: TransaksiKas[] = [];
 
-      const combined = [...manualItems, ...orderIncomeItems].sort(
+      paidOrders
+        .filter((ord: any) => !recordedOrderIds.has(String(ord.id)))
+        .forEach((ord: any) => {
+          const grandTotal = Number(ord.total || ord.total_harga || 0);
+          const ongkirVal = Number(ord.ongkir || ord.biaya_ongkir || 0);
+
+          // Kas Masuk Gross
+          unrecordedOrderItems.push({
+            id: "ord-in-" + ord.id,
+            tanggal: formatDateDisplay(ord.created_at),
+            keterangan:
+              "Pesanan " +
+              (ord.invoice_no || "") +
+              " - " +
+              (ord.nama_pembeli || "Pelanggan"),
+            kategori: "Penjualan Web",
+            tipe: "masuk",
+            nominal: grandTotal,
+            order_id: ord.id,
+            isOrder: true,
+            rawDate: ord.created_at || new Date().toISOString(),
+          });
+
+          // Kas Keluar Ongkir Kurir (Jikamana ada)
+          if (ongkirVal > 0) {
+            unrecordedOrderItems.push({
+              id: "ord-out-" + ord.id,
+              tanggal: formatDateDisplay(ord.created_at),
+              keterangan: "Biaya Ekspedisi " + (ord.invoice_no || ""),
+              kategori: "Top-Up & Biaya Ekspedisi / Kurir",
+              tipe: "keluar",
+              nominal: ongkirVal,
+              order_id: ord.id,
+              isOrder: true,
+              rawDate: ord.created_at || new Date().toISOString(),
+            });
+          }
+        });
+
+      const combined = [...manualItems, ...unrecordedOrderItems].sort(
         (a, b) =>
           new Date(b.rawDate || "").getTime() -
           new Date(a.rawDate || "").getTime(),
@@ -322,7 +346,7 @@ export default function KeuanganComponent() {
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
               <ArrowDownRight className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-              <span>Total Pemasukan</span>
+              <span>Total Pemasukan (Gross)</span>
             </p>
             <h3 className="text-lg sm:text-xl font-bold font-mono text-neutral-950 mt-1 truncate">
               Rp {totalMasuk.toLocaleString("id-ID")}
@@ -337,7 +361,7 @@ export default function KeuanganComponent() {
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1">
               <ArrowUpRight className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-              <span>Total Pengeluaran</span>
+              <span>Total Pengeluaran (Inc. Ongkir)</span>
             </p>
             <h3 className="text-lg sm:text-xl font-bold font-mono text-neutral-950 mt-1 truncate">
               Rp {totalKeluar.toLocaleString("id-ID")}
@@ -723,6 +747,9 @@ export default function KeuanganComponent() {
                       </option>
                       <option value="Jasa Jahit & Konveksi">
                         Jasa Jahit & Konveksi
+                      </option>
+                      <option value="Top-Up & Biaya Ekspedisi / Kurir">
+                        Top-Up & Biaya Ekspedisi / Kurir
                       </option>
                       <option value="Operasional & Packing">
                         Operasional & Packing
