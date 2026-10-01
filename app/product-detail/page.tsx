@@ -95,7 +95,7 @@ function ProductDetailContent() {
             imgList = [data.gambar_utama];
           } else {
             imgList = [
-              "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=100&w=1600&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=800&auto=format&fit=crop",
             ];
           }
 
@@ -115,7 +115,7 @@ function ProductDetailContent() {
               ? data.ukuran[0]
               : typeof data.ukuran === "string" && data.ukuran.trim() !== ""
                 ? data.ukuran
-                : "All Size";
+                : "All Size (LD 115 cm)";
 
           const detailsArr: string[] =
             Array.isArray(data.rincian) && data.rincian.length > 0
@@ -357,11 +357,13 @@ function ProductDetailContent() {
             </div>
 
             <div className="flex gap-3 items-center bg-[#FAF8F5] p-2.5 border border-stone-200 rounded-2xs">
-              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200 rounded-2xs flex items-center justify-center">
-                <img
+              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200 rounded-2xs">
+                <Image
                   src={allImages[selectedImageIndex] || allImages[0]}
                   alt={product.title}
-                  className="w-full h-full object-cover"
+                  fill
+                  sizes="56px"
+                  className="object-cover"
                 />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
@@ -420,7 +422,7 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* MODAL GALERI LIGHTBOX (HD 100% UNTOUCHED) */}
+      {/* MODAL GALERI LIGHTBOX */}
       {galleryModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
@@ -447,10 +449,12 @@ function ProductDetailContent() {
             </button>
 
             <div className="relative w-full max-w-4xl h-[78vh] flex items-center justify-center p-2">
-              <img
+              <Image
                 src={allImages[activeImageIndex]}
                 alt={`Tampilan foto HD ${activeImageIndex + 1}`}
-                className="max-w-full max-h-full object-contain drop-shadow-2xl rounded-xs"
+                fill
+                sizes="100vw"
+                className="object-contain drop-shadow-2xl rounded-xs"
               />
             </div>
 
@@ -467,16 +471,18 @@ function ProductDetailContent() {
               <button
                 key={idx}
                 onClick={() => setActiveImageIndex(idx)}
-                className={`relative w-14 h-18 sm:w-16 sm:h-20 shrink-0 border-2 transition overflow-hidden cursor-pointer rounded-2xs flex items-center justify-center ${
+                className={`relative w-14 h-18 sm:w-16 sm:h-20 shrink-0 border-2 transition overflow-hidden cursor-pointer rounded-2xs ${
                   activeImageIndex === idx
                     ? "border-amber-400 scale-105 ring-2 ring-amber-400/50"
                     : "border-neutral-800 opacity-40 hover:opacity-100"
                 }`}
               >
-                <img
+                <Image
                   src={img}
                   alt={`Thumb ${idx + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  sizes="64px"
+                  className="object-cover"
                 />
               </button>
             ))}
@@ -486,17 +492,19 @@ function ProductDetailContent() {
 
       {/* GRID DETAIL PRODUK */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-10 items-start">
-        {/* KOLOM FOTO */}
+        {/* KOLOM FOTO PRODUK (3:4 PRESET FULL FIT) */}
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           <div
             onClick={() => openLightbox(selectedImageIndex)}
-            className="relative w-full aspect-[3/4] max-h-[520px] bg-stone-100 border border-stone-200 overflow-hidden group cursor-pointer rounded-xs shadow-xs flex items-center justify-center"
+            className="relative w-full aspect-[3/4] max-h-[520px] bg-stone-100 border border-stone-200 overflow-hidden group cursor-pointer rounded-xs shadow-xs"
           >
-            <img
+            <Image
               src={allImages[selectedImageIndex] || allImages[0]}
               alt={product.title}
-              className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500 font-sans text-xs text-stone-400"
-              loading="eager"
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 440px"
+              className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
             />
 
             <div className="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-stone-200 shadow-2xs rounded-2xs">
@@ -538,16 +546,18 @@ function ProductDetailContent() {
                         setSelectedImageIndex(idx);
                       }
                     }}
-                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition rounded-2xs flex items-center justify-center ${
+                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition rounded-2xs ${
                       isSelected && !isThirdAndHasMore
                         ? "border-amber-900 ring-1 ring-amber-900"
                         : "border-stone-200 hover:border-stone-400"
                     }`}
                   >
-                    <img
+                    <Image
                       src={img}
                       alt={`Foto ${idx + 1}`}
-                      className="w-full h-full object-cover"
+                      fill
+                      sizes="140px"
+                      className="object-cover"
                     />
 
                     {isThirdAndHasMore && (
@@ -773,8 +783,12 @@ function ProductDetailContent() {
               <span>
                 {currentAvailableStock > 0
                   ? isGrosir
-                    ? `+ KERANJANG SERI (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})`
-                    : `+ KERANJANG (${quantity} PCS • RP ${subtotalPrice.toLocaleString("id-ID")})`
+                    ? `+ KERANJANG SERI (${quantity} PCS • RP ${subtotalPrice.toLocaleString(
+                        "id-ID",
+                      )})`
+                    : `+ KERANJANG (${quantity} PCS • RP ${subtotalPrice.toLocaleString(
+                        "id-ID",
+                      )})`
                   : isGrosir
                     ? "STOK SERI HABIS"
                     : `WARNA ${selectedColor} HABIS`}

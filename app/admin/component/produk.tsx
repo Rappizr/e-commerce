@@ -39,10 +39,11 @@ export interface ProdukItem {
   gambarUtama: string;
 }
 
-// KOMPRESI TAJAM HD (Maksimal 1200px, Kualitas 85% WebP/JPEG)
+// KOMPRESI TAJAM HD & ASPECT RATIO 3:4 PRESET (900x1200 px)
 const compressImage = (
   file: File,
-  maxDimension = 1200,
+  targetWidth = 900,
+  targetHeight = 1200,
   quality = 0.85,
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -53,30 +54,37 @@ const compressImage = (
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
 
-        if (width > height) {
-          if (width > maxDimension) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          }
-        } else {
-          if (height > maxDimension) {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
         const ctx = canvas.getContext("2d", { alpha: false });
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
+
+          // Buat background putih murni
           ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0, width, height);
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+          // Hitung rasio agar gambar utuh di dalam frame 3:4
+          const hRatio = targetWidth / img.width;
+          const vRatio = targetHeight / img.height;
+          const ratio = Math.min(hRatio, vRatio);
+
+          const centerShift_x = (targetWidth - img.width * ratio) / 2;
+          const centerShift_y = (targetHeight - img.height * ratio) / 2;
+
+          ctx.drawImage(
+            img,
+            0,
+            0,
+            img.width,
+            img.height,
+            centerShift_x,
+            centerShift_y,
+            img.width * ratio,
+            img.height * ratio,
+          );
 
           let compressedDataUrl = canvas.toDataURL("image/webp", quality);
           if (!compressedDataUrl.startsWith("data:image/webp")) {
@@ -395,7 +403,7 @@ export default function ProdukComponent() {
     setIsCompressing(true);
     try {
       const compressedList = await Promise.all(
-        Array.from(files).map((file) => compressImage(file, 1200, 0.85)),
+        Array.from(files).map((file) => compressImage(file, 900, 1200, 0.85)),
       );
 
       setFormProduk((prev) => ({
