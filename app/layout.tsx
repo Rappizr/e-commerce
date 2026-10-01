@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { KeranjangProvider } from "./penyimpanan/KeranjangContext";
-import { AuthProvider } from "./penyimpanan/authcontext"; 
+import { AuthProvider } from "./penyimpanan/authcontext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,7 +24,11 @@ export const metadata: Metadata = {
   description: "Sentuhan rancangan arsitektural untuk kepribadian modern.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="id"
@@ -32,9 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col bg-[#E6E3DA] text-[#1A1A1A]">
         <AuthProvider>
-          <KeranjangProvider>
-            {children}
-          </KeranjangProvider>
+          <KeranjangProvider>{children}</KeranjangProvider>
         </AuthProvider>
       </body>
     </html>

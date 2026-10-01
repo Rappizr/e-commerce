@@ -39,11 +39,11 @@ export interface ProdukItem {
   gambarUtama: string;
 }
 
-// KOMPRESI ULTRA-RINGAN: Ukuran file menjadi ±25-45 KB per foto
+// KOMPRESI TAJAM HD (Maksimal 1200px, Kualitas 85% WebP/JPEG)
 const compressImage = (
   file: File,
-  maxDimension = 480,
-  quality = 0.45,
+  maxDimension = 1200,
+  quality = 0.85,
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -73,7 +73,7 @@ const compressImage = (
         const ctx = canvas.getContext("2d", { alpha: false });
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "medium";
+          ctx.imageSmoothingQuality = "high";
           ctx.fillStyle = "#FFFFFF";
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
@@ -395,7 +395,7 @@ export default function ProdukComponent() {
     setIsCompressing(true);
     try {
       const compressedList = await Promise.all(
-        Array.from(files).map((file) => compressImage(file, 480, 0.45)),
+        Array.from(files).map((file) => compressImage(file, 1200, 0.85)),
       );
 
       setFormProduk((prev) => ({
@@ -707,7 +707,7 @@ export default function ProdukComponent() {
         }
       `}</style>
 
-      {/* OVERLAY LOADING SAAT UPLOAD / TERBITKAN */}
+      {/* OVERLAY LOADING */}
       {isSubmitting && (
         <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white border border-stone-200 p-6 rounded-xs shadow-2xl flex flex-col items-center justify-center gap-3 max-w-xs w-full text-center">
@@ -717,7 +717,7 @@ export default function ProdukComponent() {
                 {isEditMode ? "Memperbarui Data..." : "Menerbitkan Produk..."}
               </h4>
               <p className="text-[10.5px] text-neutral-500">
-                Menyimpan data dan foto ke database. Mohon tunggu sebentar.
+                Menyimpan data dan foto HD ke database. Mohon tunggu sebentar.
               </p>
             </div>
           </div>
@@ -1063,16 +1063,16 @@ export default function ProdukComponent() {
                 </div>
               </div>
 
-              {/* UPLOAD FOTO MULTIPLE */}
+              {/* UPLOAD FOTO MULTIPLE HD */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-700">
-                    Foto Produk ({formProduk.gambarList.length}/5)
+                    Foto Produk HD ({formProduk.gambarList.length}/5)
                   </label>
                   {isCompressing ? (
                     <span className="text-[10px] font-bold text-amber-900 flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Mengompres
-                      Foto...
+                      <Loader2 className="w-3 h-3 animate-spin" /> Memproses
+                      Foto HD...
                     </span>
                   ) : (
                     <label className="text-[10px] font-bold text-amber-900 hover:underline cursor-pointer inline-flex items-center gap-0.5">
@@ -1129,7 +1129,7 @@ export default function ProdukComponent() {
                     <label className="aspect-[3/4] border border-dashed border-stone-300 hover:border-amber-900 bg-[#FAF8F5] flex flex-col items-center justify-center p-2 text-center cursor-pointer transition rounded-2xs">
                       <Upload className="w-4 h-4 text-stone-400 mb-0.5" />
                       <span className="text-[9px] font-bold text-neutral-700">
-                        Unggah
+                        Unggah HD
                       </span>
                       <input
                         type="file"

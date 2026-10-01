@@ -272,7 +272,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // UPDATE KUANTITAS ITEM (AMAT SANGAT PRESISI DETEKSI TIPEDATA)
+  // UPDATE KUANTITAS ITEM
   const updateQty = (
     id: string | number,
     param2: number | string,
@@ -284,7 +284,6 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     let targetSize: string;
     let targetColor: string;
 
-    // Pola A: updateQty(id, targetQty, size, color)
     if (typeof param2 === "number") {
       targetQty = param2;
       targetSize = String(param3 || "All Size")
@@ -293,9 +292,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
       targetColor = String(param4 || "Default")
         .trim()
         .toUpperCase();
-    }
-    // Pola B: updateQty(id, size, color, targetQty, newPrice)
-    else if (typeof param4 === "number") {
+    } else if (typeof param4 === "number") {
       targetSize = String(param2 || "All Size")
         .trim()
         .toUpperCase();
@@ -303,9 +300,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
         .trim()
         .toUpperCase();
       targetQty = param4;
-    }
-    // Pola C: String angka untuk param2
-    else if (typeof param2 === "string" && /^\d+$/.test(param2.trim())) {
+    } else if (typeof param2 === "string" && /^\d+$/.test(param2.trim())) {
       targetQty = parseInt(param2.trim(), 10);
       targetSize = String(param3 || "All Size")
         .trim()
@@ -313,9 +308,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
       targetColor = String(param4 || "Default")
         .trim()
         .toUpperCase();
-    }
-    // Pola D: Fallback aman
-    else {
+    } else {
       targetSize = String(param2 || "All Size")
         .trim()
         .toUpperCase();
@@ -343,7 +336,6 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
 
             let finalQty = targetQty;
 
-            // Batas minimal grosir tidak boleh kurang dari min_grosir
             if (isGrosir && finalQty < minGrosir) {
               finalQty = minGrosir;
             }
@@ -430,6 +422,11 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
     const today = new Date();
     const invoiceNo = await generateInvoiceNo(supabase);
 
+    // Ambil ID User aktif dari Supabase Auth
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     const newPesanan: Pesanan = {
       ...data,
       id: invoiceNo,
@@ -448,6 +445,7 @@ export function KeranjangProvider({ children }: { children: React.ReactNode }) {
       await supabase.from("orders").insert([
         {
           invoice_no: invoiceNo,
+          user_id: user?.id || null, // Mendukung RLS Supabase
           nama_pembeli: data.pembeli,
           no_hp: data.whatsapp,
           alamat_lengkap: `${data.alamat}, ${data.kota}`,

@@ -79,7 +79,6 @@ function ProductDetailContent() {
       try {
         const cleanProductId = Number(productId);
 
-        // 1. Fetch data produk utama
         const { data, error } = await supabase
           .from("products")
           .select(
@@ -96,7 +95,7 @@ function ProductDetailContent() {
             imgList = [data.gambar_utama];
           } else {
             imgList = [
-              "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=80&w=800&auto=format&fit=crop",
+              "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?q=100&w=1600&auto=format&fit=crop",
             ];
           }
 
@@ -131,7 +130,6 @@ function ProductDetailContent() {
                     "Jahitan rapi standar konveksi ALMACO",
                   ];
 
-          // 2. Fetch data varian stok
           const { data: variantData } = await supabase
             .from("product_variants")
             .select("id, product_id, warna, ukuran, stok")
@@ -177,7 +175,6 @@ function ProductDetailContent() {
 
           setProduct(mapped);
 
-          // Inisialisasi warna & kuantitas awal
           if (isGrosir) {
             setSelectedColor("Seri Mix (Campur Warna)");
             setQuantity(minGrosirVal);
@@ -204,7 +201,6 @@ function ProductDetailContent() {
     fetchSingleProduct();
   }, [productId]);
 
-  // Fungsi cek stok warna untuk eceran
   const getStockForColor = (colorName: string): number => {
     if (!variants || variants.length === 0) return product?.stok || 0;
     const target = colorName.trim().toUpperCase();
@@ -218,11 +214,9 @@ function ProductDetailContent() {
   const totalStokSemua = product?.stok || 0;
   const currentAvailableStock = isGrosir ? totalStokSemua : activeColorStock;
 
-  // Step kuantitas: Grosir melompat per kelipatan seri (misal 5, 10, 15), Eceran 1 per 1 (1, 2, 3)
   const stepQty = isGrosir ? minGrosir : 1;
   const minAllowedQty = isGrosir ? minGrosir : 1;
 
-  // Validasi otomatis kuantitas terhadap stok dan batas bawah
   useEffect(() => {
     if (currentAvailableStock > 0) {
       if (quantity > currentAvailableStock) {
@@ -363,12 +357,11 @@ function ProductDetailContent() {
             </div>
 
             <div className="flex gap-3 items-center bg-[#FAF8F5] p-2.5 border border-stone-200 rounded-2xs">
-              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200 rounded-2xs">
-                <Image
+              <div className="relative w-14 h-18 bg-neutral-200 shrink-0 overflow-hidden border border-stone-200 rounded-2xs flex items-center justify-center">
+                <img
                   src={allImages[selectedImageIndex] || allImages[0]}
                   alt={product.title}
-                  fill
-                  className="object-cover"
+                  className="w-full h-full object-cover"
                 />
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
@@ -427,14 +420,14 @@ function ProductDetailContent() {
         </div>
       )}
 
-      {/* MODAL GALERI LIGHTBOX */}
+      {/* MODAL GALERI LIGHTBOX (HD 100% UNTOUCHED) */}
       {galleryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-6 animate-in fade-in duration-200">
           <div className="flex items-center justify-between text-white border-b border-neutral-800 pb-3">
             <div className="flex items-center gap-2">
               <Images className="w-4 h-4 text-amber-400" />
               <span className="text-xs font-bold uppercase tracking-wider">
-                Galeri Foto ({activeImageIndex + 1} / {allImages.length})
+                Galeri Foto HD ({activeImageIndex + 1} / {allImages.length})
               </span>
             </div>
             <button
@@ -445,48 +438,45 @@ function ProductDetailContent() {
             </button>
           </div>
 
-          <div className="relative flex-1 flex items-center justify-center py-4">
+          <div className="relative flex-1 flex items-center justify-center py-2 sm:py-4">
             <button
               onClick={prevImage}
-              className="absolute left-2 sm:left-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer"
+              className="absolute left-2 sm:left-6 z-10 p-2 sm:p-3 rounded-full bg-black/70 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer shadow-lg"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-6 h-6" />
             </button>
 
-            <div className="relative w-full max-w-md h-[60vh]">
-              <Image
+            <div className="relative w-full max-w-4xl h-[78vh] flex items-center justify-center p-2">
+              <img
                 src={allImages[activeImageIndex]}
-                alt={`Tampilan foto ${activeImageIndex + 1}`}
-                fill
-                className="object-contain"
-                priority
+                alt={`Tampilan foto HD ${activeImageIndex + 1}`}
+                className="max-w-full max-h-full object-contain drop-shadow-2xl rounded-xs"
               />
             </div>
 
             <button
               onClick={nextImage}
-              className="absolute right-2 sm:right-6 z-10 p-2 sm:p-2.5 rounded-full bg-black/60 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer"
+              className="absolute right-2 sm:right-6 z-10 p-2 sm:p-3 rounded-full bg-black/70 hover:bg-black text-white border border-neutral-700 transition transform hover:scale-110 active:scale-95 cursor-pointer shadow-lg"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-6 h-6" />
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-2 overflow-x-auto py-2 no-scrollbar">
+          <div className="flex items-center justify-center gap-2.5 overflow-x-auto py-2 no-scrollbar">
             {allImages.map((img: string, idx: number) => (
               <button
                 key={idx}
                 onClick={() => setActiveImageIndex(idx)}
-                className={`relative w-12 h-16 sm:w-14 sm:h-18 shrink-0 border transition overflow-hidden cursor-pointer ${
+                className={`relative w-14 h-18 sm:w-16 sm:h-20 shrink-0 border-2 transition overflow-hidden cursor-pointer rounded-2xs flex items-center justify-center ${
                   activeImageIndex === idx
-                    ? "border-amber-400 scale-105 ring-1 ring-amber-400"
-                    : "border-neutral-700 opacity-50 hover:opacity-100"
+                    ? "border-amber-400 scale-105 ring-2 ring-amber-400/50"
+                    : "border-neutral-800 opacity-40 hover:opacity-100"
                 }`}
               >
-                <Image
+                <img
                   src={img}
                   alt={`Thumb ${idx + 1}`}
-                  fill
-                  className="object-cover"
+                  className="w-full h-full object-cover"
                 />
               </button>
             ))}
@@ -500,14 +490,13 @@ function ProductDetailContent() {
         <div className="md:col-span-6 max-w-[440px] mx-auto w-full space-y-2.5">
           <div
             onClick={() => openLightbox(selectedImageIndex)}
-            className="relative w-full aspect-[3/4] max-h-[500px] bg-neutral-100 border border-stone-200 overflow-hidden group cursor-pointer rounded-xs"
+            className="relative w-full aspect-[3/4] max-h-[520px] bg-stone-100 border border-stone-200 overflow-hidden group cursor-pointer rounded-xs shadow-xs flex items-center justify-center"
           >
-            <Image
+            <img
               src={allImages[selectedImageIndex] || allImages[0]}
               alt={product.title}
-              fill
-              priority
-              className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
+              className="w-full h-full object-contain object-center group-hover:scale-105 transition-transform duration-500 font-sans text-xs text-stone-400"
+              loading="eager"
             />
 
             <div className="absolute top-2.5 left-2.5 bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-neutral-900 border border-stone-200 shadow-2xs rounded-2xs">
@@ -525,10 +514,10 @@ function ProductDetailContent() {
               </div>
             )}
 
-            <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <div className="bg-neutral-950/90 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 flex items-center gap-1.5 shadow-lg rounded-2xs">
-                <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
-                <span>Perbesar Foto</span>
+            <div className="absolute inset-0 bg-black/15 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="bg-neutral-950/90 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-2 flex items-center gap-2 shadow-lg rounded-2xs">
+                <ZoomIn className="w-4 h-4 text-amber-300" />
+                <span>Perbesar Foto HD</span>
               </div>
             </div>
           </div>
@@ -549,17 +538,16 @@ function ProductDetailContent() {
                         setSelectedImageIndex(idx);
                       }
                     }}
-                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition rounded-2xs ${
+                    className={`relative aspect-[3/4] bg-neutral-100 border cursor-pointer overflow-hidden transition rounded-2xs flex items-center justify-center ${
                       isSelected && !isThirdAndHasMore
                         ? "border-amber-900 ring-1 ring-amber-900"
                         : "border-stone-200 hover:border-stone-400"
                     }`}
                   >
-                    <Image
+                    <img
                       src={img}
                       alt={`Foto ${idx + 1}`}
-                      fill
-                      className="object-cover"
+                      className="w-full h-full object-cover"
                     />
 
                     {isThirdAndHasMore && (
@@ -714,7 +702,7 @@ function ProductDetailContent() {
             {product.desc}
           </p>
 
-          {/* INPUT QUANTITY: GROSIR MELOMPAT KELIPATAN SERI (+5, +10), ECERAN 1 PER 1 */}
+          {/* INPUT QUANTITY */}
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 block">
               Jumlah Pesanan{" "}
@@ -722,7 +710,6 @@ function ProductDetailContent() {
             </label>
             <div className="flex items-center gap-3">
               <div className="flex items-center border border-stone-300 bg-white rounded-2xs">
-                {/* Tombol Kurang (-) */}
                 <button
                   type="button"
                   disabled={quantity <= minAllowedQty}
@@ -736,12 +723,10 @@ function ProductDetailContent() {
                   <Minus className="w-3.5 h-3.5" />
                 </button>
 
-                {/* Display Quantity */}
                 <span className="w-12 text-center text-xs font-bold font-mono text-neutral-900 border-x border-stone-200 py-2 select-none">
                   {currentAvailableStock <= 0 ? 0 : quantity}
                 </span>
 
-                {/* Tombol Tambah (+) */}
                 <button
                   type="button"
                   disabled={
