@@ -26,19 +26,32 @@ import KeuanganComponent from "./component/keuangan";
 import AdminLoginPage from "./login/page";
 import { supabase } from "../penyimpanan/supabase";
 
+type MenuType =
+  | "dashboard"
+  | "pesanan"
+  | "produk"
+  | "pembayaran"
+  | "testimoni"
+  | "keuangan";
+
 export default function AdminMainPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [adminName, setAdminName] = useState<string>("Administrator");
-  const [activeMenu, setActiveMenu] = useState<
-    "dashboard" | "pesanan" | "produk" | "pembayaran" | "testimoni" | "keuangan"
-  >("dashboard");
+  const [activeMenu, setActiveMenu] = useState<MenuType>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Badge indikator pesanan butuh verifikasi
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
 
-  // Hitung pesanan yang butuh tindakan
+  // Helper untuk membersihkan cache lokal
+  const clearAdminAuthCache = () => {
+    localStorage.removeItem("almaco_admin_auth");
+    localStorage.removeItem("almaco_admin_user");
+    localStorage.removeItem("almaco_admin_login_at");
+  };
+
+  // Hitung pesanan yang membutuhkan tindakan admin
   const fetchBadgeCounts = useCallback(async () => {
     try {
       const { count, error } = await supabase
@@ -50,46 +63,40 @@ export default function AdminMainPage() {
         setPendingOrdersCount(count);
       }
     } catch {
-      // diamkan jika error
+      // Diamkan jika terjadi masalah koneksi sementara
     }
   }, []);
 
   // Verifikasi otentikasi ketat via Server Supabase Auth & Tabel Profiles
   const checkStrictAuth = useCallback(async () => {
     try {
-      // 1. Cek sesi token kriptografis Supabase
+      // 1. Ambil user tervalidasi kriptografis langsung dari server Supabase
       const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-      if (sessionError || !session?.user) {
-        throw new Error("No active session");
+      if (userError || !user) {
+        throw new Error("Sesi tidak valid / kadaluarsa");
       }
 
-      // 2. Wajib verifikasi role 'admin' langsung dari database
-      const { data: profile } = await supabase
+      // 2. Murni validasi role 'admin' dari database (tanpa hardcoded email)
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role, nama")
-        .eq("id", session.user.id)
+        .eq("id", user.id)
         .maybeSingle();
 
-      const userEmail = session.user.email?.toLowerCase();
-      const isAdminWhitelist =
-        userEmail === "mukhammadraffi5@gmail.com" ||
-        userEmail === "admin@almaco.co";
-
-      if (profile?.role === "admin" || isAdminWhitelist) {
-        setIsAuthenticated(true);
-        if (profile?.nama) setAdminName(profile.nama);
-        fetchBadgeCounts();
-      } else {
-        await supabase.auth.signOut();
-        setIsAuthenticated(false);
+      if (profileError || profile?.role !== "admin") {
+        throw new Error("Akses ditolak: Hanya untuk role admin");
       }
+
+      setIsAuthenticated(true);
+      if (profile?.nama) setAdminName(profile.nama);
+      fetchBadgeCounts();
     } catch {
-      localStorage.removeItem("almaco_admin_auth");
-      localStorage.removeItem("almaco_admin_user");
+      await supabase.auth.signOut();
+      clearAdminAuthCache();
       setIsAuthenticated(false);
     }
   }, [fetchBadgeCounts]);
@@ -97,11 +104,11 @@ export default function AdminMainPage() {
   useEffect(() => {
     checkStrictAuth();
 
+    // Listener Perubahan State Autentikasi
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_OUT" || !session) {
-          localStorage.removeItem("almaco_admin_auth");
-          localStorage.removeItem("almaco_admin_user");
+          clearAdminAuthCache();
           setIsAuthenticated(false);
         } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
           await checkStrictAuth();
@@ -109,17 +116,32 @@ export default function AdminMainPage() {
       },
     );
 
+    // Listener Realtime Supabase untuk memperbarui badge pesanan otomatis
+    const ordersChannel = supabase
+      .channel("admin-orders-badge-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          fetchBadgeCounts();
+        },
+      )
+      .subscribe();
+
     return () => {
       authListener.subscription.unsubscribe();
+      supabase.removeChannel(ordersChannel);
     };
-  }, [checkStrictAuth]);
+  }, [checkStrictAuth, fetchBadgeCounts]);
 
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
-      localStorage.removeItem("almaco_admin_auth");
-      localStorage.removeItem("almaco_admin_user");
-      localStorage.removeItem("almaco_admin_login_at");
+      clearAdminAuthCache();
       setIsAuthenticated(false);
     } catch (err) {
       console.error("Logout error:", err);
@@ -145,7 +167,46 @@ export default function AdminMainPage() {
     return <AdminLoginPage onLoginSuccess={checkStrictAuth} />;
   }
 
-  // 3. Panel Dashboard jika otentikasi lolos
+  // Helper untuk merender tombol menu sidebar
+  const renderNavButton = (
+    menu: MenuType,
+    label: string,
+    Icon: React.ElementType,
+    badgeCount?: number,
+    isPulseBadge?: boolean,
+  ) => {
+    const isActive = activeMenu === menu;
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setActiveMenu(menu);
+          setSidebarOpen(false);
+        }}
+        className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
+          isActive
+            ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
+            : "text-neutral-600 hover:bg-[#FAF8F5]"
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <Icon className="w-4 h-4" />
+          <span>{label}</span>
+        </div>
+        {badgeCount !== undefined && badgeCount > 0 && (
+          <span
+            className={`px-1.5 py-0.5 text-white font-mono text-[9.5px] font-bold rounded-full ${
+              isPulseBadge ? "bg-rose-600 animate-pulse" : "bg-amber-800"
+            }`}
+          >
+            {badgeCount}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  // 3. Panel Dashboard Utama
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col md:flex-row text-neutral-900 font-sans overflow-x-hidden relative selection:bg-amber-900 selection:text-white">
       {sidebarOpen && (
@@ -167,7 +228,7 @@ export default function AdminMainPage() {
               <div className="relative w-8 h-8 sm:w-9 sm:h-9 shrink-0">
                 <Image
                   src="/logo.png"
-                  alt="Logo"
+                  alt="Logo Almaco"
                   fill
                   className="object-contain"
                   priority
@@ -186,6 +247,7 @@ export default function AdminMainPage() {
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setSidebarOpen(false)}
               className="md:hidden p-1 text-stone-400 hover:text-neutral-900 cursor-pointer"
               aria-label="Tutup Menu"
@@ -195,109 +257,23 @@ export default function AdminMainPage() {
           </div>
 
           <nav className="p-3 space-y-1">
-            <button
-              onClick={() => {
-                setActiveMenu("dashboard");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "dashboard"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveMenu("pesanan");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "pesanan"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <ShoppingBag className="w-4 h-4" />
-                <span>Pesanan</span>
-              </div>
-              {pendingOrdersCount > 0 && (
-                <span className="px-1.5 py-0.2 bg-amber-800 text-white font-mono text-[9.5px] font-bold rounded-full">
-                  {pendingOrdersCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveMenu("pembayaran");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "pembayaran"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <CreditCard className="w-4 h-4" />
-                <span>Konfirmasi Bayar</span>
-              </div>
-              {pendingOrdersCount > 0 && (
-                <span className="px-1.5 py-0.2 bg-rose-600 text-white font-mono text-[9.5px] font-bold rounded-full animate-pulse">
-                  {pendingOrdersCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveMenu("keuangan");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "keuangan"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <Wallet className="w-4 h-4" />
-              <span>Keuangan & Kas</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveMenu("produk");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "produk"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Produk</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveMenu("testimoni");
-                setSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-xs uppercase tracking-wider font-semibold rounded-2xs transition-all cursor-pointer ${
-                activeMenu === "testimoni"
-                  ? "bg-neutral-950 text-amber-200 font-bold shadow-2xs"
-                  : "text-neutral-600 hover:bg-[#FAF8F5]"
-              }`}
-            >
-              <MessageSquareQuote className="w-4 h-4" />
-              <span>Testimoni</span>
-            </button>
+            {renderNavButton("dashboard", "Dashboard", LayoutDashboard)}
+            {renderNavButton(
+              "pesanan",
+              "Pesanan",
+              ShoppingBag,
+              pendingOrdersCount,
+            )}
+            {renderNavButton(
+              "pembayaran",
+              "Konfirmasi Bayar",
+              CreditCard,
+              pendingOrdersCount,
+              true,
+            )}
+            {renderNavButton("keuangan", "Keuangan & Kas", Wallet)}
+            {renderNavButton("produk", "Produk", Package)}
+            {renderNavButton("testimoni", "Testimoni", MessageSquareQuote)}
           </nav>
         </div>
 
@@ -350,7 +326,9 @@ export default function AdminMainPage() {
 
         <main className="p-4 sm:p-6 lg:p-8 flex-1">
           {activeMenu === "dashboard" && (
-            <DashboardComponent onNavigate={(m) => setActiveMenu(m)} />
+            <DashboardComponent
+              onNavigate={(m) => setActiveMenu(m as MenuType)}
+            />
           )}
           {activeMenu === "pesanan" && <PesananComponent />}
           {activeMenu === "pembayaran" && <VerifikasiBayarComponent />}

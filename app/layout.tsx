@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { KeranjangProvider } from "./penyimpanan/KeranjangContext";
@@ -19,9 +19,32 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#E6E3DA",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "ALMACO FASHION | E-Commerce Premium",
-  description: "Sentuhan rancangan arsitektural untuk kepribadian modern.",
+  title: {
+    default: "ALMACO FASHION | E-Commerce Premium",
+    template: "%s | ALMACO FASHION",
+  },
+  description:
+    "Grosir & Eceran Busana Muslimah Premium langsung dari Konveksi. Sentuhan rancangan arsitektural untuk kepribadian modern.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
+  openGraph: {
+    title: "ALMACO FASHION | E-Commerce Premium",
+    description:
+      "Grosir & Eceran Busana Muslimah Premium langsung dari Konveksi.",
+    images: ["/logo.png"],
+    locale: "id_ID",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -34,7 +57,7 @@ export default function RootLayout({
       lang="id"
       className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#E6E3DA] text-[#1A1A1A]">
+      <body className="min-h-full flex flex-col bg-[#E6E3DA] text-[#1A1A1A] selection:bg-amber-900 selection:text-white">
         <AuthProvider>
           <KeranjangProvider>{children}</KeranjangProvider>
         </AuthProvider>
