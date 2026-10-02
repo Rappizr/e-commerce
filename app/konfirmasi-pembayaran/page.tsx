@@ -132,7 +132,7 @@ function KonfirmasiContent() {
         }
 
         if (!error && data) {
-          const rawTotal = String(data.total || data.total_harga || "");
+          const rawTotal = String(data.total_harga || 0);
           setFormData((prev) => ({
             ...prev,
             orderId: cleanInvoice.toUpperCase(),
@@ -412,6 +412,7 @@ function KonfirmasiContent() {
                   Jumlah Transfer (Rp) <span className="text-red-500">*</span>
                 </label>
                 <input
+                  disabled
                   type="text"
                   required
                   placeholder="Contoh: 130.000"

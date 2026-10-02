@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 // ID Kecamatan Bandung, Tulungagung di database Komerce (Default: 6170)
 const ORIGIN_SUBDISTRICT_ID = process.env.KOMERCE_ORIGIN_SUBDISTRICT_ID || '6170'; 
-const KOMERCE_API_KEY = process.env.RAJAONGKIR_API_KEY || 'C7JHXYk16893a0f7daa087b8UgxeyLCd';
+const KOMERCE_API_KEY = process.env.RAJAONGKIR_API_KEY || '';
 
 // 1. GET: Pencarian Kecamatan / Kota Tujuan
 export async function GET(req: Request) {

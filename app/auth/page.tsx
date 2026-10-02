@@ -182,6 +182,7 @@ function AuthContent() {
               data: {
                 nama: cleanName,
                 no_hp: formattedPhone,
+                role: "customer",
               },
             },
           });
