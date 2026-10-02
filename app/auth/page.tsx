@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,7 +16,7 @@ import {
 import { supabase } from "../penyimpanan/supabase";
 import Footer from "../Footer";
 
-export default function AuthPage() {
+function AuthContent() {
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -115,7 +115,6 @@ export default function AuthPage() {
             password: cleanPassword,
           });
 
-        // PERBAIKAN: Tangani error secara terstruktur tanpa throw Error
         if (authError || !authData.session) {
           let pesan = "Email atau kata sandi tidak cocok. Silakan cek kembali.";
           if (authError?.message?.includes("Email not confirmed")) {
@@ -136,11 +135,9 @@ export default function AuthPage() {
 
         setSuccessMsg("Berhasil masuk! Mengalihkan...");
 
-        // Simpan tanda login di storage lokal browser
         localStorage.setItem("almaco_user_email", cleanEmail);
         localStorage.setItem("almaco_user_id", authData.user.id);
 
-        // Ambil nama profil dari database untuk disimpan di cache lokal
         try {
           const { data: prof } = await supabase
             .from("profiles")
@@ -160,7 +157,6 @@ export default function AuthPage() {
           localStorage.setItem("almaco_user_name", cleanEmail.split("@")[0]);
         }
 
-        // Pindahkan halaman secara bersih
         setTimeout(() => {
           window.location.replace(targetRedirect);
         }, 200);
@@ -431,5 +427,22 @@ export default function AuthPage() {
 
       <Footer />
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F9F8F6] flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-neutral-900" />
+          <p className="text-xs uppercase tracking-widest font-bold text-neutral-500">
+            Memuat Halaman...
+          </p>
+        </div>
+      }
+    >
+      <AuthContent />
+    </Suspense>
   );
 }
