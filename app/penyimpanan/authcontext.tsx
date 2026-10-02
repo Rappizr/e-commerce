@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from './supabase';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "./supabase";
 
 export interface UserProfile {
   id?: string;
@@ -27,107 +27,133 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Ambil data profil pelanggan dari Supabase berdasarkan user.id sesi
+  // Ambil profil dari Supabase (dukung customer & admin)
   const fetchUserProfile = async (userId: string, userEmail: string) => {
     try {
       const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
 
       if (!error && profile) {
-        const loadedUser: UserProfile = {
+        setUser({
           id: profile.id,
-          name: profile.nama || userEmail.split('@')[0],
+          name: profile.nama || userEmail.split("@")[0],
           email: profile.email || userEmail,
-          phone: profile.no_hp || '',
-          alamat: profile.alamat || '',
-          role: profile.role || 'customer',
-        };
-        setUser(loadedUser);
+          phone: profile.no_hp || "",
+          alamat: profile.alamat || "",
+          role: profile.role || "customer",
+        });
       } else {
-        // Fallback jika baris di tabel profiles belum sempat terisi
+        // Fallback jika baris di profiles belum ada
+        const fallbackName = userEmail.split("@")[0] || "Pelanggan";
+
+        await supabase.from("profiles").upsert({
+          id: userId,
+          email: userEmail,
+          nama: fallbackName,
+          role: "customer",
+        });
+
         setUser({
           id: userId,
-          name: userEmail.split('@')[0],
+          name: fallbackName,
           email: userEmail,
+          role: "customer",
         });
       }
     } catch (err) {
-      console.error('Fetch profile error in AuthContext:', err);
+      console.error("Fetch profile error in AuthContext:", err);
+      setUser({
+        id: userId,
+        name: userEmail.split("@")[0],
+        email: userEmail,
+        role: "customer",
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Cek sesi saat aplikasi pertama kali dimuat & pasang listener real-time
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && session.user) {
-          await fetchUserProfile(session.user.id, session.user.email || '');
-        } else {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user && isMounted) {
+          await fetchUserProfile(session.user.id, session.user.email || "");
+        } else if (isMounted) {
           setUser(null);
           setIsLoading(false);
         }
       } catch (err) {
-        console.error('Session check error:', err);
-        setIsLoading(false);
+        console.error("Session check error:", err);
+        if (isMounted) {
+          setUser(null);
+          setIsLoading(false);
+        }
       }
     };
 
     initAuth();
 
-    // Listener otomatis jika status autentikasi berubah di Supabase
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session && session.user) {
-        await fetchUserProfile(session.user.id, session.user.email || '');
-      } else {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === "SIGNED_OUT") {
         setUser(null);
         setIsLoading(false);
+      } else if (session?.user) {
+        await fetchUserProfile(session.user.id, session.user.email || "");
       }
     });
 
     return () => {
-      authListener.subscription.unsubscribe();
+      isMounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
-  // 3. Update state user lokal (dipanggil setelah register/login berhasil)
   const login = (userData: UserProfile) => {
     setUser(userData);
   };
 
-  // 4. Logout resmi dari Supabase Auth
   const logout = async () => {
     try {
       await supabase.auth.signOut();
-      localStorage.removeItem('almaco_user');
+      localStorage.removeItem("almaco_user");
+      localStorage.removeItem("almaco_saved_addresses");
       setUser(null);
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error("Logout error:", err);
     }
   };
 
-  // 5. Fungsi untuk memperbarui data profil setelah user mengedit profil
   const refreshProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session && session.user) {
-      await fetchUserProfile(session.user.id, session.user.email || '');
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user) {
+      await fetchUserProfile(session.user.id, session.user.email || "");
     }
   };
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        isLoggedIn: !!user, 
-        isLoading, 
-        login, 
-        logout, 
-        refreshProfile 
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoggedIn: !!user,
+        isLoading,
+        login,
+        logout,
+        refreshProfile,
       }}
     >
       {children}
@@ -138,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth harus digunakan di dalam AuthProvider');
+    throw new Error("useAuth harus digunakan di dalam AuthProvider");
   }
   return context;
 }

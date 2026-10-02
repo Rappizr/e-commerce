@@ -48,12 +48,12 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
         );
       }
 
-      // 2. Validasi Role Admin di tabel profiles secara ketat
+      // 2. Validasi Role Admin di tabel profiles menggunakan maybeSingle()
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role, nama")
         .eq("id", authData.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError || profile?.role !== "admin") {
         await supabase.auth.signOut();
@@ -70,15 +70,18 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
       );
       localStorage.setItem("almaco_admin_login_at", new Date().toISOString());
 
+      // 4. Navigasi penuh via window.location agar cookie & session terbaca sempurna di middleware
       if (onLoginSuccess) {
         onLoginSuccess();
       } else {
-        router.push("/admin");
-        router.refresh();
+        window.location.href = "/admin";
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Terjadi kesalahan saat proses verifikasi.");
-    } finally {
+      let pesan = err.message || "Terjadi kesalahan saat proses verifikasi.";
+      if (pesan.includes("Invalid login credentials")) {
+        pesan = "Email atau kata sandi salah. Silakan periksa kembali.";
+      }
+      setErrorMsg(pesan);
       setIsLoading(false);
     }
   };
@@ -213,7 +216,7 @@ export default function AdminLoginPage({ onLoginSuccess }: AdminLoginProps) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-800 p-1 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-800 p-1 transition-colors cursor-pointer"
                   aria-label={
                     showPassword ? "Sembunyikan sandi" : "Lihat sandi"
                   }

@@ -3,36 +3,72 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  User,
-  Check,
-  Plus,
-  ChevronDown,
-  Loader2,
-  Trash2,
-  Minus,
-  Scale,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Footer from "../Footer";
 import { useKeranjang } from "../penyimpanan/KeranjangContext";
 import PembayaranComponent from "./component/pembayaran";
 import { supabase } from "../penyimpanan/supabase";
 
-interface CourierPricing {
-  company: string;
-  courier_name: string;
-  courier_service_name: string;
-  duration: string;
-  price: number;
+import ModalStockWarning from "./component/ModalStockWarning";
+import ModalAuthCheckout from "./component/ModalAuthCheckout";
+import DataPenerimaForm, { RajaOngkirCity } from "./component/DataPenerimaForm";
+import JasaKirimDropdown, {
+  CourierPricing,
+} from "./component/JasaKirimDropdown";
+import CheckoutItemList from "./component/CheckoutItemList";
+import RingkasanMetode from "./component/RingkasanMetode";
+
+function getProductStock(item: any): number {
+  const possibleStock =
+    item.stock ?? item.stok ?? item.tersedia ?? item.available ?? item.maxStock;
+
+  if (possibleStock !== undefined && possibleStock !== null) {
+    const parsed = parseInt(String(possibleStock), 10);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return 0;
 }
 
-interface RajaOngkirCity {
-  city_id: string;
-  province: string;
-  type?: string;
-  city_name: string;
-  postal_code?: string;
+function formatCityDisplay(
+  cityName: string,
+  postalCode?: string,
+  villageName?: string,
+): string {
+  if (!cityName) return "";
+
+  const parts = cityName
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  const uniqueParts: string[] = [];
+  parts.forEach((part) => {
+    if (
+      !uniqueParts.some((item) => item.toLowerCase() === part.toLowerCase())
+    ) {
+      uniqueParts.push(part);
+    }
+  });
+
+  let result = uniqueParts.join(", ");
+
+  if (
+    villageName &&
+    villageName.trim() !== "" &&
+    !result.toLowerCase().includes(villageName.toLowerCase())
+  ) {
+    const cleanVillage = villageName
+      .replace(/^kecamatan\s+/gi, "")
+      .trim()
+      .toUpperCase();
+    result = `Kecamatan ${cleanVillage}, ${result}`;
+  }
+
+  if (postalCode && postalCode !== "-" && !result.includes(postalCode)) {
+    result = `${result}, ${postalCode}`;
+  }
+
+  return result;
 }
 
 async function generateInvoiceNumber(): Promise<string> {
@@ -93,6 +129,11 @@ export default function CheckoutPage() {
   const [createdInvoiceNo, setCreatedInvoiceNo] = useState("");
   const [finalAmount, setFinalAmount] = useState(0);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [stockWarning, setStockWarning] = useState<string | null>(null);
+
+  // User Auth State
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Form Field Penerima
   const [nama, setNama] = useState("");
@@ -134,8 +175,187 @@ export default function CheckoutPage() {
     setIsClient(true);
   }, []);
 
-  // LOAD PERTAMA KALI SAJA: ISOLASI DARI RE-TRIGGER CONTEXT
+  const lookupCityId = useCallback(
+    async (queryCity: string, postalCode?: string, villageName?: string) => {
+      try {
+        const searchQuery =
+          postalCode && postalCode.trim() !== "" && postalCode.trim() !== "-"
+            ? postalCode.trim()
+            : queryCity;
+
+        if (!searchQuery) return;
+
+        const cleanName = searchQuery
+          .replace(/^(wilayah terdaftar|default)/gi, "")
+          .replace(/(kabupaten|kota|\(.*?\))/gi, "")
+          .trim();
+
+        if (cleanName.length < 3) return;
+
+        const res = await fetch(
+          `/api/rajaongkir?q=${encodeURIComponent(cleanName)}`,
+        );
+        const data = await res.json();
+
+        if (data?.results && data.results.length > 0) {
+          let match = data.results[0];
+
+          if (
+            postalCode &&
+            postalCode.trim() !== "-" &&
+            postalCode.trim() !== ""
+          ) {
+            const exactZipMatch = data.results.find(
+              (c: RajaOngkirCity) =>
+                String(c.postal_code) === String(postalCode).trim(),
+            );
+            if (exactZipMatch) match = exactZipMatch;
+          }
+
+          setSelectedCityId(match.city_id);
+
+          const rawName = `${match.type ? match.type + " " : ""}${match.city_name}${match.province ? ", " + match.province : ""}`;
+          const formattedDisplay = formatCityDisplay(
+            rawName,
+            match.postal_code || postalCode,
+            villageName,
+          );
+          setSearchCityInput(formattedDisplay);
+        }
+      } catch (e) {
+        console.error("Gagal auto lookup kota:", e);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        let user: any = null;
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          user = session.user;
+        } else {
+          const { data: userData } = await supabase.auth.getUser();
+          user = userData.user;
+        }
+
+        const fallbackEmail =
+          typeof window !== "undefined"
+            ? localStorage.getItem("almaco_user_email")
+            : null;
+        const fallbackId =
+          typeof window !== "undefined"
+            ? localStorage.getItem("almaco_user_id")
+            : null;
+
+        const resolvedUid = user?.id || fallbackId;
+        const resolvedEmail = user?.email || fallbackEmail;
+
+        if (!resolvedUid && !resolvedEmail) {
+          setShowAuthModal(true);
+          return;
+        }
+
+        if (resolvedUid) setCurrentUserId(resolvedUid);
+
+        let query = supabase.from("profiles").select("*");
+        if (resolvedUid) {
+          query = query.eq("id", resolvedUid);
+        } else if (resolvedEmail) {
+          query = query.eq("email", resolvedEmail);
+        }
+
+        const { data: profile } = await query.maybeSingle();
+
+        let selectedAddr: any = null;
+        if (
+          profile?.daftar_alamat &&
+          Array.isArray(profile.daftar_alamat) &&
+          profile.daftar_alamat.length > 0
+        ) {
+          selectedAddr =
+            profile.daftar_alamat.find((a: any) => a.isDefault) ||
+            profile.daftar_alamat[0];
+        } else if (typeof window !== "undefined") {
+          const localAddr = localStorage.getItem("almaco_saved_addresses");
+          if (localAddr) {
+            try {
+              const parsed = JSON.parse(localAddr);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                selectedAddr =
+                  parsed.find((a: any) => a.isDefault) || parsed[0];
+              }
+            } catch (e) {}
+          }
+        }
+
+        const resolvedNama =
+          selectedAddr?.recipient ||
+          profile?.nama ||
+          user?.user_metadata?.nama ||
+          (resolvedEmail ? resolvedEmail.split("@")[0] : "");
+
+        const resolvedPhone =
+          selectedAddr?.phone ||
+          profile?.no_hp ||
+          user?.user_metadata?.no_hp ||
+          "";
+
+        const resolvedAlamat = selectedAddr?.address || profile?.alamat || "";
+
+        if (resolvedNama) setNama(resolvedNama);
+        if (resolvedPhone) setWhatsapp(resolvedPhone);
+        if (resolvedAlamat) setAlamat(resolvedAlamat);
+
+        const village =
+          selectedAddr?.village ||
+          selectedAddr?.kelurahan ||
+          selectedAddr?.label ||
+          "";
+
+        if (selectedAddr?.city_id) {
+          setSelectedCityId(selectedAddr.city_id);
+          const formattedDisplay = formatCityDisplay(
+            selectedAddr.city || "",
+            selectedAddr.postalCode,
+            village,
+          );
+          setSearchCityInput(formattedDisplay);
+        } else {
+          let targetCityQuery = "";
+          if (
+            selectedAddr?.city &&
+            !selectedAddr.city.includes("Wilayah Terdaftar")
+          ) {
+            targetCityQuery = selectedAddr.city;
+          } else if (resolvedAlamat) {
+            const parts = resolvedAlamat.split(",");
+            targetCityQuery =
+              parts.length > 1
+                ? parts[1].replace(/\(.*?\)/g, "").trim()
+                : resolvedAlamat.replace(/\(.*?\)/g, "").trim();
+          }
+
+          if (selectedAddr?.postalCode || targetCityQuery) {
+            lookupCityId(targetCityQuery, selectedAddr?.postalCode, village);
+          }
+        }
+      } catch (err) {
+        console.error("Gagal load profile di checkout:", err);
+      }
+    };
+
+    fetchUserData();
+  }, [lookupCityId]);
+
+  useEffect(() => {
+    let rawItemsToSanitize: any[] = [];
+
     try {
       const savedCheckoutItems = sessionStorage.getItem(
         "almaco_checkout_items",
@@ -143,32 +363,140 @@ export default function CheckoutPage() {
       if (savedCheckoutItems) {
         const parsed = JSON.parse(savedCheckoutItems);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const sanitized = parsed.map((item: any) => ({
-            ...item,
-            qty: Math.max(1, parseInt(String(item.qty || 1), 10)),
-            min_grosir: Math.max(1, parseInt(String(item.min_grosir || 5), 10)),
-            price: Number(item.price || item.rawPrice || 0),
-          }));
-          setCheckoutItems(sanitized);
-          return;
+          rawItemsToSanitize = parsed;
         }
       }
     } catch (e) {
-      console.error("Gagal membaca item checkout dari session storage:", e);
+      console.error("Gagal membaca session storage checkout:", e);
     }
 
-    if (fullCartItems && fullCartItems.length > 0) {
-      const sanitized = fullCartItems.map((item: any) => ({
-        ...item,
-        qty: Math.max(1, parseInt(String(item.qty || 1), 10)),
-        min_grosir: Math.max(1, parseInt(String(item.min_grosir || 5), 10)),
-        price: Number(item.price || item.rawPrice || 0),
-      }));
-      setCheckoutItems(sanitized);
+    if (
+      rawItemsToSanitize.length === 0 &&
+      fullCartItems &&
+      fullCartItems.length > 0
+    ) {
+      rawItemsToSanitize = fullCartItems;
     }
-  }, []);
 
-  // Kalkulasi Subtotal & Berat
+    if (rawItemsToSanitize.length === 0) {
+      setCheckoutItems([]);
+      return;
+    }
+
+    const syncRealtimeStock = async () => {
+      try {
+        const productIds = Array.from(
+          new Set(
+            rawItemsToSanitize
+              .map((item: any) => Number(item.id))
+              .filter(Boolean),
+          ),
+        );
+
+        if (productIds.length === 0) return;
+
+        const { data: activeProducts } = await supabase
+          .from("products")
+          .select("id, stok")
+          .in("id", productIds);
+
+        const { data: variantsData } = await supabase
+          .from("product_variants")
+          .select("product_id, warna, ukuran, stok")
+          .in("product_id", productIds);
+
+        const sanitized = rawItemsToSanitize.map((item: any) => {
+          const pId = Number(item.id);
+          const matchedInCart = fullCartItems.find(
+            (c: any) =>
+              String(c.id) === String(item.id) &&
+              String(c.size || "")
+                .trim()
+                .toUpperCase() ===
+                String(item.size || "")
+                  .trim()
+                  .toUpperCase() &&
+              String(c.color || "")
+                .trim()
+                .toUpperCase() ===
+                String(item.color || "")
+                  .trim()
+                  .toUpperCase(),
+          );
+
+          const isGrosir = Boolean(item.is_grosir ?? matchedInCart?.is_grosir);
+          const minGrosir = Math.max(
+            1,
+            parseInt(
+              String(item.min_grosir ?? matchedInCart?.min_grosir ?? 5),
+              10,
+            ),
+          );
+
+          let realStock = 0;
+
+          if (isGrosir) {
+            const matchedProd = (activeProducts || []).find(
+              (p: any) => Number(p.id) === pId,
+            );
+            realStock = Number(
+              matchedProd?.stok ?? item.stok ?? item.stock ?? 0,
+            );
+          } else {
+            const targetColor = String(item.color || "Default")
+              .trim()
+              .toUpperCase();
+            const targetSize = String(item.size || "All Size")
+              .trim()
+              .toUpperCase();
+
+            const match = (variantsData || []).find(
+              (v: any) =>
+                Number(v.product_id) === pId &&
+                String(v.ukuran || "")
+                  .trim()
+                  .toUpperCase() === targetSize &&
+                (String(v.warna || "")
+                  .trim()
+                  .toUpperCase() === targetColor ||
+                  String(v.warna || "")
+                    .trim()
+                    .toUpperCase() === "DEFAULT"),
+            );
+
+            realStock = match
+              ? Number(match.stok ?? 0)
+              : getProductStock(matchedInCart || item);
+          }
+
+          const currentQty = parseInt(
+            String(item.qty || (isGrosir ? minGrosir : 1)),
+            10,
+          );
+          const validQty = Math.min(
+            Math.max(isGrosir ? minGrosir : 1, currentQty),
+            realStock > 0 ? realStock : currentQty,
+          );
+
+          return {
+            ...item,
+            is_grosir: isGrosir,
+            min_grosir: minGrosir,
+            qty: validQty,
+            price: Number(item.price || item.rawPrice || 0),
+            stock: realStock,
+          };
+        });
+
+        setCheckoutItems(sanitized);
+      } catch (err) {
+        console.error("Gagal sinkronisasi stok realtime di checkout:", err);
+      }
+    };
+
+    syncRealtimeStock();
+  }, [fullCartItems]);
+
   const subtotal = checkoutItems.reduce((acc: number, item: any) => {
     const price = Number(item.price || item.rawPrice || 0);
     const qty = Math.max(1, parseInt(String(item.qty || 1), 10));
@@ -187,7 +515,6 @@ export default function CheckoutPage() {
   const shippingFee = selectedCourier ? Number(selectedCourier.price || 0) : 0;
   const total = subtotal + shippingFee + packingFee;
 
-  // Handler Hapus Item Checkout
   const handleRemoveCheckoutItem = (
     id: string | number,
     size?: string,
@@ -229,29 +556,35 @@ export default function CheckoutPage() {
     }
   };
 
-  // VERSI PERBAIKAN:
   const handleUpdateQtyCheckout = (item: any, direction: number) => {
     const isGrosir = Boolean(item.is_grosir);
     const minGrosir = Math.max(1, parseInt(String(item.min_grosir || 5), 10));
+    const minAllowed = isGrosir ? minGrosir : 1;
+    const maxStock = getProductStock(item);
 
-    const currentQty = Math.max(1, parseInt(String(item.qty || 1), 10));
-    let nextQty = currentQty;
+    const currentQty = Math.max(
+      minAllowed,
+      parseInt(String(item.qty || minAllowed), 10),
+    );
+    const step = isGrosir ? minGrosir : 1;
+    let nextQty = direction > 0 ? currentQty + step : currentQty - step;
 
-    if (isGrosir) {
-      const step = minGrosir;
-      nextQty = direction > 0 ? currentQty + step : currentQty - step;
-      if (nextQty < minGrosir) nextQty = minGrosir;
-    } else {
-      nextQty = direction > 0 ? currentQty + 1 : currentQty - 1;
-      if (nextQty <= 0) return;
+    if (nextQty < minAllowed) return;
+
+    if (direction > 0 && nextQty > maxStock) {
+      setStockWarning(
+        `Stok untuk ${item.title} ${isGrosir ? "(Seri Grosir)" : `(${item.color || "Default"})`} hanya tersisa ${maxStock} pcs.`,
+      );
+      return;
     }
 
-    // 1. Update Context secara terpisah (Aman dari bentrokan render React)
+    if (nextQty === currentQty) return;
+
+    const price = Number(item.price || item.rawPrice || 0);
     if (typeof updateQtyContext === "function") {
-      updateQtyContext(item.id, nextQty, item.size, item.color);
+      updateQtyContext(item.id, item.size, item.color, nextQty, price);
     }
 
-    // 2. Update State Checkout Lokal
     setCheckoutItems((prevItems) => {
       const updated = prevItems.map((i: any) => {
         const isSame =
@@ -406,14 +739,14 @@ export default function CheckoutPage() {
   };
 
   const handleSelectCity = (city: RajaOngkirCity) => {
-    const formatted = `${city.type ? city.type + " " : ""}${city.city_name}${city.province ? ", " + city.province : ""}`;
+    const rawName = `${city.type ? city.type + " " : ""}${city.city_name}${city.province ? ", " + city.province : ""}`;
+    const formatted = formatCityDisplay(rawName, city.postal_code);
     setSearchCityInput(formatted);
     setSelectedCityId(city.city_id);
     setShowCityDropdown(false);
     fetchRates(city.city_id);
   };
 
-  // Submit Pesanan Ke Supabase
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingOrder) return;
@@ -431,6 +764,16 @@ export default function CheckoutPage() {
     if (checkoutItems.length === 0) {
       alert("Tidak ada produk yang dipilih untuk di-checkout.");
       return;
+    }
+
+    for (const item of checkoutItems) {
+      const maxStock = getProductStock(item);
+      if (item.qty > maxStock) {
+        setStockWarning(
+          `Jumlah pesanan untuk ${item.title} melebihi sisa stok yang tersedia (${maxStock} pcs). Mohon sesuaikan jumlah pesanan Anda.`,
+        );
+        return;
+      }
     }
 
     setIsSubmittingOrder(true);
@@ -480,6 +823,7 @@ export default function CheckoutPage() {
         .from("orders")
         .insert([
           {
+            user_id: currentUserId || null,
             invoice_no: inv,
             nama_pembeli: nama.trim(),
             no_hp: formattedWa,
@@ -521,36 +865,6 @@ export default function CheckoutPage() {
           .from("order_items")
           .insert(orderItemsPayload);
         if (itemsError) throw itemsError;
-
-        for (const item of checkoutItems) {
-          if (item.id) {
-            const isGrosir = Boolean(item.is_grosir);
-            const itemQty = parseInt(String(item.qty || 1), 10);
-            const cleanColor = String(item.color || "Default")
-              .replace(/\(.*\)/g, "")
-              .trim();
-
-            // JIKA GROSIR & DATABASE SUDAH PUNYA TRIGGER INSERT ORDER_ITEMS:
-            // Panggilan RPC ini dilewati agar stok grosir tidak terpotong 2x.
-            // Jika di database belum ada trigger otomatis, panggil RPC secara khusus:
-            if (!isGrosir) {
-              await supabase.rpc("rpc_kurangi_stok", {
-                p_product_id: Number(item.id),
-                p_qty: itemQty,
-                p_warna: cleanColor,
-              });
-            } else {
-              // Panggilan khusus Grosir jika TIDAK MENGGUNAKAN TRIGGER DATABASE:
-              // (Buka komentar di bawah ini hanya jika database Anda TIDAK memiliki Trigger)
-              /*
-      await supabase.rpc("rpc_kurangi_stok_grosir", {
-        p_product_id: Number(item.id),
-        p_qty: itemQty,
-      });
-      */
-            }
-          }
-        }
       }
 
       if (typeof hapusItemDaftar === "function") {
@@ -592,8 +906,14 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
-      {/* HEADER */}
+    <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden relative">
+      <ModalStockWarning
+        warningMessage={stockWarning}
+        onClose={() => setStockWarning(null)}
+      />
+
+      <ModalAuthCheckout show={showAuthModal} />
+
       <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
           <Link
@@ -633,7 +953,6 @@ export default function CheckoutPage() {
         </div>
       </header>
 
-      {/* FORM CHECKOUT */}
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-8 lg:px-12 py-8 sm:py-12">
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif uppercase tracking-tight mb-6 sm:mb-8 text-neutral-900">
           PEMBAYARAN & CHECKOUT
@@ -644,421 +963,63 @@ export default function CheckoutPage() {
           className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start"
         >
           <div className="lg:col-span-7 space-y-6">
-            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs rounded-xs">
-              <div className="flex items-center gap-2 border-b border-neutral-100 pb-3">
-                <User className="w-4 h-4 text-neutral-800" />
-                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900">
-                  DATA PENERIMA
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
-                    NAMA PENERIMA <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={nama}
-                    onChange={(e) => setNama(e.target.value)}
-                    placeholder="Nama Lengkap"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
-                    NO WHATSAPP <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    placeholder="081234567890"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1 relative" ref={cityDropdownRef}>
-                <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
-                  ALAMAT TUJUAN{" "}
-                  <span className="text-red-500">*(KETIK MIN. 3 HURUF)</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={searchCityInput}
-                    onChange={handleCitySearchChange}
-                    onFocus={() =>
-                      cityResults.length > 0 && setShowCityDropdown(true)
-                    }
-                    placeholder="Contoh: Kecamatan / Kabupaten / Kota"
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 pr-9 rounded-2xs"
-                  />
-                  {isSearchingCity && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Loader2 className="w-4 h-4 animate-spin text-neutral-500" />
-                    </div>
-                  )}
-                </div>
-
-                {showCityDropdown && cityResults.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-neutral-300 shadow-xl z-50 max-h-52 overflow-y-auto rounded-2xs">
-                    {cityResults.map((c, idx) => (
-                      <div
-                        key={`${c.city_id}-${idx}`}
-                        onClick={() => handleSelectCity(c)}
-                        className="p-3 hover:bg-neutral-100 cursor-pointer border-b border-neutral-100 last:border-none text-left"
-                      >
-                        <p className="text-xs font-bold text-neutral-900">
-                          {c.type ? `${c.type} ` : ""}
-                          {c.city_name}
-                        </p>
-                        <p className="text-[10px] text-neutral-500">
-                          Provinsi: {c.province} • Kodepos:{" "}
-                          {c.postal_code || "-"}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-neutral-600 block">
-                  DETAIL ALAMAT LENGKAP <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={alamat}
-                  onChange={(e) => setAlamat(e.target.value)}
-                  placeholder="Nama jalan, nomor bangunan, patokan..."
-                  className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2 sm:py-2.5 text-xs text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
-                />
-              </div>
-            </div>
+            <DataPenerimaForm
+              currentUserId={currentUserId}
+              nama={nama}
+              setNama={setNama}
+              whatsapp={whatsapp}
+              setWhatsapp={setWhatsapp}
+              alamat={alamat}
+              setAlamat={setAlamat}
+              searchCityInput={searchCityInput}
+              handleCitySearchChange={handleCitySearchChange}
+              cityResults={cityResults}
+              isSearchingCity={isSearchingCity}
+              showCityDropdown={showCityDropdown}
+              setShowCityDropdown={setShowCityDropdown}
+              handleSelectCity={handleSelectCity}
+              cityDropdownRef={cityDropdownRef}
+            />
 
             <div className="bg-white border border-neutral-200 shadow-xs rounded-xs overflow-hidden">
-              <div className="bg-[#F1F3F5] p-4 sm:p-5 border-b border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="text-xs text-neutral-800">
-                  <span>
-                    Dikirim dari:{" "}
-                    <strong className="text-neutral-950 font-bold">
-                      Tulungagung
-                    </strong>
-                  </span>
-                </div>
+              <JasaKirimDropdown
+                isClient={isClient}
+                isLoadingShipping={isLoadingShipping}
+                shippingOptions={shippingOptions}
+                selectedCourier={selectedCourier}
+                setSelectedCourier={setSelectedCourier}
+                showCourierDropdown={showCourierDropdown}
+                setShowCourierDropdown={setShowCourierDropdown}
+                courierDropdownRef={courierDropdownRef}
+              />
 
-                <div className="relative" ref={courierDropdownRef}>
-                  {!isClient ? (
-                    <div className="bg-neutral-400 text-white text-xs font-bold px-4 py-2.5 rounded-2xs flex items-center justify-between gap-3 min-w-[200px]">
-                      <span>PILIH JASA KIRIM</span>
-                      <ChevronDown className="w-4 h-4 shrink-0" />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={
-                        isLoadingShipping || shippingOptions.length === 0
-                      }
-                      onClick={() =>
-                        setShowCourierDropdown(!showCourierDropdown)
-                      }
-                      className="bg-[#0F2137] hover:bg-[#182F4D] text-white text-xs font-bold px-4 py-2.5 rounded-2xs flex items-center justify-between gap-3 min-w-[200px] shadow-xs cursor-pointer disabled:bg-neutral-400 disabled:cursor-not-allowed"
-                    >
-                      {isLoadingShipping ? (
-                        <div className="flex items-center gap-2 mx-auto">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Memuat Tarif...</span>
-                        </div>
-                      ) : selectedCourier ? (
-                        <>
-                          <span className="truncate uppercase tracking-wide">
-                            {selectedCourier.courier_name ||
-                              selectedCourier.company}{" "}
-                            {selectedCourier.courier_service_name} (
-                            {selectedCourier.duration})
-                          </span>
-                          <ChevronDown className="w-4 h-4 shrink-0" />
-                        </>
-                      ) : (
-                        <>
-                          <span>PILIH JASA KIRIM</span>
-                          <ChevronDown className="w-4 h-4 shrink-0" />
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  {showCourierDropdown && shippingOptions.length > 0 && (
-                    <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 max-w-[90vw] bg-white border border-neutral-300 shadow-2xl rounded-2xs z-50 py-1 max-h-64 overflow-y-auto">
-                      {shippingOptions.map((opt, idx) => (
-                        <div
-                          key={`${opt.company}-${opt.courier_service_name}-${idx}`}
-                          onClick={() => {
-                            setSelectedCourier(opt);
-                            setShowCourierDropdown(false);
-                          }}
-                          className={`px-4 py-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
-                            (selectedCourier?.courier_name ||
-                              selectedCourier?.company) ===
-                              (opt.courier_name || opt.company) &&
-                            selectedCourier?.courier_service_name ===
-                              opt.courier_service_name
-                              ? "bg-neutral-100 font-bold text-neutral-950"
-                              : "hover:bg-neutral-50 text-neutral-800"
-                          }`}
-                        >
-                          <div>
-                            <p className="uppercase">
-                              {opt.courier_name || opt.company}{" "}
-                              {opt.courier_service_name} ({opt.duration})
-                            </p>
-                          </div>
-                          <span className="font-bold shrink-0 ml-2 text-neutral-950 font-mono">
-                            Rp {opt.price.toLocaleString("id-ID")}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* LIST ITEM PRODUK */}
-              <div className="p-4 sm:p-6 space-y-4">
-                {checkoutItems.length === 0 ? (
-                  <p className="text-xs text-neutral-500 text-center py-4">
-                    Tidak ada produk terpilih untuk di-checkout.
-                  </p>
-                ) : (
-                  checkoutItems.map((item: any) => {
-                    const isGrosir = Boolean(item.is_grosir);
-                    const minGrosir = Math.max(
-                      1,
-                      parseInt(String(item.min_grosir || 5), 10),
-                    );
-                    const currentQty = Math.max(
-                      1,
-                      parseInt(String(item.qty || 1), 10),
-                    );
-                    const minAllowed = isGrosir ? minGrosir : 1;
-
-                    return (
-                      <div
-                        key={`${item.id}-${item.size}-${item.color}`}
-                        className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between border-b border-neutral-100 pb-4 last:border-none last:pb-0"
-                      >
-                        <div className="flex gap-3 items-center min-w-0">
-                          <div className="relative w-16 h-20 bg-neutral-100 shrink-0 border border-neutral-200 overflow-hidden rounded-2xs">
-                            <Image
-                              src={item.image}
-                              alt={item.title}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="space-y-0.5 min-w-0">
-                            <h4 className="text-xs font-bold text-neutral-900 line-clamp-1">
-                              {item.title}
-                            </h4>
-                            <p className="text-[11px] text-neutral-500">
-                              {item.size || "All Size"} (
-                              {item.color || "Default"})
-                            </p>
-                            <p className="text-xs font-bold text-amber-950 font-mono">
-                              Rp{" "}
-                              {Number(item.price || 0).toLocaleString("id-ID")}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 self-end sm:self-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleRemoveCheckoutItem(
-                                item.id,
-                                item.size,
-                                item.color,
-                              )
-                            }
-                            className="w-8 h-8 bg-rose-500 hover:bg-rose-600 text-white rounded-2xs flex items-center justify-center transition cursor-pointer"
-                            title="Hapus dari Checkout"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-
-                          {/* Tombol Kurang & Tambah Qty */}
-                          <div className="flex items-center border border-neutral-300 rounded-2xs bg-white">
-                            <button
-                              type="button"
-                              disabled={currentQty <= minAllowed}
-                              onClick={() => handleUpdateQtyCheckout(item, -1)}
-                              className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-r border-neutral-300 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="w-8 text-center text-xs font-bold font-mono text-neutral-800">
-                              {currentQty}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateQtyCheckout(item, 1)}
-                              className="w-7 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-950 border-l border-neutral-300 cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-
-                <div className="pt-2">
-                  <input
-                    type="text"
-                    value={catatan}
-                    onChange={(e) => setCatatan(e.target.value)}
-                    placeholder="Tulis Catatan Buat Penjual..."
-                    className="w-full bg-neutral-50 border border-neutral-200 px-3.5 py-2.5 text-xs text-neutral-800 focus:bg-white focus:outline-none focus:border-neutral-900 rounded-2xs"
-                  />
-                </div>
-              </div>
+              <CheckoutItemList
+                checkoutItems={checkoutItems}
+                catatan={catatan}
+                setCatatan={setCatatan}
+                handleRemoveCheckoutItem={handleRemoveCheckoutItem}
+                handleUpdateQtyCheckout={handleUpdateQtyCheckout}
+                getProductStock={getProductStock}
+              />
             </div>
           </div>
 
           <div className="lg:col-span-5 space-y-6">
-            <div className="bg-white border border-neutral-200 p-5 sm:p-7 space-y-5 shadow-xs sticky top-24 rounded-xs">
-              <h3 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-neutral-900 border-b border-neutral-100 pb-3">
-                METODE PEMBAYARAN
-              </h3>
-
-              <div
-                onClick={() => setSelectedBank("bca")}
-                className="flex items-center justify-between p-3.5 border-2 border-neutral-950 bg-neutral-50 shadow-xs cursor-pointer rounded-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative w-12 h-6 shrink-0 bg-white border border-neutral-200 flex items-center justify-center rounded-2xs">
-                    <Image
-                      src="/BCA.png"
-                      alt="Bank BCA"
-                      fill
-                      className="object-contain p-0.5"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-neutral-900 block">
-                      Bank BCA
-                    </span>
-                    <span className="text-[9px] text-neutral-500 uppercase tracking-wider">
-                      Transfer Manual
-                    </span>
-                  </div>
-                </div>
-                <div className="w-5 h-5 rounded-full bg-neutral-950 text-white flex items-center justify-center">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                </div>
-              </div>
-
-              <div className="border-t border-neutral-100 pt-4 space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-neutral-900">
-                  RINCIAN PESANAN
-                </h4>
-                <div className="space-y-2 text-xs text-neutral-600">
-                  <div className="flex justify-between items-center text-neutral-700">
-                    <span className="flex items-center gap-1.5 text-[11px]">
-                      <Scale className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>Total Berat Pesanan</span>
-                    </span>
-                    <span className="font-semibold text-neutral-900 font-mono">
-                      {totalWeight} Gram ({totalWeightKg} Kg)
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span>Subtotal Produk</span>
-                    <span className="font-semibold text-neutral-900 font-mono">
-                      Rp {subtotal.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>
-                      Ongkos Kirim (
-                      {selectedCourier
-                        ? (
-                            selectedCourier.courier_name ||
-                            selectedCourier.company
-                          ).toUpperCase()
-                        : "Kurir"}
-                      )
-                    </span>
-                    <span className="font-semibold text-neutral-900 font-mono">
-                      {isLoadingShipping
-                        ? "Menghitung..."
-                        : selectedCourier
-                          ? "Rp " + shippingFee.toLocaleString("id-ID")
-                          : "Pilih Kurir"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-1.5">
-                      <span>Biaya Packing</span>
-                      <span className="text-[10px] text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded font-mono">
-                        {totalWeightKg} kg (Rp 3.000/kg)
-                      </span>
-                    </div>
-                    <span className="font-semibold text-neutral-900 font-mono">
-                      Rp {packingFee.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                  <div className="border-t border-neutral-100 pt-3 flex justify-between text-sm font-bold text-neutral-900">
-                    <span>Total Tagihan</span>
-                    <span className="text-base font-bold text-neutral-950 font-mono">
-                      Rp {total.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {!isClient ? (
-                <div className="w-full bg-neutral-400 text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md text-center rounded-2xs">
-                  MEMPROSES PESANAN...
-                </div>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={
-                    !selectedCourier ||
-                    isLoadingShipping ||
-                    isSubmittingOrder ||
-                    checkoutItems.length === 0
-                  }
-                  className={`w-full text-white text-xs tracking-[0.2em] font-bold uppercase py-4 shadow-md transition flex items-center justify-center gap-2 rounded-2xs ${
-                    !selectedCourier ||
-                    isLoadingShipping ||
-                    isSubmittingOrder ||
-                    checkoutItems.length === 0
-                      ? "bg-neutral-400 cursor-not-allowed"
-                      : "bg-neutral-950 hover:bg-black cursor-pointer active:scale-[0.99]"
-                  }`}
-                >
-                  {isSubmittingOrder && (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  )}
-                  <span>
-                    {isSubmittingOrder
-                      ? "MEMPROSES PESANAN..."
-                      : "BAYAR SEKARANG"}
-                  </span>
-                </button>
-              )}
-            </div>
+            <RingkasanMetode
+              selectedBank={selectedBank}
+              setSelectedBank={setSelectedBank}
+              totalWeight={totalWeight}
+              totalWeightKg={totalWeightKg}
+              subtotal={subtotal}
+              shippingFee={shippingFee}
+              packingFee={packingFee}
+              total={total}
+              selectedCourier={selectedCourier}
+              isLoadingShipping={isLoadingShipping}
+              isClient={isClient}
+              isSubmittingOrder={isSubmittingOrder}
+              checkoutItemsLength={checkoutItems.length}
+            />
           </div>
         </form>
       </main>

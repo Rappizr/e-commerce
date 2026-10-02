@@ -8,7 +8,6 @@ import {
   ShoppingBag,
   Search,
   User,
-  UserPlus,
   Menu,
   X,
   Plus,
@@ -65,6 +64,11 @@ export default function Beranda() {
   const [testimoniList, setTestimoniList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // State sinkronisasi auth & anti-hydration mismatch
+  const [hasMounted, setHasMounted] = useState<boolean>(false);
+  const [isUserLoggedIn, setIsUserLoggedIn] = useState<boolean>(false);
+  const [unpaidCount, setUnpaidCount] = useState<number>(0);
+
   // State Modal Pop-up Quick Add to Cart
   const [activeQuickProduct, setActiveQuickProduct] = useState<any | null>(
     null,
@@ -79,7 +83,78 @@ export default function Beranda() {
     tambahKeKeranjang,
     totalCount,
   } = (useKeranjang() as any) || {};
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user: authContextUser } = useAuth();
+
+  // Sinkronisasi Sesi Pengguna di Header
+  useEffect(() => {
+    let isMounted = true;
+    setHasMounted(true);
+
+    const checkUnpaidOrders = async (uid: string) => {
+      if (!uid) return;
+      try {
+        const { count, error } = await supabase
+          .from("orders")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", uid)
+          .eq("status", "Menunggu Pembayaran");
+
+        if (!error && count !== null && isMounted) {
+          setUnpaidCount(count);
+        }
+      } catch (err) {
+        console.error("Gagal cek pesanan belum bayar:", err);
+      }
+    };
+
+    // 1. Cek sesi Supabase dan localStorage setelah mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      if (session?.user) {
+        setIsUserLoggedIn(true);
+        localStorage.setItem("almaco_user_email", session.user.email || "");
+        localStorage.setItem("almaco_user_id", session.user.id);
+        checkUnpaidOrders(session.user.id);
+      } else {
+        const localEmail = localStorage.getItem("almaco_user_email");
+        const localId = localStorage.getItem("almaco_user_id");
+        if (localEmail || localId) {
+          setIsUserLoggedIn(true);
+          if (localId) checkUnpaidOrders(localId);
+        } else {
+          setIsUserLoggedIn(false);
+        }
+      }
+    });
+
+    // 2. Pasang listener auth real-time
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      if (session?.user) {
+        setIsUserLoggedIn(true);
+        localStorage.setItem("almaco_user_email", session.user.email || "");
+        localStorage.setItem("almaco_user_id", session.user.id);
+        checkUnpaidOrders(session.user.id);
+      } else if (event === "SIGNED_OUT") {
+        setIsUserLoggedIn(false);
+        setUnpaidCount(0);
+        localStorage.removeItem("almaco_user_email");
+        localStorage.removeItem("almaco_user_id");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Status login aktif yang aman
+  const isUserAuthenticated = Boolean(
+    hasMounted && (isUserLoggedIn || isLoggedIn || Boolean(authContextUser)),
+  );
 
   const totalCartCount =
     totalCount !== undefined
@@ -220,7 +295,6 @@ export default function Beranda() {
     return () => clearTimeout(timer);
   };
 
-  // Buka Pop-up Quick Add
   const handleOpenQuickModal = async (item: any) => {
     if (item.stok <= 0) return;
     setActiveQuickProduct(item);
@@ -366,10 +440,12 @@ export default function Beranda() {
     return () => clearInterval(interval);
   }, [heroBanners.length]);
 
-  const noWhatsapp = "628883199088";
+  const noWhatsapp = "6285138472520";
   const pesanWhatsapp =
     "Halo Admin ALMACO FASHION, saya tertarik dan ingin bertanya mengenai katalog produk terbaru.";
-  const waUrl = `https://wa.me/${noWhatsapp}?text=${encodeURIComponent(pesanWhatsapp)}`;
+  const waUrl = `https://wa.me/${noWhatsapp}?text=${encodeURIComponent(
+    pesanWhatsapp,
+  )}`;
   const mapsUrl = "https://maps.app.goo.gl/6rg5xWuRDZvKg76i6";
 
   const brandTicker = Array(8).fill("ALMACO FASHION");
@@ -617,23 +693,41 @@ export default function Beranda() {
               </span>
             </Link>
 
-            {isLoggedIn ? (
+            {/* TOMBOL PROFILE DENGAN IKON USER STANDAR (BEBAS HYDRATION ERROR) */}
+            {isUserAuthenticated ? (
               <Link
                 href="/profile"
-                className="flex items-center gap-1.5 p-1 text-neutral-800 hover:text-amber-900 transition-all duration-300 active:scale-95 text-xs font-bold uppercase tracking-[0.15em] group"
+                className="flex items-center gap-1.5 p-1 text-neutral-800 hover:text-amber-900 transition-all duration-300 active:scale-95 text-xs font-bold uppercase tracking-[0.15em] group relative"
               >
-                <User className="w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-300 group-hover:scale-110" />
+                <div className="relative">
+                  <User className="w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-300 group-hover:scale-110" />
+                  {unpaidCount > 0 && (
+                    <span className="sm:hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 border-2 border-white rounded-full animate-ping" />
+                  )}
+                  {unpaidCount > 0 && (
+                    <span className="sm:hidden absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 border-2 border-white rounded-full" />
+                  )}
+                </div>
                 <span className="hidden sm:inline relative py-1">
                   Profile
                   <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-amber-900 transition-all duration-300 ease-out group-hover:w-full" />
                 </span>
+
+                {unpaidCount > 0 && (
+                  <span
+                    className="hidden sm:inline-flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs animate-bounce"
+                    title={`${unpaidCount} pesanan menunggu pembayaran`}
+                  >
+                    <span>{unpaidCount} Belum Bayar</span>
+                  </span>
+                )}
               </Link>
             ) : (
               <Link
                 href="/auth"
                 className="flex items-center gap-1.5 p-1 text-neutral-800 hover:text-amber-900 transition-all duration-300 active:scale-95 text-xs font-bold uppercase tracking-[0.15em] group"
               >
-                <UserPlus className="w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-300 group-hover:scale-110" />
+                <User className="w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform duration-300 group-hover:scale-110" />
                 <span className="hidden sm:inline relative py-1">
                   Masuk
                   <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-amber-900 transition-all duration-300 ease-out group-hover:w-full" />
@@ -643,13 +737,18 @@ export default function Beranda() {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-1.5 text-neutral-900 border border-stone-300 hover:border-neutral-900 transition-all duration-200 active:scale-90 rounded-2xs"
+              className="lg:hidden p-1.5 text-neutral-900 border border-stone-300 hover:border-neutral-900 transition-all duration-200 active:scale-90 rounded-2xs relative"
               aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? (
                 <X className="w-4 h-4" />
               ) : (
-                <Menu className="w-4 h-4" />
+                <>
+                  <Menu className="w-4 h-4" />
+                  {unpaidCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 border border-white rounded-full" />
+                  )}
+                </>
               )}
             </button>
           </div>
@@ -707,11 +806,18 @@ export default function Beranda() {
               Testimoni
             </a>
             <Link
-              href={isLoggedIn ? "/profile" : "/auth"}
+              href={isUserAuthenticated ? "/profile" : "/auth"}
               onClick={() => setMobileMenuOpen(false)}
-              className="block py-1.5 text-xs font-bold uppercase tracking-wider text-neutral-800 active:bg-stone-50 transition-colors"
+              className="flex items-center justify-between py-1.5 text-xs font-bold uppercase tracking-wider text-neutral-800 active:bg-stone-50 transition-colors"
             >
-              {isLoggedIn ? "Profile Saya" : "Masuk / Daftar Akun"}
+              <span>
+                {isUserAuthenticated ? "Profile Saya" : "Masuk / Daftar Akun"}
+              </span>
+              {isUserAuthenticated && unpaidCount > 0 && (
+                <span className="bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-full">
+                  {unpaidCount} Belum Dibayar
+                </span>
+              )}
             </Link>
           </div>
         )}
@@ -817,12 +923,10 @@ export default function Beranda() {
                           className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                         />
 
-                        {/* BADGE MINIMAL SERI */}
                         <span className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[7.5px] sm:text-[9.5px] uppercase font-bold tracking-wider bg-amber-900 text-amber-100 px-2 py-0.5 shadow-sm rounded-2xs z-10">
                           Min. {item.min_grosir} Pcs
                         </span>
 
-                        {/* BADGE SISA STOK GROSIR / HABIS */}
                         <span
                           className={`absolute top-1.5 right-1.5 sm:top-2 sm:right-2 text-[7.5px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 shadow-sm rounded-2xs z-10 ${
                             isHabis
@@ -899,7 +1003,9 @@ export default function Beranda() {
                       : `Lihat (${grosirProducts.length - defaultGrosirLimit} Produk Grosir Lainnya)`}
                   </span>
                   <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-300 ${showAllGrosir ? "rotate-180" : ""}`}
+                    className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                      showAllGrosir ? "rotate-180" : ""
+                    }`}
                   />
                 </button>
               </div>
@@ -1023,7 +1129,6 @@ export default function Beranda() {
                         className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                       />
 
-                      {/* BADGE SISA STOK ECERAN / HABIS */}
                       <span
                         className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs z-10 ${
                           isHabis
@@ -1050,7 +1155,6 @@ export default function Beranda() {
                     </div>
                   </div>
 
-                  {/* 2 TOMBOL AKSI */}
                   <div className="flex items-stretch border-t border-stone-200 bg-stone-50">
                     <Link
                       href={`/product-detail?id=${item.id}`}
@@ -1099,7 +1203,6 @@ export default function Beranda() {
               />
 
               <div className="relative z-10 w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white border border-stone-200 shadow-2xl p-4 sm:p-5 space-y-3.5 animate-in zoom-in-95 duration-200 rounded-xs">
-                {/* Header Modal */}
                 <div className="flex items-start justify-between border-b border-stone-100 pb-3 gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative w-12 h-16 bg-neutral-100 border border-stone-200 shrink-0 rounded-2xs overflow-hidden">
@@ -1165,7 +1268,6 @@ export default function Beranda() {
                   </button>
                 </div>
 
-                {/* UKURAN MODEL TUNGGAL */}
                 <div className="flex items-center justify-between p-2 bg-[#FAF8F5] border border-stone-200 text-xs rounded-2xs">
                   <span className="text-[10px] uppercase font-bold text-neutral-500">
                     Ukuran Model:
@@ -1175,7 +1277,6 @@ export default function Beranda() {
                   </span>
                 </div>
 
-                {/* PILIHAN WARNA */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs uppercase">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
@@ -1233,7 +1334,6 @@ export default function Beranda() {
                   )}
                 </div>
 
-                {/* JUMLAH PESAN & SUBTOTAL */}
                 <div className="flex items-center justify-between pt-1 border-t border-stone-100">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 block">
@@ -1248,7 +1348,6 @@ export default function Beranda() {
                   </div>
 
                   <div className="flex items-center gap-2 border border-stone-300 bg-stone-50 px-2 py-0.5 rounded-2xs">
-                    {/* Tombol Kurang (-) */}
                     <button
                       type="button"
                       disabled={
@@ -1267,7 +1366,6 @@ export default function Beranda() {
                     <span className="w-6 text-center font-mono font-bold text-xs">
                       {quickQty}
                     </span>
-                    {/* Tombol Tambah (+) */}
                     <button
                       type="button"
                       disabled={
@@ -1286,7 +1384,6 @@ export default function Beranda() {
                   </div>
                 </div>
 
-                {/* TOMBOL KONFIRMASI MASUK KERANJANG */}
                 <button
                   type="button"
                   onClick={handleConfirmAddToCart}
@@ -1473,39 +1570,6 @@ export default function Beranda() {
             </div>
           </section>
         </>
-      )}
-
-      {/* MODAL ZOOM POP-UP BUKTI TESTIMONI */}
-      {zoomTestimoni && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
-          <div
-            className="fixed inset-0"
-            onClick={() => setZoomTestimoni(null)}
-          />
-          <div className="relative z-10 bg-white border border-stone-200 max-w-xs sm:max-w-sm w-full p-3.5 space-y-3 shadow-2xl rounded-xs flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between border-b border-stone-200 pb-2">
-              <span className="text-xs font-serif font-bold uppercase tracking-wider text-neutral-950">
-                Detail Bukti Testimoni
-              </span>
-              <button
-                onClick={() => setZoomTestimoni(null)}
-                className="p-1 text-stone-400 hover:text-neutral-900 cursor-pointer"
-                aria-label="Tutup pratinjau"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="relative aspect-[9/16] w-full max-h-[75vh] bg-stone-100 overflow-hidden rounded-2xs border border-stone-200">
-              <Image
-                src={zoomTestimoni}
-                alt="Testimoni Penuh"
-                fill
-                className="object-contain"
-              />
-            </div>
-          </div>
-        </div>
       )}
 
       <Footer />

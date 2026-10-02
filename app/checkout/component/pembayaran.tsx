@@ -42,7 +42,7 @@ export default function PembayaranComponent({
   const { removeItem, hapusItem, hapusItemDaftar } =
     (useKeranjang() as any) || {};
 
-  // Pembersihan item yang berhasil di-checkout dari session storage dan keranjang
+  // Pembersihan item yang berhasil di-checkout dari session storage dan keranjang (dijalankan 1x saat mount)
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -70,7 +70,8 @@ export default function PembayaranComponent({
         console.error("Error clearing checked-out items:", e);
       }
     }
-  }, [removeItem, hapusItem, hapusItemDaftar]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sinkronisasi live data dengan database orders
   useEffect(() => {
@@ -129,10 +130,43 @@ export default function PembayaranComponent({
     atasNama: "TITIN PRAMUDYA WATI",
   };
 
+  // Safe clipboard handler untuk kompatibilitas lintas browser & koneksi
+  const copyToClipboard = (text: string, callback: () => void) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard
+        .writeText(text)
+        .then(callback)
+        .catch(() => {
+          fallbackCopyTextToClipboard(text, callback);
+        });
+    } else {
+      fallbackCopyTextToClipboard(text, callback);
+    }
+  };
+
+  const fallbackCopyTextToClipboard = (text: string, callback: () => void) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      callback();
+    } catch (err) {
+      console.error("Fallback copy failed:", err);
+    }
+    document.body.removeChild(textArea);
+  };
+
   const handleCopyRek = () => {
-    navigator.clipboard.writeText(paymentDetails.noRek.replace(/\s+/g, ""));
-    setCopiedRek(true);
-    setTimeout(() => setCopiedRek(false), 2000);
+    copyToClipboard(paymentDetails.noRek.replace(/\s+/g, ""), () => {
+      setCopiedRek(true);
+      setTimeout(() => setCopiedRek(false), 2000);
+    });
   };
 
   const handleCopyNominal = () => {
@@ -140,9 +174,10 @@ export default function PembayaranComponent({
       /[^0-9]/g,
       "",
     );
-    navigator.clipboard.writeText(nominalToCopy);
-    setCopiedNominal(true);
-    setTimeout(() => setCopiedNominal(false), 2000);
+    copyToClipboard(nominalToCopy, () => {
+      setCopiedNominal(true);
+      setTimeout(() => setCopiedNominal(false), 2000);
+    });
   };
 
   const nominalDisplay = liveAmount > 0 ? liveAmount : totalAmount;
@@ -363,7 +398,11 @@ export default function PembayaranComponent({
           {/* TOMBOL AKSI UTAMA */}
           <div className="pt-1 space-y-2">
             <Link
-              href={`/konfirmasi-pembayaran?invoice=${encodeURIComponent(paymentDetails.invoiceNo)}`}
+              href={
+                invoiceId
+                  ? `/konfirmasi-pembayaran?invoice=${encodeURIComponent(invoiceId)}`
+                  : "/konfirmasi-pembayaran"
+              }
               className="w-full bg-neutral-950 hover:bg-amber-950 text-white text-[11px] sm:text-xs font-bold uppercase tracking-widest py-3 transition flex items-center justify-center gap-1.5 shadow-sm rounded-2xs text-center cursor-pointer active:scale-[0.99]"
             >
               <FileCheck className="w-4 h-4 text-amber-300" />

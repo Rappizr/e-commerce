@@ -1,151 +1,248 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Phone, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useAuth } from '../penyimpanan/authcontext';
-import { supabase } from '../penyimpanan/supabase';
-import Footer from '../Footer';
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Eye,
+  EyeOff,
+  Loader2,
+} from "lucide-react";
+import { supabase } from "../penyimpanan/supabase";
+import Footer from "../Footer";
 
 export default function AuthPage() {
-  const [isLoginMode, setIsLoginMode] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const router = useRouter();
-  const { login } = useAuth();
+  const searchParams = useSearchParams();
+  const targetRedirect = searchParams.get("redirect") || "/profile";
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: '',
-  });
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+
+  // 1. CEK SESI SECARA KETAT & AMAN: Jika user sudah login, langsung lempar ke target/profile
+  useEffect(() => {
+    let isMounted = true;
+
+    const verifyActiveSession = async () => {
+      try {
+        // Cek 1: Token sesi aktif dari Supabase
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user && isMounted) {
+          window.location.replace(targetRedirect);
+          return;
+        }
+
+        // Cek 2: Tanda login di storage
+        const savedEmail = localStorage.getItem("almaco_user_email");
+        if (savedEmail && isMounted) {
+          // Berikan toleransi singkat untuk memastikan sesi benar-benar sinkron
+          const { data: retry } = await supabase.auth.getSession();
+          if (retry?.session?.user) {
+            window.location.replace(targetRedirect);
+            return;
+          }
+        }
+
+        if (isMounted) {
+          setIsCheckingSession(false);
+        }
+      } catch (err) {
+        if (isMounted) setIsCheckingSession(false);
+      }
+    };
+
+    verifyActiveSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [targetRedirect]);
 
   const handleToggleMode = (loginMode: boolean) => {
     setIsLoginMode(loginMode);
-    setErrorMsg('');
-    setSuccessMsg('');
+    setErrorMsg("");
+    setSuccessMsg("");
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const clean = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+    setName(clean);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
+
+    if (!cleanEmail) {
+      setErrorMsg("Silakan ketikkan alamat email Anda.");
+      return;
+    }
+
+    if (!cleanPassword) {
+      setErrorMsg("Silakan masukkan kata sandi Anda.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const cleanEmail = formData.email.trim().toLowerCase();
-      const cleanPhone = formData.phone.trim();
-      const formattedPhone = cleanPhone.startsWith('0')
-        ? '62' + cleanPhone.slice(1)
-        : cleanPhone;
-
       if (isLoginMode) {
-        // 1. PROSES MASUK (LOGIN)
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: formData.password,
-        });
+        // PROSES LOGIN
+        const { data: authData, error: authError } =
+          await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPassword,
+          });
 
-        if (authError || !authData.user) {
-          throw new Error(authError?.message || 'Email atau kata sandi tidak sesuai.');
+        // PERBAIKAN: Tangani error secara terstruktur tanpa throw Error
+        if (authError || !authData.session) {
+          let pesan = "Email atau kata sandi tidak cocok. Silakan cek kembali.";
+          if (authError?.message?.includes("Email not confirmed")) {
+            pesan =
+              "Email Anda belum dikonfirmasi. Silakan periksa kotak masuk/spam email Anda.";
+          } else if (
+            authError?.message?.includes("Invalid login credentials")
+          ) {
+            pesan = "Email atau kata sandi tidak cocok. Silakan cek kembali.";
+          } else if (authError?.message) {
+            pesan = authError.message;
+          }
+
+          setErrorMsg(pesan);
+          setIsLoading(false);
+          return;
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('nama, no_hp, email, alamat')
-          .eq('id', authData.user.id)
-          .single();
+        setSuccessMsg("Berhasil masuk! Mengalihkan...");
 
-        login({
-          id: authData.user.id,
-          name: profile?.nama || cleanEmail.split('@')[0],
-          email: authData.user.email || cleanEmail,
-          phone: profile?.no_hp || '',
-        });
+        // Simpan tanda login di storage lokal browser
+        localStorage.setItem("almaco_user_email", cleanEmail);
+        localStorage.setItem("almaco_user_id", authData.user.id);
 
-        router.push('/profile');
+        // Ambil nama profil dari database untuk disimpan di cache lokal
+        try {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("nama")
+            .eq("id", authData.user.id)
+            .maybeSingle();
+
+          if (prof?.nama) {
+            localStorage.setItem("almaco_user_name", prof.nama);
+          } else {
+            localStorage.setItem(
+              "almaco_user_name",
+              authData.user.user_metadata?.nama || cleanEmail.split("@")[0],
+            );
+          }
+        } catch (e) {
+          localStorage.setItem("almaco_user_name", cleanEmail.split("@")[0]);
+        }
+
+        // Pindahkan halaman secara bersih
+        setTimeout(() => {
+          window.location.replace(targetRedirect);
+        }, 200);
       } else {
-        // 2. PROSES DAFTAR (SIGN UP)
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: formData.password,
-          options: {
-            data: {
-              nama: formData.name.trim(),
-              no_hp: formattedPhone,
+        // PROSES REGISTER
+        const cleanName = name.trim();
+        const cleanPhone = phone.trim();
+        const formattedPhone = cleanPhone.startsWith("0")
+          ? "62" + cleanPhone.slice(1)
+          : cleanPhone;
+
+        if (!cleanName) {
+          setErrorMsg("Silakan masukkan nama lengkap Anda.");
+          setIsLoading(false);
+          return;
+        }
+
+        const { data: signUpData, error: signUpError } =
+          await supabase.auth.signUp({
+            email: cleanEmail,
+            password: cleanPassword,
+            options: {
+              data: {
+                nama: cleanName,
+                no_hp: formattedPhone,
+              },
             },
-          },
-        });
+          });
 
         if (signUpError) {
-          throw signUpError;
+          let pesan = signUpError.message || "Gagal mendaftarkan akun.";
+          if (pesan.includes("User already registered")) {
+            pesan = 'Email sudah terdaftar. Silakan pilih tab "Masuk Akun".';
+          }
+          setErrorMsg(pesan);
+          setIsLoading(false);
+          return;
         }
 
-        if (!signUpData.user) {
-          throw new Error('Pendaftaran akun gagal. Silakan coba lagi.');
+        if (signUpData.session) {
+          localStorage.setItem("almaco_user_email", cleanEmail);
+          localStorage.setItem("almaco_user_name", cleanName);
+          if (signUpData.user) {
+            localStorage.setItem("almaco_user_id", signUpData.user.id);
+          }
+          setSuccessMsg("Pendaftaran berhasil! Mengalihkan...");
+          setTimeout(() => {
+            window.location.replace(targetRedirect);
+          }, 200);
+          return;
         }
 
-        // Simpan / Sinkronkan data ke tabel profiles
-        const { error: profileError } = await supabase.from('profiles').upsert([
-          {
-            id: signUpData.user.id,
-            email: cleanEmail,
-            nama: formData.name.trim(),
-            no_hp: formattedPhone,
-            role: 'customer',
-          },
-        ]);
-
-        if (profileError) {
-          console.error('Gagal menyimpan baris profile:', profileError);
-        }
-
-        login({
-          id: signUpData.user.id,
-          name: formData.name.trim(),
-          email: cleanEmail,
-          phone: formattedPhone,
-        });
-
-        setSuccessMsg('Akun berhasil didaftarkan! Mengalihkan...');
-        setTimeout(() => {
-          router.push('/profile');
-        }, 1000);
+        setSuccessMsg(
+          "Pendaftaran berhasil! Silakan periksa email Anda jika konfirmasi diperlukan, lalu masuk.",
+        );
+        setIsLoginMode(true);
+        setPassword("");
+        setIsLoading(false);
       }
     } catch (err: any) {
-      console.error('Auth submit error:', err);
-      let pesan = err.message || 'Terjadi kendala pada sistem autentikasi.';
-
-      if (pesan.includes('Signups not allowed') || pesan.includes('signups are disabled')) {
-        pesan = 'Pendaftaran akun baru saat ini dinonaktifkan di dashboard Supabase. Aktifkan opsi "Allow new users to sign up" pada menu Auth Providers.';
-      } else if (pesan.includes('rate limit')) {
-        pesan = 'Terlalu banyak percobaan. Harap tunggu beberapa saat lagi.';
-      } else if (pesan.includes('User already registered')) {
-        pesan = 'Email ini sudah terdaftar. Silakan pilih tab "Masuk Akun".';
-      } else if (pesan.includes('Password should be at least')) {
-        pesan = 'Kata sandi minimal harus terdiri dari 6 karakter.';
-      } else if (pesan.includes('Invalid login credentials')) {
-        pesan = 'Email atau kata sandi tidak cocok.';
-      }
-
-      setErrorMsg(pesan);
-    } finally {
+      console.error("Auth error:", err);
+      setErrorMsg(err?.message || "Terjadi kendala autentikasi.");
       setIsLoading(false);
     }
   };
 
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-[#F9F8F6] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-900" />
+        <p className="text-xs uppercase tracking-widest font-bold text-neutral-500">
+          Memeriksa Status Akun...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white justify-between overflow-x-hidden">
-      {/* NAVBAR */}
       <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200">
         <div className="w-full px-4 sm:px-8 lg:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
-          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-85 min-w-0">
+          <Link href="/" className="flex items-center gap-2.5 min-w-0">
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 shrink-0">
               <Image
                 src="/logo.png"
@@ -157,7 +254,8 @@ export default function AuthPage() {
             </div>
             <div className="leading-tight truncate">
               <div className="text-base sm:text-xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-500">FASHION</span>
+                <span className="font-black">ALMACO</span>{" "}
+                <span className="font-light text-neutral-500">FASHION</span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wide block truncate">
                 Fashionable • Syari • Berkualitas
@@ -167,7 +265,7 @@ export default function AuthPage() {
 
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs uppercase tracking-widest font-semibold text-neutral-800 hover:text-white bg-white hover:bg-neutral-950 border border-neutral-300 hover:border-neutral-950 px-3 sm:px-4 py-2 sm:py-2.5 transition-all shadow-xs shrink-0 rounded-2xs"
           >
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Kembali</span>
@@ -175,10 +273,8 @@ export default function AuthPage() {
         </div>
       </header>
 
-      {/* FORM AUTHENTICATION */}
       <main className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
-        <div className="w-full max-w-md bg-white border border-neutral-200 p-6 sm:p-8 shadow-xs">
-          
+        <div className="w-full max-w-md bg-white border border-neutral-200 p-6 sm:p-8 shadow-xs rounded-xs">
           <div className="flex flex-col items-center justify-center text-center mb-5 sm:mb-6 space-y-1">
             <div className="relative w-12 h-12 sm:w-14 sm:h-14 shrink-0 mb-1">
               <Image
@@ -191,7 +287,8 @@ export default function AuthPage() {
             </div>
             <div className="leading-tight">
               <div className="text-xl sm:text-2xl uppercase tracking-tight text-neutral-950">
-                <span className="font-black">ALMACO</span><span className="font-light text-neutral-600">FASHION</span>
+                <span className="font-black">ALMACO</span>{" "}
+                <span className="font-light text-neutral-600">FASHION</span>
               </div>
               <span className="text-[9px] sm:text-[10px] text-neutral-400 font-medium tracking-wider block mt-0.5">
                 Fashionable • Syari • Berkualitas
@@ -199,13 +296,14 @@ export default function AuthPage() {
             </div>
           </div>
 
-          {/* TAB MODE */}
           <div className="flex border-b border-neutral-200 mb-5 sm:mb-6 text-[11px] sm:text-xs uppercase tracking-wider font-bold">
             <button
               type="button"
               onClick={() => handleToggleMode(false)}
-              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
-                !isLoginMode ? 'border-neutral-950 text-neutral-950 font-black' : 'border-transparent text-neutral-400 hover:text-neutral-700'
+              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 cursor-pointer ${
+                !isLoginMode
+                  ? "border-neutral-950 text-neutral-950 font-black"
+                  : "border-transparent text-neutral-400 hover:text-neutral-700"
               }`}
             >
               Daftar Baru
@@ -213,8 +311,10 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={() => handleToggleMode(true)}
-              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 ${
-                isLoginMode ? 'border-neutral-950 text-neutral-950 font-black' : 'border-transparent text-neutral-400 hover:text-neutral-700'
+              className={`flex-1 py-2.5 sm:py-3 text-center transition-all border-b-2 cursor-pointer ${
+                isLoginMode
+                  ? "border-neutral-950 text-neutral-950 font-black"
+                  : "border-transparent text-neutral-400 hover:text-neutral-700"
               }`}
             >
               Masuk Akun
@@ -222,31 +322,35 @@ export default function AuthPage() {
           </div>
 
           {errorMsg && (
-            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium leading-relaxed">
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium leading-relaxed rounded-2xs">
               {errorMsg}
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium leading-relaxed">
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium leading-relaxed rounded-2xs">
               {successMsg}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="space-y-3.5 sm:space-y-4"
+          >
             {!isLoginMode && (
               <div>
                 <label className="text-[10px] sm:text-[11px] uppercase tracking-wider text-neutral-500 font-bold block mb-1">
-                  Nama Lengkap <span className="text-red-500">*</span>
+                  Nama Lengkap{" "}
+                  <span className="text-red-500">* (Huruf A-Z)</span>
                 </label>
                 <div className="relative">
                   <input
                     type="text"
-                    required
                     placeholder="Nama Lengkap Anda"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                    value={name}
+                    onChange={handleNameChange}
+                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white rounded-2xs"
                   />
                   <User className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
                 </div>
@@ -260,11 +364,10 @@ export default function AuthPage() {
               <div className="relative">
                 <input
                   type="email"
-                  required
                   placeholder="nama@email.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white rounded-2xs"
                 />
                 <Mail className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
               </div>
@@ -278,11 +381,10 @@ export default function AuthPage() {
                 <div className="relative">
                   <input
                     type="tel"
-                    required
                     placeholder="08xxxxxxxxxx"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-9 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white rounded-2xs"
                   />
                   <Phone className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5 sm:top-3 pointer-events-none" />
                 </div>
@@ -295,19 +397,22 @@ export default function AuthPage() {
               </label>
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-10 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white font-mono"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-10 py-2 sm:py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 focus:bg-white font-mono rounded-2xs"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 sm:top-3 text-neutral-400 hover:text-neutral-700"
+                  className="absolute right-3 top-2.5 sm:top-3 text-neutral-400 hover:text-neutral-700 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -315,10 +420,10 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-neutral-950 hover:bg-black disabled:bg-neutral-400 text-white text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] py-3 sm:py-3.5 transition shadow-xs mt-2 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full bg-neutral-950 hover:bg-black disabled:bg-neutral-400 text-white text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] py-3 sm:py-3.5 transition shadow-xs mt-2 flex items-center justify-center gap-2 cursor-pointer rounded-2xs"
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{isLoginMode ? 'Masuk Sekarang' : 'Daftar Akun'}</span>
+              <span>{isLoginMode ? "Masuk Sekarang" : "Daftar Akun"}</span>
             </button>
           </form>
         </div>

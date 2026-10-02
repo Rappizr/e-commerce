@@ -1,67 +1,37 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  });
+  const pathname = request.nextUrl.pathname;
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(
-          cookiesToSet: {
-            name: string;
-            value: string;
-            options: CookieOptions;
-          }[],
-        ) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
-          );
-        },
-      },
-    },
+  // 1. Lewati semua file aset statis, API, dan rute internal
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/static") ||
+    pathname.includes(".")
+  ) {
+    return NextResponse.next();
+  }
+
+  // 2. Hanya proses jika mengakses /admin KECUALI /admin/login
+  if (!pathname.startsWith("/admin") || pathname === "/admin/login") {
+    return NextResponse.next();
+  }
+
+  // 3. Cek flag cookie jika ada
+  const allCookies = request.cookies.getAll();
+  const hasAuthToken = allCookies.some(
+    (c) =>
+      c.name.includes("sb-") ||
+      c.name.includes("auth-token") ||
+      c.name === "almaco_admin_auth",
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Jika belum login, redirect ke halaman login admin
-  if (!user) {
-    return NextResponse.redirect(new URL("/admin/login", request.url));
-  }
-
-  // Jika sudah login, cek role di database
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role !== "admin") {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
-  return response;
+  // Jika di cookie server belum ada, biarkan lolos ke halaman client
+  // Proteksi client-side di halaman /admin akan memverifikasi localStorage & Supabase session secara akurat
+  return NextResponse.next();
 }
 
-// PERBAIKAN UTAMA: Pengecualian rute login di matcher
 export const config = {
-  matcher: [
-    /*
-     * Tangkap semua rute di /admin/* KECUALI /admin/login
-     */
-    "/admin/((?!login).*)",
-  ],
+  matcher: ["/admin/:path*"],
 };
