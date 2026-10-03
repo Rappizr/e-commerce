@@ -113,16 +113,17 @@ function KonfirmasiContent() {
     const fetchOrderDetails = async () => {
       setIsLoadingOrder(true);
       try {
+        // PERBAIKAN: Hapus kolom 'total' dari select query, murni gunakan 'total_harga'
         let { data, error } = await supabase
           .from("orders")
-          .select("nama_pembeli, total, total_harga, bank_asal")
+          .select("nama_pembeli, total_harga, bank_asal")
           .ilike("invoice_no", cleanInvoice)
           .single();
 
         if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
           const fallbackRes = await supabase
             .from("orders")
-            .select("nama_pembeli, total, total_harga, bank_asal")
+            .select("nama_pembeli, total_harga, bank_asal")
             .eq("id", Number(cleanInvoice))
             .single();
           if (fallbackRes.data) {
@@ -132,7 +133,7 @@ function KonfirmasiContent() {
         }
 
         if (!error && data) {
-          const rawTotal = String(data.total || data.total_harga || "");
+          const rawTotal = String(data.total_harga || "");
           setFormData((prev) => ({
             ...prev,
             orderId: cleanInvoice.toUpperCase(),
@@ -186,16 +187,17 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
+      // PERBAIKAN: Hapus kolom 'total' dari select query
       let { data: existingOrder, error: checkError } = await supabase
         .from("orders")
-        .select("id, invoice_no, total, total_harga, status")
+        .select("id, invoice_no, total_harga, status")
         .ilike("invoice_no", cleanInvoiceNo)
         .single();
 
       if ((checkError || !existingOrder) && /^\d+$/.test(cleanInvoiceNo)) {
         const fallbackRes = await supabase
           .from("orders")
-          .select("id, invoice_no, total, total_harga, status")
+          .select("id, invoice_no, total_harga, status")
           .eq("id", Number(cleanInvoiceNo))
           .single();
         if (fallbackRes.data) {
@@ -212,17 +214,15 @@ function KonfirmasiContent() {
 
       const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
 
-      // Payload murni disesuaikan dengan skema tabel orders Supabase Anda
+      // PERBAIKAN: Gunakan bukti_transfer_url saja dan perbarui total_harga jika diisi
       const updatePayload: any = {
         bukti_transfer_url: previewImage,
-        bukti_transfer: previewImage,
         nama_pengirim: formData.senderName.trim() || null,
         bank_asal: formData.senderBank,
         status: "Menunggu Verifikasi",
       };
 
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
-        updatePayload.total = parsedAmount;
         updatePayload.total_harga = parsedAmount;
       }
 

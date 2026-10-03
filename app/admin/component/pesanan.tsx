@@ -99,6 +99,7 @@ export default function PesananComponent() {
   const fetchOrders = async () => {
     setIsLoading(true);
     try {
+      // PERBAIKAN: Hapus kolom 'total' dari select query
       const { data, error } = await supabase
         .from("orders")
         .select(
@@ -111,7 +112,6 @@ export default function PesananComponent() {
           status,
           subtotal,
           ongkir,
-          total,
           total_harga,
           no_resi,
           kurir,
@@ -333,7 +333,8 @@ export default function PesananComponent() {
       })
       .join("\n");
 
-    const totalFormat = `Rp ${Number(order.total || order.total_harga || 0).toLocaleString("id-ID")}`;
+    // PERBAIKAN: Menggunakan total_harga murni
+    const totalFormat = `Rp ${Number(order.total_harga || 0).toLocaleString("id-ID")}`;
 
     let penjelasan = "";
     if (alasan === "Stok Barang Habis") {
@@ -389,7 +390,8 @@ export default function PesananComponent() {
       })
       .join("\n");
 
-    const totalFormat = `Rp ${Number(item.total || item.total_harga || 0).toLocaleString("id-ID")}`;
+    // PERBAIKAN: Menggunakan total_harga murni
+    const totalFormat = `Rp ${Number(item.total_harga || 0).toLocaleString("id-ID")}`;
     const kurirAktif = (item.kurir || "Ekspedisi").toUpperCase();
     const noResiAktif = item.no_resi || resiInputs[item.id]?.no_resi || "-";
     const originUrl =

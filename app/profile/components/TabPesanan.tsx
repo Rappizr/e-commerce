@@ -8,8 +8,7 @@ export interface OrderItem {
   id: number;
   invoice_no: string;
   status: string;
-  total: number;
-  total_harga?: number;
+  total_harga: number; // ← Menggunakan total_harga sebagai patokan resmi
   kurir: string;
   created_at: string;
 }
@@ -67,7 +66,8 @@ export default function TabPesanan({
       ) : (
         <div className="divide-y divide-neutral-100 border border-neutral-200 rounded-2xs overflow-hidden">
           {orders.map((ord) => {
-            const tagihan = ord.total || ord.total_harga || 0;
+            // Selalu ambil total_harga murni
+            const tagihan = ord.total_harga || 0;
             const isMenunggu = ord.status === "Menunggu Pembayaran";
             const isBatal =
               ord.status === "Dibatalkan" || ord.status === "Ditolak";

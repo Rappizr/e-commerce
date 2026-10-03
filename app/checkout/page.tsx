@@ -819,6 +819,7 @@ export default function CheckoutPage() {
     try {
       const inv = await generateInvoiceNumber();
 
+      // HAPUS kolom `total` yang duplikat/sisa lama agar tidak membingungkan DB
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert([
@@ -831,7 +832,6 @@ export default function CheckoutPage() {
             status: "Menunggu Pembayaran",
             subtotal: subtotal,
             ongkir: calculatedTotalOngkir,
-            total: calculatedTotal,
             total_harga: calculatedTotal,
             kurir: kurirFinalSimpan,
             bank_asal: selectedBank.toUpperCase(),

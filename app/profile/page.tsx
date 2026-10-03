@@ -141,9 +141,10 @@ export default function ProfilePage() {
   const fetchOrders = async (uid: string) => {
     setIsLoadingOrders(true);
     try {
+      // PERBAIKAN: Hapus 'total' dari select query, gunakan 'total_harga'
       const { data, error } = await supabase
         .from("orders")
-        .select("id, invoice_no, status, total, total_harga, kurir, created_at")
+        .select("id, invoice_no, status, total_harga, kurir, created_at")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
@@ -683,12 +684,7 @@ export default function ProfilePage() {
                   </strong>{" "}
                   sebesar{" "}
                   <strong className="font-mono text-amber-950 font-black">
-                    Rp{" "}
-                    {(
-                      firstUnpaid.total ||
-                      firstUnpaid.total_harga ||
-                      0
-                    ).toLocaleString("id-ID")}
+                    Rp {(firstUnpaid.total_harga || 0).toLocaleString("id-ID")}
                   </strong>{" "}
                   belum diselesaikan. Silakan konfirmasi bukti transfer agar
                   pesanan diproses.
