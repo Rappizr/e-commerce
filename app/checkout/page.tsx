@@ -786,92 +786,43 @@ export default function CheckoutPage() {
 
     setIsSubmittingOrder(true);
 
-    const calculatedShipping = Number(selectedCourier.price || 0);
-    const calculatedPacking = packingFee;
-    const calculatedTotalOngkir = calculatedShipping + calculatedPacking;
-    const calculatedTotal = subtotal + calculatedTotalOngkir;
-    const formattedWa = whatsapp.startsWith("0")
-      ? "62" + whatsapp.slice(1)
-      : whatsapp;
-
-    const rawCompany = (
-      selectedCourier.courier_name ||
-      selectedCourier.company ||
-      (selectedCourier as any).code ||
-      "JNE"
-    )
-      .trim()
-      .toUpperCase();
-
-    let namaKurirBersih = rawCompany;
-    if (rawCompany.includes("JNE")) {
-      namaKurirBersih = "JNE";
-    } else if (rawCompany.includes("J&T") || rawCompany.includes("JNT")) {
-      namaKurirBersih = "J&T EXPRESS";
-    } else if (rawCompany.includes("SICEPAT")) {
-      namaKurirBersih = "SICEPAT";
-    }
-
-    const serviceName = (
-      selectedCourier.courier_service_name ||
-      (selectedCourier as any).service ||
-      ""
-    )
-      .trim()
-      .toUpperCase();
-
-    const kurirFinalSimpan = serviceName
-      ? `${namaKurirBersih} - ${serviceName}`
-      : namaKurirBersih;
-
     try {
-      const inv = await generateInvoiceNumber();
+      // HANYA kirim data yang aman — harga, subtotal, ongkir dihitung ulang di server
+      const payload = {
+        items: checkoutItems.map((item: any) => ({
+          product_id: Number(item.id),
+          qty: parseInt(String(item.qty || 1), 10),
+          warna: item.color || null,
+          ukuran: item.size || null,
+        })),
+        destination_city_id: selectedCityId,
+        courier_company:
+          selectedCourier.company ||
+          selectedCourier.courier_name ||
+          "jne",
+        courier_service:
+          selectedCourier.courier_service_name ||
+          (selectedCourier as any).service ||
+          "REG",
+        nama_pembeli: nama.trim(),
+        no_hp: whatsapp.trim(),
+        alamat_lengkap: alamat.trim(),
+        search_city_label: searchCityInput || undefined,
+        catatan: catatan.trim() || null,
+        bank_asal: selectedBank,
+        user_id: currentUserId || null,
+      };
 
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .insert([
-          {
-            user_id: currentUserId || null,
-            invoice_no: inv,
-            nama_pembeli: nama.trim(),
-            no_hp: formattedWa,
-            alamat_lengkap: `${alamat.trim()} (${searchCityInput})`,
-            status: "Menunggu Pembayaran",
-            subtotal: subtotal,
-            ongkir: calculatedTotalOngkir,
-            total_harga: calculatedTotal,
-            kurir: kurirFinalSimpan,
-            bank_asal: selectedBank.toUpperCase(),
-            catatan: catatan.trim() || null,
-            berat_total: totalWeight,
-          },
-        ])
-        .select()
-        .single();
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-      if (orderError) throw orderError;
+      const data = await res.json();
 
-      if (orderData) {
-        const orderItemsPayload = checkoutItems.map((item: any) => {
-          const itemPrice = Number(item.price || item.rawPrice || 0);
-          const itemQty = parseInt(String(item.qty || 1), 10);
-          return {
-            order_id: orderData.id,
-            product_id: item.id ? Number(item.id) : null,
-            nama_produk: item.title,
-            harga: itemPrice,
-            qty: itemQty,
-            warna: item.color || null,
-            ukuran: item.size || null,
-            gambar: item.image || null,
-            subtotal: itemPrice * itemQty,
-          };
-        });
-
-        const { error: itemsError } = await supabase
-          .from("order_items")
-          .insert(orderItemsPayload);
-        if (itemsError) throw itemsError;
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal membuat pesanan.");
       }
 
       if (typeof hapusItemDaftar === "function") {
@@ -880,8 +831,9 @@ export default function CheckoutPage() {
         kosongkanKeranjang();
       }
 
-      setFinalAmount(calculatedTotal);
-      setCreatedInvoiceNo(inv);
+      // Gunakan nilai yang dihitung server (bukan client)
+      setFinalAmount(Number(data.total_harga));
+      setCreatedInvoiceNo(data.invoice_no);
       if (typeof window !== "undefined") {
         sessionStorage.removeItem("almaco_checkout_items");
       }

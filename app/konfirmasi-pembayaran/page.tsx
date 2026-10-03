@@ -185,7 +185,7 @@ function KonfirmasiContent() {
       setErrorMsg("Nomor Invoice / Order ID harus diisi.");
       return;
     }
-    if (!previewImage) {
+    if (!previewImage || !rawImageBlob) {
       setErrorMsg("Silakan unggah foto atau tangkapan layar bukti transfer.");
       return;
     }
@@ -194,93 +194,26 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      // 1. Temukan order berdasarkan invoice_no
-      let { data: existingOrder } = await supabase
-        .from("orders")
-        .select("id, invoice_no, total_harga, status")
-        .ilike("invoice_no", cleanInvoiceNo)
-        .maybeSingle();
+      // Upload + update order lewat API server-side (bypass RLS client)
+      const body = new FormData();
+      body.append("invoice_no", cleanInvoiceNo);
+      body.append("nama_pengirim", formData.senderName.trim());
+      body.append("bank_asal", formData.senderBank);
+      body.append(
+        "bukti",
+        new File([rawImageBlob], "bukti.jpg", { type: "image/jpeg" }),
+      );
 
-      if (!existingOrder && /^\d+$/.test(cleanInvoiceNo)) {
-        const fallbackRes = await supabase
-          .from("orders")
-          .select("id, invoice_no, total_harga, status")
-          .eq("id", Number(cleanInvoiceNo))
-          .maybeSingle();
-        if (fallbackRes.data) {
-          existingOrder = fallbackRes.data;
-        }
-      }
+      const res = await fetch("/api/konfirmasi-pembayaran", {
+        method: "POST",
+        body,
+      });
 
-      if (!existingOrder) {
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
         throw new Error(
-          `Pesanan dengan Invoice "${cleanInvoiceNo}" tidak ditemukan. Pastikan nomor invoice sudah sesuai.`,
-        );
-      }
-
-      // 2. Upload file bukti transfer ke Storage Supabase
-      let finalBuktiUrl = previewImage;
-
-      if (rawImageBlob) {
-        try {
-          const fileName = `bukti_${existingOrder.id}_${Date.now()}.jpg`;
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from("bukti-transfer")
-            .upload(fileName, rawImageBlob, {
-              contentType: "image/jpeg",
-              upsert: true,
-            });
-
-          if (!uploadErr && uploadData) {
-            const { data: publicUrlData } = supabase.storage
-              .from("bukti-transfer")
-              .getPublicUrl(fileName);
-
-            if (publicUrlData?.publicUrl) {
-              finalBuktiUrl = publicUrlData.publicUrl;
-            }
-          } else if (uploadErr) {
-            console.warn(
-              "Storage upload gagal, menggunakan format gambar inline:",
-              uploadErr.message,
-            );
-          }
-        } catch (uploadException) {
-          console.warn("Exception saat upload storage:", uploadException);
-        }
-      }
-
-      const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
-
-      // 3. Update tabel orders secara tuntas
-      const updatePayload: Record<string, any> = {
-        bukti_transfer_url: finalBuktiUrl,
-        nama_pengirim: formData.senderName.trim() || null,
-        bank_asal: formData.senderBank,
-        status: "Menunggu Verifikasi",
-        updated_at: new Date().toISOString(),
-      };
-
-      if (!isNaN(parsedAmount) && parsedAmount > 0) {
-        updatePayload.total_harga = parsedAmount;
-      }
-
-      const { data: updatedResult, error: updateError } = await supabase
-        .from("orders")
-        .update(updatePayload)
-        .eq("id", existingOrder.id)
-        .select();
-
-      if (updateError) {
-        throw new Error(
-          updateError.message ||
-            "Gagal memperbarui status pesanan di database.",
-        );
-      }
-
-      if (!updatedResult || updatedResult.length === 0) {
-        throw new Error(
-          "Izin update ditolak oleh database (RLS). Harap jalankan script SQL izin update pada dashboard Supabase.",
+          data.error || "Gagal mengunggah konfirmasi pembayaran.",
         );
       }
 
