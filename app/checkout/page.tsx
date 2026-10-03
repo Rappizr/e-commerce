@@ -230,6 +230,8 @@ export default function CheckoutPage() {
   );
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchUserData = async () => {
       try {
         let user: any = null;
@@ -257,11 +259,11 @@ export default function CheckoutPage() {
         const resolvedEmail = user?.email || fallbackEmail;
 
         if (!resolvedUid && !resolvedEmail) {
-          setShowAuthModal(true);
+          if (isMounted) setShowAuthModal(true);
           return;
         }
 
-        if (resolvedUid) setCurrentUserId(resolvedUid);
+        if (resolvedUid && isMounted) setCurrentUserId(resolvedUid);
 
         let query = supabase.from("profiles").select("*");
         if (resolvedUid) {
@@ -271,6 +273,8 @@ export default function CheckoutPage() {
         }
 
         const { data: profile } = await query.maybeSingle();
+
+        if (!isMounted) return;
 
         let selectedAddr: any = null;
         if (
@@ -351,6 +355,10 @@ export default function CheckoutPage() {
     };
 
     fetchUserData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [lookupCityId]);
 
   useEffect(() => {
@@ -730,8 +738,8 @@ export default function CheckoutPage() {
           data = { results: [] };
         }
         setCityResults(data.results || []);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        if (err.name !== "AbortError") console.error(err);
       } finally {
         setIsSearchingCity(false);
       }
@@ -819,7 +827,6 @@ export default function CheckoutPage() {
     try {
       const inv = await generateInvoiceNumber();
 
-      // HAPUS kolom `total` yang duplikat/sisa lama agar tidak membingungkan DB
       const { data: orderData, error: orderError } = await supabase
         .from("orders")
         .insert([

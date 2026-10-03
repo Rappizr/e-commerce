@@ -16,11 +16,12 @@ import {
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
 
+// Kompresi gambar agar ringan dan cepat diunggah
 const compressImage = (
   file: File,
-  maxDimension = 1000,
-  quality = 0.75,
-): Promise<string> => {
+  maxDimension = 900,
+  quality = 0.65,
+): Promise<{ dataUrl: string; blob: Blob }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -49,12 +50,22 @@ const compressImage = (
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
+          ctx.imageSmoothingQuality = "medium";
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-          resolve(compressedDataUrl);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve({ dataUrl, blob });
+              } else {
+                resolve({ dataUrl, blob: file });
+              }
+            },
+            "image/jpeg",
+            quality,
+          );
         } else {
-          resolve(event.target?.result as string);
+          resolve({ dataUrl: event.target?.result as string, blob: file });
         }
       };
       img.onerror = (error) => reject(error);
@@ -73,7 +84,6 @@ function KonfirmasiContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Helper formatting angka ke ribuan (misal: 419000 -> 419.000)
   const formatRupiah = (val: string | number) => {
     const rawNumber = String(val).replace(/[^0-9]/g, "");
     if (!rawNumber) return "";
@@ -83,10 +93,7 @@ function KonfirmasiContent() {
   const getDefaultDateTime = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(now.getTime() - offset)
-      .toISOString()
-      .slice(0, 16);
-    return localISOTime;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 16);
   };
 
   const [formData, setFormData] = useState({
@@ -98,6 +105,7 @@ function KonfirmasiContent() {
   });
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [rawImageBlob, setRawImageBlob] = useState<Blob | null>(null);
 
   const rekeningInfo = {
     bank: "BANK BCA",
@@ -113,26 +121,24 @@ function KonfirmasiContent() {
     const fetchOrderDetails = async () => {
       setIsLoadingOrder(true);
       try {
-        // PERBAIKAN: Hapus kolom 'total' dari select query, murni gunakan 'total_harga'
         let { data, error } = await supabase
           .from("orders")
           .select("nama_pembeli, total_harga, bank_asal")
           .ilike("invoice_no", cleanInvoice)
-          .single();
+          .maybeSingle();
 
         if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
           const fallbackRes = await supabase
             .from("orders")
             .select("nama_pembeli, total_harga, bank_asal")
             .eq("id", Number(cleanInvoice))
-            .single();
+            .maybeSingle();
           if (fallbackRes.data) {
             data = fallbackRes.data;
-            error = null;
           }
         }
 
-        if (!error && data) {
+        if (data) {
           const rawTotal = String(data.total_harga || "");
           setFormData((prev) => ({
             ...prev,
@@ -162,8 +168,9 @@ function KonfirmasiContent() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImage(file);
-        setPreviewImage(compressed);
+        const { dataUrl, blob } = await compressImage(file);
+        setPreviewImage(dataUrl);
+        setRawImageBlob(blob);
       } catch (err) {
         console.error("Gagal memproses gambar:", err);
       }
@@ -187,54 +194,99 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      // PERBAIKAN: Hapus kolom 'total' dari select query
-      let { data: existingOrder, error: checkError } = await supabase
+      // 1. Temukan order berdasarkan invoice_no
+      let { data: existingOrder } = await supabase
         .from("orders")
         .select("id, invoice_no, total_harga, status")
         .ilike("invoice_no", cleanInvoiceNo)
-        .single();
+        .maybeSingle();
 
-      if ((checkError || !existingOrder) && /^\d+$/.test(cleanInvoiceNo)) {
+      if (!existingOrder && /^\d+$/.test(cleanInvoiceNo)) {
         const fallbackRes = await supabase
           .from("orders")
           .select("id, invoice_no, total_harga, status")
           .eq("id", Number(cleanInvoiceNo))
-          .single();
+          .maybeSingle();
         if (fallbackRes.data) {
           existingOrder = fallbackRes.data;
-          checkError = null;
         }
       }
 
-      if (checkError || !existingOrder) {
+      if (!existingOrder) {
         throw new Error(
           `Pesanan dengan Invoice "${cleanInvoiceNo}" tidak ditemukan. Pastikan nomor invoice sudah sesuai.`,
         );
       }
 
+      // 2. Upload file bukti transfer ke Storage Supabase
+      let finalBuktiUrl = previewImage;
+
+      if (rawImageBlob) {
+        try {
+          const fileName = `bukti_${existingOrder.id}_${Date.now()}.jpg`;
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from("bukti-transfer")
+            .upload(fileName, rawImageBlob, {
+              contentType: "image/jpeg",
+              upsert: true,
+            });
+
+          if (!uploadErr && uploadData) {
+            const { data: publicUrlData } = supabase.storage
+              .from("bukti-transfer")
+              .getPublicUrl(fileName);
+
+            if (publicUrlData?.publicUrl) {
+              finalBuktiUrl = publicUrlData.publicUrl;
+            }
+          } else if (uploadErr) {
+            console.warn(
+              "Storage upload gagal, menggunakan format gambar inline:",
+              uploadErr.message,
+            );
+          }
+        } catch (uploadException) {
+          console.warn("Exception saat upload storage:", uploadException);
+        }
+      }
+
       const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
 
-      // PERBAIKAN: Gunakan bukti_transfer_url saja dan perbarui total_harga jika diisi
-      const updatePayload: any = {
-        bukti_transfer_url: previewImage,
+      // 3. Update tabel orders secara tuntas
+      const updatePayload: Record<string, any> = {
+        bukti_transfer_url: finalBuktiUrl,
         nama_pengirim: formData.senderName.trim() || null,
         bank_asal: formData.senderBank,
         status: "Menunggu Verifikasi",
+        updated_at: new Date().toISOString(),
       };
 
       if (!isNaN(parsedAmount) && parsedAmount > 0) {
         updatePayload.total_harga = parsedAmount;
       }
 
-      const { error: updateError } = await supabase
+      const { data: updatedResult, error: updateError } = await supabase
         .from("orders")
         .update(updatePayload)
-        .eq("id", existingOrder.id);
+        .eq("id", existingOrder.id)
+        .select();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        throw new Error(
+          updateError.message ||
+            "Gagal memperbarui status pesanan di database.",
+        );
+      }
+
+      if (!updatedResult || updatedResult.length === 0) {
+        throw new Error(
+          "Izin update ditolak oleh database (RLS). Harap jalankan script SQL izin update pada dashboard Supabase.",
+        );
+      }
 
       setShowSuccessModal(true);
     } catch (err: any) {
+      console.error("Submit konfirmasi error:", err);
       setErrorMsg(
         err.message ||
           "Terjadi kesalahan saat mengunggah konfirmasi pembayaran. Silakan coba lagi.",
@@ -327,7 +379,7 @@ function KonfirmasiContent() {
             <ul className="list-disc list-inside space-y-0.5 text-[10.5px] leading-relaxed">
               <li>Pastikan nomor invoice sesuai dengan pesanan Anda.</li>
               <li>Lampirkan foto/screenshot bukti transfer yang jelas.</li>
-              <li>Status berubah otomatis saat diverifikasi oleh admin.</li>
+              <li>Status pesanan otomatis beralih ke Menunggu Verifikasi.</li>
             </ul>
           </div>
         </div>
@@ -450,12 +502,11 @@ function KonfirmasiContent() {
 
               <div className="p-3 border-2 border-dashed border-neutral-300 hover:border-neutral-900 transition-colors bg-neutral-50 rounded-2xs text-center">
                 {previewImage ? (
-                  <div className="relative w-24 h-32 mx-auto mb-1.5 border border-neutral-200 bg-white rounded-2xs overflow-hidden">
-                    <Image
+                  <div className="relative w-28 h-36 mx-auto mb-1.5 border border-neutral-200 bg-white rounded-2xs overflow-hidden">
+                    <img
                       src={previewImage}
                       alt="Bukti Transfer"
-                      fill
-                      className="object-contain"
+                      className="w-full h-full object-contain p-2"
                     />
                   </div>
                 ) : (
@@ -537,17 +588,17 @@ function KonfirmasiContent() {
                 <strong className="text-neutral-900 font-mono">
                   {formData.orderId}
                 </strong>{" "}
-                telah tersimpan. Tim kami akan segera memverifikasi pesanan
-                Anda.
+                telah tersimpan. Status pesanan Anda kini beralih ke{" "}
+                <strong>Menunggu Verifikasi</strong>.
               </p>
             </div>
 
             <div className="pt-1">
               <Link
-                href="/"
+                href="/profile"
                 className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2.5 transition-colors block text-center shadow-xs rounded-2xs"
               >
-                Kembali ke Beranda
+                Lihat di Profil Saya
               </Link>
             </div>
           </div>
