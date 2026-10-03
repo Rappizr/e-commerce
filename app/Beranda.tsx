@@ -983,7 +983,7 @@ export default function Beranda() {
                           </span>
                           {!isHabis && (
                             <span className="text-[8px] sm:text-[9.5px] font-bold text-neutral-500 font-mono shrink-0">
-                              ({jumlahSeri} Seri Available)
+                              ({jumlahSeri} Seri Tersedia)
                             </span>
                           )}
                         </div>
