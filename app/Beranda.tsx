@@ -864,15 +864,13 @@ export default function Beranda() {
           {heroBanners.map((bannerSrc, index) => (
             <div
               key={index}
-              className="w-full shrink-0 relative aspect-[16/6] sm:aspect-[21/9]"
+              className="w-full shrink-0 relative flex items-center justify-center"
             >
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={bannerSrc}
                 alt={`Almaco Fashion Banner ${index + 1}`}
-                fill
-                priority={index === 0}
-                sizes="100vw"
-                className="object-cover"
+                className="w-full h-auto block select-none"
               />
             </div>
           ))}
