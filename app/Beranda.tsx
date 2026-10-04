@@ -162,7 +162,7 @@ export default function Beranda() {
   const totalCartCount =
     totalCount !== undefined
       ? totalCount
-      : cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
+      : cartItems.reduce((acc: number, item: any) => acc + 1, 0);
 
   const handleSmoothScroll = (
     e: React.MouseEvent<HTMLAnchorElement>,

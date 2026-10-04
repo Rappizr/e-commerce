@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Upload,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
+import { useAuth } from "../penyimpanan/authcontext";
 
 // Kompresi gambar agar ringan dan cepat diunggah
 const compressImage = (
@@ -113,6 +114,19 @@ function KonfirmasiContent() {
     atasNama: "TITIN PRAMUDYA WATI",
   };
 
+  const router = useRouter();
+      const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
+      useEffect(() => {
+          if (isAuthLoading) return;
+          if (!isLoggedIn) {
+              const redirectPath = invoiceParam.trim()
+                  ? `/rincian-pemesanan?invoice=${encodeURIComponent(invoiceParam.trim())}`
+                  : "/rincian-pemesanan";
+              router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
+          }
+      }, [isAuthLoading, isLoggedIn, invoiceParam, router]);
+  
+
   useEffect(() => {
     if (!invoiceParam) return;
 
@@ -147,6 +161,10 @@ function KonfirmasiContent() {
             amount: formatRupiah(rawTotal),
             senderBank: data.bank_asal || "BCA",
           }));
+        } else {
+          //redirect to profile page if order not found
+          // window.location.href = "/profile";
+          setErrorMsg(`Pesanan dengan nomor invoice "${cleanInvoice}" tidak ditemukan. Silakan periksa kembali nomor invoice Anda atau hubungi layanan pelanggan kami.`);
         }
       } catch (err) {
         console.error("Fetch order detail error:", err);
@@ -397,6 +415,7 @@ function KonfirmasiContent() {
                   Jumlah Transfer (Rp) <span className="text-red-500">*</span>
                 </label>
                 <input
+                  disabled
                   type="text"
                   required
                   placeholder="Contoh: 130.000"

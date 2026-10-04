@@ -71,7 +71,10 @@ export default function TabPesanan({
             const isMenunggu = ord.status === "Menunggu Pembayaran";
             const isBatal =
               ord.status === "Dibatalkan" || ord.status === "Ditolak";
-            const targetInvoiceUrl = `/konfirmasi-pembayaran?invoice=${ord.invoice_no}`;
+            // Belum bayar → konfirmasi pembayaran; sudah upload bukti → rincian pesanan
+            const targetInvoiceUrl = isMenunggu
+              ? `/konfirmasi-pembayaran?invoice=${ord.invoice_no}`
+              : `/rincian-pemesanan?invoice=${ord.invoice_no}`;
 
             return (
               <Link
@@ -82,7 +85,11 @@ export default function TabPesanan({
                     ? "bg-amber-50/50 hover:bg-amber-50/80 border-l-4 border-l-amber-500"
                     : "bg-white hover:bg-neutral-50"
                 }`}
-                title="Klik untuk melihat konfirmasi pembayaran"
+                title={
+                  isMenunggu
+                    ? "Klik untuk konfirmasi pembayaran"
+                    : "Klik untuk melihat rincian pesanan & bukti"
+                }
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">

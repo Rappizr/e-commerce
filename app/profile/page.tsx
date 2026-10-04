@@ -78,7 +78,7 @@ export default function ProfilePage() {
 
   const [activeSubTab, setActiveSubTab] = useState<
     "biodata" | "pesanan" | "alamat" | "keamanan"
-  >("biodata");
+  >("pesanan");
 
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [toastMessage, setToastMessage] = useState(
@@ -261,9 +261,14 @@ export default function ProfilePage() {
           await loadUserData({ email: storedEmail });
           return;
         }
-
+        if (isMounted) {
+          router.replace("/auth?redirect=/profile");
+        }
         if (isMounted) setIsLoading(false);
       } catch (e) {
+        if (isMounted) {
+          router.replace("/auth?redirect=/profile");
+        }
         if (isMounted) setIsLoading(false);
       }
     };
@@ -714,18 +719,6 @@ export default function ProfilePage() {
         <div className="bg-white border border-neutral-200 shadow-xs rounded-xs overflow-hidden">
           <div className="flex border-b border-neutral-200 bg-neutral-50/70 overflow-x-auto">
             <button
-              onClick={() => setActiveSubTab("biodata")}
-              className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                activeSubTab === "biodata"
-                  ? "border-neutral-950 bg-white text-neutral-950"
-                  : "border-transparent text-neutral-500 hover:text-neutral-900"
-              }`}
-            >
-              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Biodata Diri</span>
-            </button>
-
-            <button
               onClick={() => setActiveSubTab("pesanan")}
               className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer relative ${
                 activeSubTab === "pesanan"
@@ -741,6 +734,19 @@ export default function ProfilePage() {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveSubTab("biodata")}
+              className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                activeSubTab === "biodata"
+                  ? "border-neutral-950 bg-white text-neutral-950"
+                  : "border-transparent text-neutral-500 hover:text-neutral-900"
+              }`}
+            >
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Biodata Diri</span>
+            </button>
+
 
             <button
               onClick={() => setActiveSubTab("alamat")}
