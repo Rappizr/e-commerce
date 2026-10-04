@@ -421,7 +421,6 @@ function RincianContent() {
               </div>
             </div>
 
-            {/* KOLOM KANAN: Barang + Total + Bukti */}
             <div className="lg:col-span-7 space-y-4">
               {/* Barang */}
               <div className="bg-white border border-neutral-200 p-4 sm:p-5 shadow-2xs rounded-xs">
