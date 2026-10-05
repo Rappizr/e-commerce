@@ -23,7 +23,7 @@ import ProdukComponent from "./component/produk";
 import TestimoniComponent from "./component/testimoni";
 import VerifikasiBayarComponent from "./component/verifikasi-bayar";
 import KeuanganComponent from "./component/keuangan";
-import AdminLoginPage from "./login/page";
+import AdminLoginForm from "./login/AdminLoginForm";
 import { supabase } from "../penyimpanan/supabase";
 
 type MenuType =
@@ -164,7 +164,7 @@ export default function AdminMainPage() {
 
   // 2. Jika bukan admin terverifikasi, kunci di halaman login
   if (!isAuthenticated) {
-    return <AdminLoginPage onLoginSuccess={checkStrictAuth} />;
+    return <AdminLoginForm onLoginSuccess={checkStrictAuth} />;
   }
 
   // Helper untuk merender tombol menu sidebar
