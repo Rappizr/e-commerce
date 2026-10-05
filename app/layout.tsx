@@ -27,6 +27,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://almacofashion.com"),
+  alternates: {
+    canonical: "/",
+  },
   title: {
     default: "ALMACO FASHION | E-Commerce Premium",
     template: "%s | ALMACO FASHION",
@@ -40,10 +44,26 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ALMACO FASHION | E-Commerce Premium",
     description:
-      "Grosir & Eceran Busana Muslimah Premium langsung dari Konveksi.",
-    images: ["/logo.png"],
+      "Grosir & Eceran Busana Muslimah Premium langsung dari Konveksi. Sentuhan rancangan arsitektural untuk kepribadian modern.",
+    url: "https://almacofashion.com",
+    siteName: "ALMACO FASHION",
+    images: [
+      {
+        url: "/logo.png",
+        width: 800,
+        height: 800,
+        alt: "Logo ALMACO FASHION",
+      },
+    ],
     locale: "id_ID",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ALMACO FASHION | E-Commerce Premium",
+    description:
+      "Grosir & Eceran Busana Muslimah Premium langsung dari Konveksi.",
+    images: ["/logo.png"],
   },
 };
 
