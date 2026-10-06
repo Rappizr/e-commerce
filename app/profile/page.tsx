@@ -30,6 +30,7 @@ import ModalAddressForm, {
 } from "./components/ModalAddressForm";
 import ModalDeleteAddress from "./components/ModalDeleteAddress";
 import ModalLogout from "./components/ModalLogout";
+import { useAuth } from "../penyimpanan/authcontext";
 
 function formatCityDisplay(
   cityName: string,
@@ -158,6 +159,14 @@ export default function ProfilePage() {
     }
   };
 
+  const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
+  useEffect(() => {
+            if (isAuthLoading) return;
+            if (!isLoggedIn) {
+                const redirectPath = "/profile";
+                router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
+            }
+        }, [isAuthLoading, isLoggedIn, router]);
   const loadUserData = async (currentUser: any) => {
     try {
       let query = supabase.from("profiles").select("*");
@@ -538,16 +547,54 @@ export default function ProfilePage() {
     triggerToast("Alamat berhasil dihapus!", "danger");
   };
 
-  const handleChangePassword = async (e: React.FormEvent, newPass: string) => {
+  const handleChangePassword = async (
+    e: React.FormEvent,
+    newPass: string,
+    _confirmPass: string,
+  ) => {
     setIsSaving(true);
     try {
+      // Cek dulu apakah session masih valid
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error(
+          "Sesi Anda sudah tidak valid. Silakan logout lalu login ulang.",
+        );
+      }
+
+      // Refresh session biar tokennya fresh
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        throw new Error(
+          "Sesi kedaluwarsa. Silakan logout lalu login ulang.",
+        );
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPass,
       });
+
       if (error) throw error;
-      triggerToast("KATA SANDI BERHASIL DIPERBARUI!", "success");
+
+      // Sukses: biarkan TabKeamanan tampilkan pesan di atas form
+      // (tidak throw = success)
     } catch (err: any) {
-      alert(err.message || "Gagal mengubah kata sandi.");
+      const msg = err?.message || "Gagal mengubah kata sandi.";
+
+      if (
+        msg.includes("session_not_found") ||
+        msg.includes("Sesi") ||
+        msg.includes("session")
+      ) {
+        throw new Error(
+          "Sesi tidak valid. Silakan logout dan login ulang.",
+        );
+      }
+      throw new Error(msg);
     } finally {
       setIsSaving(false);
     }
