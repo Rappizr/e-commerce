@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Upload,
@@ -15,12 +15,14 @@ import {
 } from "lucide-react";
 import Footer from "../Footer";
 import { supabase } from "../penyimpanan/supabase";
+import { useAuth } from "../penyimpanan/authcontext";
 
+// Kompresi gambar agar ringan dan cepat diunggah
 const compressImage = (
   file: File,
-  maxDimension = 1000,
-  quality = 0.75,
-): Promise<string> => {
+  maxDimension = 900,
+  quality = 0.65,
+): Promise<{ dataUrl: string; blob: Blob }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -49,12 +51,22 @@ const compressImage = (
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = "high";
+          ctx.imageSmoothingQuality = "medium";
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-          resolve(compressedDataUrl);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve({ dataUrl, blob });
+              } else {
+                resolve({ dataUrl, blob: file });
+              }
+            },
+            "image/jpeg",
+            quality,
+          );
         } else {
-          resolve(event.target?.result as string);
+          resolve({ dataUrl: event.target?.result as string, blob: file });
         }
       };
       img.onerror = (error) => reject(error);
@@ -73,7 +85,6 @@ function KonfirmasiContent() {
   const [errorMsg, setErrorMsg] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Helper formatting angka ke ribuan (misal: 419000 -> 419.000)
   const formatRupiah = (val: string | number) => {
     const rawNumber = String(val).replace(/[^0-9]/g, "");
     if (!rawNumber) return "";
@@ -83,10 +94,7 @@ function KonfirmasiContent() {
   const getDefaultDateTime = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(now.getTime() - offset)
-      .toISOString()
-      .slice(0, 16);
-    return localISOTime;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 16);
   };
 
   const [formData, setFormData] = useState({
@@ -98,12 +106,26 @@ function KonfirmasiContent() {
   });
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [rawImageBlob, setRawImageBlob] = useState<Blob | null>(null);
 
   const rekeningInfo = {
     bank: "BANK BCA",
     noRek: "0481980827",
     atasNama: "TITIN PRAMUDYA WATI",
   };
+
+  const router = useRouter();
+      const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
+      useEffect(() => {
+          if (isAuthLoading) return;
+          if (!isLoggedIn) {
+              const redirectPath = invoiceParam.trim()
+                  ? `/rincian-pemesanan?invoice=${encodeURIComponent(invoiceParam.trim())}`
+                  : "/rincian-pemesanan";
+              router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
+          }
+      }, [isAuthLoading, isLoggedIn, invoiceParam, router]);
+  
 
   useEffect(() => {
     if (!invoiceParam) return;
@@ -115,24 +137,28 @@ function KonfirmasiContent() {
       try {
         let { data, error } = await supabase
           .from("orders")
-          .select("nama_pembeli, total, total_harga, bank_asal")
+          .select("nama_pembeli, total_harga, bank_asal")
           .ilike("invoice_no", cleanInvoice)
-          .single();
+          .maybeSingle();
 
         if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
           const fallbackRes = await supabase
             .from("orders")
-            .select("nama_pembeli, total, total_harga, bank_asal")
+            .select("nama_pembeli, total_harga, bank_asal")
             .eq("id", Number(cleanInvoice))
-            .single();
+            .maybeSingle();
           if (fallbackRes.data) {
             data = fallbackRes.data;
-            error = null;
           }
         }
 
+<<<<<<< HEAD
         if (!error && data) {
           const rawTotal = String(data.total_harga || 0);
+=======
+        if (data) {
+          const rawTotal = String(data.total_harga || "");
+>>>>>>> dev
           setFormData((prev) => ({
             ...prev,
             orderId: cleanInvoice.toUpperCase(),
@@ -140,6 +166,10 @@ function KonfirmasiContent() {
             amount: formatRupiah(rawTotal),
             senderBank: data.bank_asal || "BCA",
           }));
+        } else {
+          //redirect to profile page if order not found
+          // window.location.href = "/profile";
+          setErrorMsg(`Pesanan dengan nomor invoice "${cleanInvoice}" tidak ditemukan. Silakan periksa kembali nomor invoice Anda atau hubungi layanan pelanggan kami.`);
         }
       } catch (err) {
         console.error("Fetch order detail error:", err);
@@ -161,8 +191,9 @@ function KonfirmasiContent() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressImage(file);
-        setPreviewImage(compressed);
+        const { dataUrl, blob } = await compressImage(file);
+        setPreviewImage(dataUrl);
+        setRawImageBlob(blob);
       } catch (err) {
         console.error("Gagal memproses gambar:", err);
       }
@@ -177,7 +208,7 @@ function KonfirmasiContent() {
       setErrorMsg("Nomor Invoice / Order ID harus diisi.");
       return;
     }
-    if (!previewImage) {
+    if (!previewImage || !rawImageBlob) {
       setErrorMsg("Silakan unggah foto atau tangkapan layar bukti transfer.");
       return;
     }
@@ -186,55 +217,32 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      let { data: existingOrder, error: checkError } = await supabase
-        .from("orders")
-        .select("id, invoice_no, total, total_harga, status")
-        .ilike("invoice_no", cleanInvoiceNo)
-        .single();
+      // Upload + update order lewat API server-side (bypass RLS client)
+      const body = new FormData();
+      body.append("invoice_no", cleanInvoiceNo);
+      body.append("nama_pengirim", formData.senderName.trim());
+      body.append("bank_asal", formData.senderBank);
+      body.append(
+        "bukti",
+        new File([rawImageBlob], "bukti.jpg", { type: "image/jpeg" }),
+      );
 
-      if ((checkError || !existingOrder) && /^\d+$/.test(cleanInvoiceNo)) {
-        const fallbackRes = await supabase
-          .from("orders")
-          .select("id, invoice_no, total, total_harga, status")
-          .eq("id", Number(cleanInvoiceNo))
-          .single();
-        if (fallbackRes.data) {
-          existingOrder = fallbackRes.data;
-          checkError = null;
-        }
-      }
+      const res = await fetch("/api/konfirmasi-pembayaran", {
+        method: "POST",
+        body,
+      });
 
-      if (checkError || !existingOrder) {
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
         throw new Error(
-          `Pesanan dengan Invoice "${cleanInvoiceNo}" tidak ditemukan. Pastikan nomor invoice sudah sesuai.`,
+          data.error || "Gagal mengunggah konfirmasi pembayaran.",
         );
       }
 
-      const parsedAmount = Number(formData.amount.replace(/[^0-9]/g, ""));
-
-      // Payload murni disesuaikan dengan skema tabel orders Supabase Anda
-      const updatePayload: any = {
-        bukti_transfer_url: previewImage,
-        bukti_transfer: previewImage,
-        nama_pengirim: formData.senderName.trim() || null,
-        bank_asal: formData.senderBank,
-        status: "Menunggu Verifikasi",
-      };
-
-      if (!isNaN(parsedAmount) && parsedAmount > 0) {
-        updatePayload.total = parsedAmount;
-        updatePayload.total_harga = parsedAmount;
-      }
-
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update(updatePayload)
-        .eq("id", existingOrder.id);
-
-      if (updateError) throw updateError;
-
       setShowSuccessModal(true);
     } catch (err: any) {
+      console.error("Submit konfirmasi error:", err);
       setErrorMsg(
         err.message ||
           "Terjadi kesalahan saat mengunggah konfirmasi pembayaran. Silakan coba lagi.",
@@ -327,7 +335,7 @@ function KonfirmasiContent() {
             <ul className="list-disc list-inside space-y-0.5 text-[10.5px] leading-relaxed">
               <li>Pastikan nomor invoice sesuai dengan pesanan Anda.</li>
               <li>Lampirkan foto/screenshot bukti transfer yang jelas.</li>
-              <li>Status berubah otomatis saat diverifikasi oleh admin.</li>
+              <li>Status pesanan otomatis beralih ke Menunggu Verifikasi.</li>
             </ul>
           </div>
         </div>
@@ -451,12 +459,11 @@ function KonfirmasiContent() {
 
               <div className="p-3 border-2 border-dashed border-neutral-300 hover:border-neutral-900 transition-colors bg-neutral-50 rounded-2xs text-center">
                 {previewImage ? (
-                  <div className="relative w-24 h-32 mx-auto mb-1.5 border border-neutral-200 bg-white rounded-2xs overflow-hidden">
-                    <Image
+                  <div className="relative w-28 h-36 mx-auto mb-1.5 border border-neutral-200 bg-white rounded-2xs overflow-hidden">
+                    <img
                       src={previewImage}
                       alt="Bukti Transfer"
-                      fill
-                      className="object-contain"
+                      className="w-full h-full object-contain p-2"
                     />
                   </div>
                 ) : (
@@ -538,17 +545,17 @@ function KonfirmasiContent() {
                 <strong className="text-neutral-900 font-mono">
                   {formData.orderId}
                 </strong>{" "}
-                telah tersimpan. Tim kami akan segera memverifikasi pesanan
-                Anda.
+                telah tersimpan. Status pesanan Anda kini beralih ke{" "}
+                <strong>Menunggu Verifikasi</strong>.
               </p>
             </div>
 
             <div className="pt-1">
               <Link
-                href="/"
+                href="/profile"
                 className="w-full bg-neutral-950 hover:bg-black text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider py-2.5 transition-colors block text-center shadow-xs rounded-2xs"
               >
-                Kembali ke Beranda
+                Lihat di Profil Saya
               </Link>
             </div>
           </div>

@@ -208,10 +208,7 @@ export default function OrderDesktopTable({
                     </td>
 
                     <td className="p-3.5 whitespace-nowrap align-top font-bold font-mono text-amber-950">
-                      Rp{" "}
-                      {Number(
-                        item.total || item.total_harga || 0,
-                      ).toLocaleString("id-ID")}
+                      Rp {Number(item.total_harga || 0).toLocaleString("id-ID")}
                     </td>
 
                     <td className="p-3.5 whitespace-nowrap align-top">

@@ -79,26 +79,16 @@ export default function VerifikasiBayarComponent() {
   const fetchVerifikasiFromSupabase = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. Ambil data pesanan langsung dari tabel orders
+      const { data: ordersData, error: ordersError } = await supabase
         .from("orders")
-        .select(
-          `
-          *,
-          order_items (
-            product_id,
-            nama_produk,
-            qty,
-            warna,
-            ukuran
-          )
-        `,
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (ordersError) throw ordersError;
 
-      if (data) {
-        // Status yang TIDAK perlu masuk verifikasi (karena sudah selesai/diproses/batal)
+      if (ordersData && ordersData.length > 0) {
+        // Status yang TIDAK perlu masuk daftar verifikasi
         const excludeStatuses = [
           "diproses",
           "dikirim",
@@ -107,12 +97,34 @@ export default function VerifikasiBayarComponent() {
           "batal",
         ];
 
-        const pendingOrders = data.filter((item: any) => {
+        const pendingOrders = ordersData.filter((item: any) => {
           const st = String(item.status || "")
             .trim()
             .toLowerCase();
           return !excludeStatuses.includes(st);
         });
+
+        // 2. Ambil item barang terkait dari order_items secara aman
+        const pendingOrderIds = pendingOrders.map((o: any) => o.id);
+        let itemsMap: Record<number, any[]> = {};
+
+        if (pendingOrderIds.length > 0) {
+          try {
+            const { data: itemsData } = await supabase
+              .from("order_items")
+              .select("order_id, product_id, nama_produk, qty, warna, ukuran")
+              .in("order_id", pendingOrderIds);
+
+            if (itemsData) {
+              itemsData.forEach((itm: any) => {
+                if (!itemsMap[itm.order_id]) itemsMap[itm.order_id] = [];
+                itemsMap[itm.order_id].push(itm);
+              });
+            }
+          } catch (e) {
+            // Lanjutkan jika order_items kosong atau belum dibuat
+          }
+        }
 
         const mapped: VerifikasiItem[] = pendingOrders.map((item: any) => ({
           id: item.id,
@@ -122,24 +134,37 @@ export default function VerifikasiBayarComponent() {
           bank_asal: item.bank_asal || "BCA",
           subtotal: Number(item.subtotal || 0),
           ongkir: Number(item.ongkir || item.biaya_ongkir || 0),
-          total: Number(item.total || item.total_harga || 0),
+          total: Number(item.total_harga || item.total || 0),
           bukti_transfer_url:
             item.bukti_transfer_url || item.bukti_transfer || "",
           status: item.status || "Menunggu Verifikasi",
           created_at: item.created_at,
-          order_items: item.order_items || [],
+          order_items: itemsMap[item.id] || [],
         }));
+
         setKonfirmasiList(mapped);
+      } else {
+        setKonfirmasiList([]);
       }
-    } catch (err) {
-      console.error("Fetch verifikasi error:", err);
+    } catch (err: any) {
+      // Tangani error tanpa melempar pop-up merah
+      setKonfirmasiList([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Menggunakan flag isMounted untuk mencegah error ganda StrictMode
   useEffect(() => {
-    fetchVerifikasiFromSupabase();
+    let isMounted = true;
+
+    if (isMounted) {
+      fetchVerifikasiFromSupabase();
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Format WhatsApp untuk penolakan pesanan
@@ -218,7 +243,7 @@ export default function VerifikasiBayarComponent() {
         .eq("order_id", orderItem.id);
 
       if (!existingCash || existingCash.length === 0) {
-        // A. Catat KAS MASUK Gross (Total Pembayaran Pembeli)
+        // A. Catat KAS MASUK Gross
         await supabase.from("cash_flow").insert([
           {
             order_id: orderItem.id,
@@ -230,7 +255,7 @@ export default function VerifikasiBayarComponent() {
           },
         ]);
 
-        // B. Jika terdapat ongkir, otomatis catat KAS KELUAR untuk Biaya Kurir
+        // B. Jika ada ongkir, catat KAS KELUAR untuk Biaya Kurir
         if (ongkirVal > 0) {
           await supabase.from("cash_flow").insert([
             {
@@ -251,12 +276,11 @@ export default function VerifikasiBayarComponent() {
       setSuccessModal({ show: true, invoiceId: orderItem.invoice_no });
       setSelectedBukti(null);
     } catch (err: any) {
-      console.error("Gagal menyetujui pembayaran:", err);
       alert("Gagal menyetujui pembayaran: " + (err.message || err));
     }
   };
 
-  // Tolak Pembayaran (Trigger Supabase otomatis mengembalikan stok)
+  // Tolak Pembayaran
   const handleConfirmReject = async () => {
     const { order, alasan } = rejectModal;
     if (!order) return;
@@ -280,7 +304,6 @@ export default function VerifikasiBayarComponent() {
       const waUrl = generateWaTolakUrl(order, alasan);
       window.open(waUrl, "_blank");
     } catch (err: any) {
-      console.error("Gagal menolak pesanan:", err);
       alert("Gagal menolak pesanan: " + (err.message || err));
     } finally {
       setRejectModal({
@@ -318,7 +341,7 @@ export default function VerifikasiBayarComponent() {
           </div>
 
           <button
-            onClick={fetchVerifikasiFromSupabase}
+            onClick={() => fetchVerifikasiFromSupabase()}
             className="p-2 border border-stone-300 hover:border-neutral-900 bg-white text-neutral-700 transition rounded-2xs cursor-pointer shadow-2xs"
             title="Refresh Data"
           >

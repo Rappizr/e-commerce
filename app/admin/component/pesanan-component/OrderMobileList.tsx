@@ -184,10 +184,7 @@ export default function OrderMobileList({
                     Total Tagihan:
                   </span>
                   <span className="font-bold text-amber-950 font-mono text-xs sm:text-sm">
-                    Rp{" "}
-                    {Number(item.total || item.total_harga || 0).toLocaleString(
-                      "id-ID",
-                    )}
+                    Rp {Number(item.total_harga || 0).toLocaleString("id-ID")}
                   </span>
                 </div>
               </div>

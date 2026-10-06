@@ -1,0 +1,29 @@
+# https://almacofashion.com/robots.txt
+User-agent: *
+Allow: /
+Allow: /tentang-kami
+Allow: /faq
+Allow: /kebijakan-privasi
+Allow: /kebijakan-garansi
+Allow: /syarat-ketentuan
+Allow: /product-detail
+
+# Private / auth / cart / admin pages — do not index
+Disallow: /auth
+Disallow: /auth/
+Disallow: /profile
+Disallow: /profile/
+Disallow: /keranjang
+Disallow: /keranjang/
+Disallow: /checkout
+Disallow: /checkout/
+Disallow: /konfirmasi-pembayaran
+Disallow: /konfirmasi-pembayaran/
+Disallow: /rincian-pemesanan
+Disallow: /rincian-pemesanan/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://almacofashion.com/sitemap.xml

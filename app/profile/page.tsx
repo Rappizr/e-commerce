@@ -30,6 +30,7 @@ import ModalAddressForm, {
 } from "./components/ModalAddressForm";
 import ModalDeleteAddress from "./components/ModalDeleteAddress";
 import ModalLogout from "./components/ModalLogout";
+import { useAuth } from "../penyimpanan/authcontext";
 
 function formatCityDisplay(
   cityName: string,
@@ -78,7 +79,7 @@ export default function ProfilePage() {
 
   const [activeSubTab, setActiveSubTab] = useState<
     "biodata" | "pesanan" | "alamat" | "keamanan"
-  >("biodata");
+  >("pesanan");
 
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [toastMessage, setToastMessage] = useState(
@@ -141,9 +142,10 @@ export default function ProfilePage() {
   const fetchOrders = async (uid: string) => {
     setIsLoadingOrders(true);
     try {
+      // PERBAIKAN: Hapus 'total' dari select query, gunakan 'total_harga'
       const { data, error } = await supabase
         .from("orders")
-        .select("id, invoice_no, status, total, total_harga, kurir, created_at")
+        .select("id, invoice_no, status, total_harga, kurir, created_at")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
 
@@ -157,6 +159,14 @@ export default function ProfilePage() {
     }
   };
 
+  const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
+  useEffect(() => {
+            if (isAuthLoading) return;
+            if (!isLoggedIn) {
+                const redirectPath = "/profile";
+                router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
+            }
+        }, [isAuthLoading, isLoggedIn, router]);
   const loadUserData = async (currentUser: any) => {
     try {
       let query = supabase.from("profiles").select("*");
@@ -260,9 +270,14 @@ export default function ProfilePage() {
           await loadUserData({ email: storedEmail });
           return;
         }
-
+        if (isMounted) {
+          router.replace("/auth?redirect=/profile");
+        }
         if (isMounted) setIsLoading(false);
       } catch (e) {
+        if (isMounted) {
+          router.replace("/auth?redirect=/profile");
+        }
         if (isMounted) setIsLoading(false);
       }
     };
@@ -532,16 +547,54 @@ export default function ProfilePage() {
     triggerToast("Alamat berhasil dihapus!", "danger");
   };
 
-  const handleChangePassword = async (e: React.FormEvent, newPass: string) => {
+  const handleChangePassword = async (
+    e: React.FormEvent,
+    newPass: string,
+    _confirmPass: string,
+  ) => {
     setIsSaving(true);
     try {
+      // Cek dulu apakah session masih valid
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error(
+          "Sesi Anda sudah tidak valid. Silakan logout lalu login ulang.",
+        );
+      }
+
+      // Refresh session biar tokennya fresh
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        throw new Error(
+          "Sesi kedaluwarsa. Silakan logout lalu login ulang.",
+        );
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPass,
       });
+
       if (error) throw error;
-      triggerToast("KATA SANDI BERHASIL DIPERBARUI!", "success");
+
+      // Sukses: biarkan TabKeamanan tampilkan pesan di atas form
+      // (tidak throw = success)
     } catch (err: any) {
-      alert(err.message || "Gagal mengubah kata sandi.");
+      const msg = err?.message || "Gagal mengubah kata sandi.";
+
+      if (
+        msg.includes("session_not_found") ||
+        msg.includes("Sesi") ||
+        msg.includes("session")
+      ) {
+        throw new Error(
+          "Sesi tidak valid. Silakan logout dan login ulang.",
+        );
+      }
+      throw new Error(msg);
     } finally {
       setIsSaving(false);
     }
@@ -683,12 +736,7 @@ export default function ProfilePage() {
                   </strong>{" "}
                   sebesar{" "}
                   <strong className="font-mono text-amber-950 font-black">
-                    Rp{" "}
-                    {(
-                      firstUnpaid.total ||
-                      firstUnpaid.total_harga ||
-                      0
-                    ).toLocaleString("id-ID")}
+                    Rp {(firstUnpaid.total_harga || 0).toLocaleString("id-ID")}
                   </strong>{" "}
                   belum diselesaikan. Silakan konfirmasi bukti transfer agar
                   pesanan diproses.
@@ -718,18 +766,6 @@ export default function ProfilePage() {
         <div className="bg-white border border-neutral-200 shadow-xs rounded-xs overflow-hidden">
           <div className="flex border-b border-neutral-200 bg-neutral-50/70 overflow-x-auto">
             <button
-              onClick={() => setActiveSubTab("biodata")}
-              className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                activeSubTab === "biodata"
-                  ? "border-neutral-950 bg-white text-neutral-950"
-                  : "border-transparent text-neutral-500 hover:text-neutral-900"
-              }`}
-            >
-              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Biodata Diri</span>
-            </button>
-
-            <button
               onClick={() => setActiveSubTab("pesanan")}
               className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer relative ${
                 activeSubTab === "pesanan"
@@ -745,6 +781,19 @@ export default function ProfilePage() {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveSubTab("biodata")}
+              className={`px-4 sm:px-6 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all border-b-2 whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                activeSubTab === "biodata"
+                  ? "border-neutral-950 bg-white text-neutral-950"
+                  : "border-transparent text-neutral-500 hover:text-neutral-900"
+              }`}
+            >
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Biodata Diri</span>
+            </button>
+
 
             <button
               onClick={() => setActiveSubTab("alamat")}

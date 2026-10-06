@@ -8,8 +8,7 @@ export interface OrderItem {
   id: number;
   invoice_no: string;
   status: string;
-  total: number;
-  total_harga?: number;
+  total_harga: number; // ← Menggunakan total_harga sebagai patokan resmi
   kurir: string;
   created_at: string;
 }
@@ -67,11 +66,18 @@ export default function TabPesanan({
       ) : (
         <div className="divide-y divide-neutral-100 border border-neutral-200 rounded-2xs overflow-hidden">
           {orders.map((ord) => {
+<<<<<<< HEAD
+=======
+            // Selalu ambil total_harga murni
+>>>>>>> dev
             const tagihan = ord.total_harga || 0;
             const isMenunggu = ord.status === "Menunggu Pembayaran";
             const isBatal =
               ord.status === "Dibatalkan" || ord.status === "Ditolak";
-            const targetInvoiceUrl = `/konfirmasi-pembayaran?invoice=${ord.invoice_no}`;
+            // Belum bayar → konfirmasi pembayaran; sudah upload bukti → rincian pesanan
+            const targetInvoiceUrl = isMenunggu
+              ? `/konfirmasi-pembayaran?invoice=${ord.invoice_no}`
+              : `/rincian-pemesanan?invoice=${ord.invoice_no}`;
 
             return (
               <Link
@@ -82,7 +88,11 @@ export default function TabPesanan({
                     ? "bg-amber-50/50 hover:bg-amber-50/80 border-l-4 border-l-amber-500"
                     : "bg-white hover:bg-neutral-50"
                 }`}
-                title="Klik untuk melihat konfirmasi pembayaran"
+                title={
+                  isMenunggu
+                    ? "Klik untuk konfirmasi pembayaran"
+                    : "Klik untuk melihat rincian pesanan & bukti"
+                }
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">

@@ -81,9 +81,10 @@ export default function PembayaranComponent({
       setIsLoadingOrder(true);
       try {
         const cleanInvoice = invoiceId.trim();
+        // PERBAIKAN: Hapus kolom 'total' dari select query
         let { data, error } = await supabase
           .from("orders")
-          .select("id, invoice_no, total, total_harga, kurir, nama_pembeli")
+          .select("id, invoice_no, total_harga, kurir, nama_pembeli")
           .ilike("invoice_no", cleanInvoice)
           .maybeSingle();
 
@@ -91,7 +92,7 @@ export default function PembayaranComponent({
         if ((error || !data) && /^\d+$/.test(cleanInvoice)) {
           const fallbackRes = await supabase
             .from("orders")
-            .select("id, invoice_no, total, total_harga, kurir, nama_pembeli")
+            .select("id, invoice_no, total_harga, kurir, nama_pembeli")
             .eq("id", Number(cleanInvoice))
             .maybeSingle();
 
@@ -102,7 +103,8 @@ export default function PembayaranComponent({
         }
 
         if (!error && data) {
-          const nominalDb = Number(data.total || data.total_harga || 0);
+          // PERBAIKAN: Murni menggunakan total_harga
+          const nominalDb = Number(data.total_harga || 0);
           if (nominalDb > 0) {
             setLiveAmount(nominalDb);
           }

@@ -13,6 +13,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // HAPUS storageKey custom agar memakai default Supabase
   },
 });

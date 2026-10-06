@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -25,6 +25,8 @@ import {
   Eye,
   Loader2,
   Package,
+  AlertCircle,
+  RefreshCcw,
 } from "lucide-react";
 import { useKeranjang } from "./penyimpanan/KeranjangContext";
 import { useAuth } from "./penyimpanan/authcontext";
@@ -63,6 +65,10 @@ export default function Beranda() {
   const [categories, setCategories] = useState<string[]>(["Semua"]);
   const [testimoniList, setTestimoniList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetchError, setIsFetchError] = useState(false);
+
+  // Transition state untuk pencarian tanpa lag UI
+  const [, startTransition] = useTransition();
 
   // State sinkronisasi auth & anti-hydration mismatch
   const [hasMounted, setHasMounted] = useState<boolean>(false);
@@ -85,7 +91,7 @@ export default function Beranda() {
   } = (useKeranjang() as any) || {};
   const { isLoggedIn, user: authContextUser } = useAuth();
 
-  // Sinkronisasi Sesi Pengguna di Header
+  // 1. Sinkronisasi Sesi Pengguna
   useEffect(() => {
     let isMounted = true;
     setHasMounted(true);
@@ -95,7 +101,7 @@ export default function Beranda() {
       try {
         const { count, error } = await supabase
           .from("orders")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("user_id", uid)
           .eq("status", "Menunggu Pembayaran");
 
@@ -107,7 +113,6 @@ export default function Beranda() {
       }
     };
 
-    // 1. Cek sesi Supabase dan localStorage setelah mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
       if (session?.user) {
@@ -127,7 +132,6 @@ export default function Beranda() {
       }
     });
 
-    // 2. Pasang listener auth real-time
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -151,7 +155,6 @@ export default function Beranda() {
     };
   }, []);
 
-  // Status login aktif yang aman
   const isUserAuthenticated = Boolean(
     hasMounted && (isUserLoggedIn || isLoggedIn || Boolean(authContextUser)),
   );
@@ -159,7 +162,7 @@ export default function Beranda() {
   const totalCartCount =
     totalCount !== undefined
       ? totalCount
-      : cartItems.reduce((acc: number, item: any) => acc + (item.qty || 1), 0);
+      : cartItems.reduce((acc: number, item: any) => acc + 1, 0);
 
   const handleSmoothScroll = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -187,16 +190,17 @@ export default function Beranda() {
     }
   };
 
+  // 2. FETCH DATA SUPABASE AMAN TANPA CRASH TIMEOUT PROMISE.RACE
   const fetchDataFromSupabase = async () => {
+    setIsLoading(true);
+    setIsFetchError(false);
+
     try {
       const [prodRes, testRes] = await Promise.all([
         supabase
           .from("products")
           .select(
-            `
-            id, nama, kategori, harga, stok, berat, warna, ukuran, gambar_utama, is_grosir, min_grosir, harga_grosir,
-            product_variants ( id, warna, stok )
-          `,
+            "id, nama, kategori, harga, stok, berat, warna, ukuran, gambar_utama, is_grosir, min_grosir, harga_grosir",
           )
           .order("created_at", { ascending: false }),
         supabase
@@ -204,36 +208,38 @@ export default function Beranda() {
           .select("id, foto_url")
           .eq("tayang", true)
           .order("created_at", { ascending: false })
-          .limit(14),
+          .limit(10),
       ]);
 
-      if (!prodRes.error && prodRes.data) {
-        const mapped = prodRes.data.map((p: any) => {
-          const isGrosir = Boolean(p.is_grosir);
-          const minG = Number(p.min_grosir || 5);
+      if (prodRes.error) {
+        throw prodRes.error;
+      }
 
-          let realStock = Number(p.stok || 0);
-          if (
-            Array.isArray(p.product_variants) &&
-            p.product_variants.length > 0
-          ) {
-            if (isGrosir) {
-              realStock = Number(p.stok || 0);
-            } else {
-              const sumVariant = p.product_variants.reduce(
-                (acc: number, curr: any) => acc + Number(curr.stok || 0),
-                0,
-              );
-              if (sumVariant > 0 || realStock <= 0) {
-                realStock = sumVariant;
-              }
+      if (prodRes.data) {
+        const mapped = prodRes.data.map((p: any) => {
+          const isGrosir = p.is_grosir === true || p.is_grosir === "true";
+          const minG = Number(p.min_grosir || 5);
+          const realStock = Number(p.stok || 0);
+
+          let warnaArray: string[] = [];
+          if (Array.isArray(p.warna)) {
+            warnaArray = p.warna;
+          } else if (typeof p.warna === "string") {
+            try {
+              warnaArray = JSON.parse(p.warna);
+            } catch {
+              warnaArray = p.warna.split(",").map((s: string) => s.trim());
             }
+          }
+
+          if (warnaArray.length === 0) {
+            warnaArray = [isGrosir ? "Seri Mix (Campur Warna)" : "Default"];
           }
 
           return {
             id: Number(p.id),
-            nama: p.nama,
-            kategori: p.kategori,
+            nama: p.nama || "Tanpa Nama",
+            kategori: p.kategori || "Umum",
             harga: Number(p.harga || 0),
             stok: realStock,
             berat: Number(p.berat || 100),
@@ -245,32 +251,30 @@ export default function Beranda() {
             gambarUtama:
               p.gambar_utama ||
               "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?q=80&w=600&auto=format&fit=crop",
-            warna:
-              Array.isArray(p.warna) && p.warna.length > 0
-                ? p.warna
-                : [isGrosir ? "Seri Mix (Campur Warna)" : "Default"],
+            warna: warnaArray,
             ukuran:
               Array.isArray(p.ukuran) && p.ukuran.length > 0
                 ? p.ukuran[0]
-                : "All Size",
-            product_variants: p.product_variants || [],
+                : p.ukuran || "All Size",
           };
         });
+
         setProducts(mapped);
 
         const extractedCats = Array.from(
-          new Set(prodRes.data.map((p: any) => p.kategori)),
+          new Set(mapped.map((p: any) => p.kategori)),
         ).filter(Boolean);
         if (extractedCats.length > 0) {
           setCategories(["Semua", ...(extractedCats as string[])]);
         }
       }
 
-      if (!testRes.error && testRes.data) {
+      if (testRes && !testRes.error && testRes.data) {
         setTestimoniList(testRes.data);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Fetch Supabase Error:", e);
+      setIsFetchError(true);
     } finally {
       setIsLoading(false);
     }
@@ -328,7 +332,7 @@ export default function Beranda() {
 
       setQuickVariants(loadedVariants);
 
-      if (!isGrosir) {
+      if (!isGrosir && loadedVariants.length > 0) {
         const availableColor =
           item.warna.find((w: string) => {
             const match = loadedVariants.find(
@@ -355,7 +359,7 @@ export default function Beranda() {
     const match = quickVariants.find(
       (v) => v.warna.trim().toUpperCase() === target,
     );
-    return match ? Number(match.stok || 0) : 0;
+    return match ? Number(match.stok || 0) : activeQuickProduct?.stok || 0;
   };
 
   const isQuickProductGrosir = Boolean(activeQuickProduct?.is_grosir);
@@ -451,26 +455,51 @@ export default function Beranda() {
   const brandTicker = Array(8).fill("ALMACO FASHION");
   const deliveryTicker = Array(8).fill("TESTIMONI & BUKTI PENGIRIMAN");
 
-  const grosirProducts = products.filter((p) => p.is_grosir === true);
+  const grosirProducts = products
+    .filter((p) => p.is_grosir === true)
+    .sort((a, b) => {
+      const aIsHabis = Number(a.stok || 0) <= 0;
+      const bIsHabis = Number(b.stok || 0) <= 0;
+      if (aIsHabis && !bIsHabis) return 1;
+      if (!aIsHabis && bIsHabis) return -1;
+      return 0;
+    });
+
   const defaultGrosirLimit = 4;
   const displayedGrosir = showAllGrosir
     ? grosirProducts
     : grosirProducts.slice(0, defaultGrosirLimit);
 
+  const hasGrosirProducts = grosirProducts.length > 0;
+
   const filteredProducts = products
     .filter((p) => {
-      const matchGrosir = !p.is_grosir;
+      const isEceran = hasGrosirProducts ? !p.is_grosir : true;
+
       const matchCategory =
         selectedCategory === "Semua" ||
-        p.kategori?.toLowerCase() === selectedCategory.toLowerCase();
+        String(p.kategori || "").toLowerCase() ===
+          selectedCategory.toLowerCase();
+
       const query = searchQuery.trim().toLowerCase();
       const matchSearch =
         !query ||
-        p.nama?.toLowerCase().includes(query) ||
-        p.kategori?.toLowerCase().includes(query);
-      return matchGrosir && matchCategory && matchSearch;
+        String(p.nama || "")
+          .toLowerCase()
+          .includes(query) ||
+        String(p.kategori || "")
+          .toLowerCase()
+          .includes(query);
+
+      return isEceran && matchCategory && matchSearch;
     })
     .sort((a, b) => {
+      const aIsHabis = Number(a.stok || 0) <= 0;
+      const bIsHabis = Number(b.stok || 0) <= 0;
+
+      if (aIsHabis && !bIsHabis) return 1;
+      if (!aIsHabis && bIsHabis) return -1;
+
       if (sortOption === "price-low") return a.harga - b.harga;
       if (sortOption === "price-high") return b.harga - a.harga;
       if (sortOption === "newest") return b.id - a.id;
@@ -611,7 +640,10 @@ export default function Beranda() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                startTransition(() => setSearchQuery(val));
+              }}
               placeholder="CARI MODEL BUSANA..."
               className="w-full bg-[#FAF8F5] border border-stone-200 px-4 py-2 pr-9 text-xs tracking-wider uppercase text-neutral-800 placeholder-neutral-400 focus:outline-none focus:border-amber-900 focus:bg-white transition-all duration-300 rounded-2xs"
             />
@@ -693,7 +725,7 @@ export default function Beranda() {
               </span>
             </Link>
 
-            {/* TOMBOL PROFILE DENGAN IKON USER STANDAR (BEBAS HYDRATION ERROR) */}
+            {/* TOMBOL PROFILE */}
             {isUserAuthenticated ? (
               <Link
                 href="/profile"
@@ -830,11 +862,15 @@ export default function Beranda() {
           style={{ transform: `translateX(-${currentHeroIndex * 100}%)` }}
         >
           {heroBanners.map((bannerSrc, index) => (
-            <div key={index} className="w-full shrink-0">
+            <div
+              key={index}
+              className="w-full shrink-0 relative flex items-center justify-center"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={bannerSrc}
                 alt={`Almaco Fashion Banner ${index + 1}`}
-                className="w-full h-auto block"
+                className="w-full h-auto block select-none"
               />
             </div>
           ))}
@@ -856,7 +892,7 @@ export default function Beranda() {
       </div>
 
       {/* SECTION GROSIR TERPISAH */}
-      {grosirProducts.length > 0 && (
+      {!isLoading && !isFetchError && grosirProducts.length > 0 && (
         <section
           id="grosir-section"
           className="w-full max-w-[1440px] mx-auto px-3.5 sm:px-8 lg:px-12 pt-6 sm:pt-10"
@@ -945,7 +981,7 @@ export default function Beranda() {
                           </span>
                           {!isHabis && (
                             <span className="text-[8px] sm:text-[9.5px] font-bold text-neutral-500 font-mono shrink-0">
-                              ({jumlahSeri} Seri Available)
+                              ({jumlahSeri} Seri Tersedia)
                             </span>
                           )}
                         </div>
@@ -991,20 +1027,20 @@ export default function Beranda() {
             </div>
 
             {grosirProducts.length > defaultGrosirLimit && (
-              <div className="mt-5 sm:mt-6 pt-3.5 border-t border-stone-300/60 text-center">
+              <div className="mt-6 sm:mt-8 pt-4 border-t border-stone-300/60 text-center">
                 <button
                   type="button"
                   onClick={() => setShowAllGrosir(!showAllGrosir)}
-                  className="inline-flex items-center gap-1.5 bg-white border border-stone-300 hover:border-amber-900 px-5 py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-neutral-900 transition-all shadow-2xs cursor-pointer active:scale-95 rounded-2xs"
+                  className="inline-flex items-center justify-center gap-2 bg-white hover:bg-neutral-950 text-neutral-900 hover:text-white border border-stone-300 hover:border-neutral-950 px-6 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider transition-all duration-300 shadow-2xs cursor-pointer active:scale-95 rounded-2xs group"
                 >
                   <span>
                     {showAllGrosir
                       ? "Sembunyikan Sebagian"
-                      : `Lihat (${grosirProducts.length - defaultGrosirLimit} Produk Grosir Lainnya)`}
+                      : `Lihat (${grosirProducts.length - defaultGrosirLimit}) Produk Grosir Lainnya`}
                   </span>
                   <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-300 ${
-                      showAllGrosir ? "rotate-180" : ""
+                    className={`w-4 h-4 text-amber-800 group-hover:text-amber-300 transition-transform duration-300 ${
+                      showAllGrosir ? "rotate-180" : "animate-bounce"
                     }`}
                   />
                 </button>
@@ -1065,14 +1101,38 @@ export default function Beranda() {
           </div>
         </div>
 
+        {/* PENANGANAN TAMPILAN: LOADING, ERROR KONEKSI, KOSONG, ATAU PRODUK */}
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 animate-pulse">
-            {[1, 2, 3, 4].map((n) => (
-              <div
-                key={n}
-                className="bg-stone-200/60 aspect-[3/4] rounded-2xs w-full h-full"
-              />
-            ))}
+          <div className="py-16 flex flex-col items-center justify-center space-y-3 bg-white border border-stone-200 rounded-xs shadow-xs my-4">
+            <Loader2 className="w-9 h-9 text-amber-900 animate-spin" />
+            <div className="text-center space-y-1">
+              <p className="text-xs font-bold uppercase tracking-widest text-neutral-800">
+                Memuat Katalog Produk...
+              </p>
+              <p className="text-[10px] text-neutral-400 uppercase tracking-wider">
+                Mohon tunggu sebentar, data sedang diunduh
+              </p>
+            </div>
+          </div>
+        ) : isFetchError ? (
+          <div className="bg-rose-50/50 border border-rose-200 p-8 sm:p-12 text-center space-y-3 my-4 rounded-xs shadow-xs">
+            <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-rose-600" />
+            <div className="space-y-1">
+              <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-rose-950">
+                Koneksi Internet Buruk / Gagal Memuat Data
+              </p>
+              <p className="text-[10px] sm:text-[11px] text-neutral-600 max-w-sm mx-auto">
+                Terjadi kendala saat menghubungkan ke database server. Periksa
+                jaringan internet Anda lalu coba muat ulang.
+              </p>
+            </div>
+            <button
+              onClick={() => fetchDataFromSupabase()}
+              className="inline-flex items-center gap-1.5 bg-neutral-950 hover:bg-amber-950 text-white text-[11px] font-bold uppercase tracking-wider px-5 py-2.5 transition shadow-sm cursor-pointer active:scale-95 rounded-2xs"
+            >
+              <RefreshCcw className="w-3.5 h-3.5" />
+              <span>Coba Muat Ulang</span>
+            </button>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="bg-white border border-stone-200 p-8 sm:p-12 text-center text-neutral-400 space-y-2.5 shadow-xs my-4 rounded-xs">

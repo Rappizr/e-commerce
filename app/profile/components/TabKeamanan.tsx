@@ -20,10 +20,12 @@ export default function TabKeamanan({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
+    setPasswordSuccess("");
 
     if (newPassword.length < 6) {
       setPasswordError("Kata sandi minimal 6 karakter.");
@@ -34,9 +36,15 @@ export default function TabKeamanan({
       return;
     }
 
-    await onChangePassword(e, newPassword, confirmPassword);
-    setNewPassword("");
-    setConfirmPassword("");
+    try {
+      await onChangePassword(e, newPassword, confirmPassword);
+      setPasswordSuccess("Kata sandi berhasil diperbarui!");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      const msg = err?.message || "Gagal mengubah kata sandi.";
+      setPasswordError(msg);
+    }
   };
 
   return (
@@ -50,9 +58,15 @@ export default function TabKeamanan({
         </p>
       </div>
 
+      {/* Error / Success message di atas form */}
       {passwordError && (
         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-2xs">
           {passwordError}
+        </div>
+      )}
+      {passwordSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-2xs">
+          {passwordSuccess}
         </div>
       )}
 
@@ -67,7 +81,11 @@ export default function TabKeamanan({
               required
               placeholder="Minimal 6 karakter"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (passwordError) setPasswordError("");
+                if (passwordSuccess) setPasswordSuccess("");
+              }}
               className="w-full bg-neutral-50 border border-neutral-300 pl-3.5 pr-10 py-2 sm:py-2.5 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white font-mono rounded-2xs"
             />
             <button
@@ -93,7 +111,11 @@ export default function TabKeamanan({
             required
             placeholder="Ulangi kata sandi baru"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              if (passwordError) setPasswordError("");
+              if (passwordSuccess) setPasswordSuccess("");
+            }}
             className="w-full bg-neutral-50 border border-neutral-300 px-3.5 py-2 sm:py-2.5 text-xs focus:outline-none focus:border-neutral-950 focus:bg-white font-mono rounded-2xs"
           />
         </div>
