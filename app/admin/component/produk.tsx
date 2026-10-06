@@ -95,6 +95,61 @@ const compressImage = (
   });
 };
 
+const BUCKET_NAME = "products";
+const uploadBase64ToSupabase = async (
+  base64: string,
+  folder: string = "produk",
+  prefix: string = "img",
+): Promise<string> => {
+  // 1. Kalau sudah URL (bukan base64), langsung kembalikan
+  if (!base64 || !base64.startsWith("data:")) {
+    return base64;
+  }
+
+  // 2. Parse base64
+  const match = base64.match(/^data:(image\/[\w+.-]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Format base64 tidak valid");
+  }
+
+  const mimeType = match[1];              // e.g. image/webp
+  const base64Data = match[2];
+  const ext = mimeType.split("/")[1].replace("+xml", ""); // webp, jpeg, png
+
+  // 3. Convert base64 → Uint8Array (browser-friendly)
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // 4. Nama file unik
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const filePath = `${folder}/${prefix}-${randomId}.${ext}`;
+
+  // 5. Upload
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, bytes, {
+      contentType: mimeType,
+      upsert: false,
+      cacheControl: "31536000", // 1 tahun
+    });
+
+  if (uploadError) throw uploadError;
+
+  // 6. Ambil public URL
+  const { data: urlData } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(filePath);
+
+  return urlData.publicUrl;
+};
+
 export default function ProdukComponent() {
   const [produk, setProduk] = useState<ProdukItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -468,9 +523,9 @@ export default function ProdukComponent() {
   const totalStokTerhitung = isGrosirForm
     ? Number(formProduk.stokGrosirPcs.replace(/[^0-9]/g, "")) || 0
     : activeWarnaList.reduce((acc, w) => {
-        const key = w.trim().toUpperCase();
-        return acc + (Number(formProduk.stokPerWarna[key]) || 0);
-      }, 0);
+      const key = w.trim().toUpperCase();
+      return acc + (Number(formProduk.stokPerWarna[key]) || 0);
+    }, 0);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -521,6 +576,20 @@ export default function ProdukComponent() {
     const finalList =
       formProduk.gambarList.length > 0 ? formProduk.gambarList : [fallbackImg];
 
+    let gambarUrl: string | null = null;
+
+    try {
+      gambarUrl = await uploadBase64ToSupabase(
+        finalList[0],
+        "produk",
+        "utama",
+      );
+    } catch (err) {
+      console.error("Gagal upload gambar_utama:", err);
+      // Kalau gagal upload, biarkan null (atau bisa set ke fallbackImg)
+      gambarUrl = null;
+    }
+
     const parsedBerat = Number(formProduk.berat);
     const validBerat =
       !isNaN(parsedBerat) && parsedBerat > 0 ? parsedBerat : 100;
@@ -545,14 +614,15 @@ export default function ProdukComponent() {
           ? parsedRincian
           : isGrosirForm
             ? [
-                `Paket seri otomatis isi ${parsedMinGrosir} pcs beda warna`,
-                "Bahan adem & jahitan konveksi rapi",
-              ]
+              `Paket seri otomatis isi ${parsedMinGrosir} pcs beda warna`,
+              "Bahan adem & jahitan konveksi rapi",
+            ]
             : ["Bahan premium super adem & lembut", "Jahitan rapi kelas butik"],
       warna: activeWarnaList,
       ukuran: [cleanUkuran],
       gambar_list: finalList,
       gambar_utama: finalList[0],
+      gambar_url: gambarUrl || null,
     };
 
     try {
@@ -570,12 +640,12 @@ export default function ProdukComponent() {
           prev.map((item) =>
             item.id === editingItem.id
               ? {
-                  ...item,
-                  ...payload,
-                  id: editingItem.id,
-                  gambarList: finalList,
-                  gambarUtama: finalList[0],
-                }
+                ...item,
+                ...payload,
+                id: editingItem.id,
+                gambarList: finalList,
+                gambarUtama: finalList[0],
+              }
               : item,
           ),
         );
@@ -621,23 +691,23 @@ export default function ProdukComponent() {
 
         const variantsPayload = isGrosirForm
           ? [
-              {
-                product_id: numericId,
-                warna: "Seri Mix (Campur Warna)",
-                ukuran: cleanUkuran,
-                stok: totalStokTerhitung,
-              },
-            ]
+            {
+              product_id: numericId,
+              warna: "Seri Mix (Campur Warna)",
+              ukuran: cleanUkuran,
+              stok: totalStokTerhitung,
+            },
+          ]
           : activeWarnaList.map((w) => {
-              const key = w.trim().toUpperCase();
-              const stokVal = Number(formProduk.stokPerWarna[key]) || 0;
-              return {
-                product_id: numericId,
-                warna: w.trim(),
-                ukuran: cleanUkuran,
-                stok: stokVal,
-              };
-            });
+            const key = w.trim().toUpperCase();
+            const stokVal = Number(formProduk.stokPerWarna[key]) || 0;
+            return {
+              product_id: numericId,
+              warna: w.trim(),
+              ukuran: cleanUkuran,
+              stok: stokVal,
+            };
+          });
 
         if (variantsPayload.length > 0) {
           await supabase.from("product_variants").insert(variantsPayload);
