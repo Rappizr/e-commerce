@@ -115,17 +115,17 @@ function KonfirmasiContent() {
   };
 
   const router = useRouter();
-      const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
-      useEffect(() => {
-          if (isAuthLoading) return;
-          if (!isLoggedIn) {
-              const redirectPath = invoiceParam.trim()
-                  ? `/rincian-pemesanan?invoice=${encodeURIComponent(invoiceParam.trim())}`
-                  : "/rincian-pemesanan";
-              router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
-          }
-      }, [isAuthLoading, isLoggedIn, invoiceParam, router]);
-  
+  const { isLoggedIn, isLoading: isAuthLoading } = useAuth();
+
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!isLoggedIn) {
+      const redirectPath = invoiceParam.trim()
+        ? `/rincian-pemesanan?invoice=${encodeURIComponent(invoiceParam.trim())}`
+        : "/rincian-pemesanan";
+      router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`);
+    }
+  }, [isAuthLoading, isLoggedIn, invoiceParam, router]);
 
   useEffect(() => {
     if (!invoiceParam) return;
@@ -152,13 +152,9 @@ function KonfirmasiContent() {
           }
         }
 
-<<<<<<< HEAD
-        if (!error && data) {
-          const rawTotal = String(data.total_harga || 0);
-=======
         if (data) {
           const rawTotal = String(data.total_harga || "");
->>>>>>> dev
+
           setFormData((prev) => ({
             ...prev,
             orderId: cleanInvoice.toUpperCase(),
@@ -167,9 +163,9 @@ function KonfirmasiContent() {
             senderBank: data.bank_asal || "BCA",
           }));
         } else {
-          //redirect to profile page if order not found
-          // window.location.href = "/profile";
-          setErrorMsg(`Pesanan dengan nomor invoice "${cleanInvoice}" tidak ditemukan. Silakan periksa kembali nomor invoice Anda atau hubungi layanan pelanggan kami.`);
+          setErrorMsg(
+            `Pesanan dengan nomor invoice "${cleanInvoice}" tidak ditemukan. Silakan periksa kembali nomor invoice Anda atau hubungi layanan pelanggan kami.`,
+          );
         }
       } catch (err) {
         console.error("Fetch order detail error:", err);
@@ -217,7 +213,6 @@ function KonfirmasiContent() {
     setErrorMsg("");
 
     try {
-      // Upload + update order lewat API server-side (bypass RLS client)
       const body = new FormData();
       body.append("invoice_no", cleanInvoiceNo);
       body.append("nama_pengirim", formData.senderName.trim());
