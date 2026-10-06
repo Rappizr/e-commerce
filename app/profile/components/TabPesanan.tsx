@@ -66,10 +66,6 @@ export default function TabPesanan({
       ) : (
         <div className="divide-y divide-neutral-100 border border-neutral-200 rounded-2xs overflow-hidden">
           {orders.map((ord) => {
-<<<<<<< HEAD
-=======
-            // Selalu ambil total_harga murni
->>>>>>> dev
             const tagihan = ord.total_harga || 0;
             const isMenunggu = ord.status === "Menunggu Pembayaran";
             const isBatal =
