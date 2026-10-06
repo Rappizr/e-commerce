@@ -24,7 +24,7 @@ async function loadProduct(slug: string) {
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, nama, kategori, harga, stok, berat, deskripsi, is_grosir, min_grosir, harga_grosir, gambar_list, gambar_utama, warna, ukuran, rincian",
+      "id, nama, kategori, harga, stok, berat, deskripsi, is_grosir, min_grosir, harga_grosir, gambar_list, gambar_utama, gambar_url, warna, ukuran, rincian",
     )
     .eq("id", id)
     .single();
@@ -33,6 +33,11 @@ async function loadProduct(slug: string) {
 
   const product = mapProductRow(data);
   const canonicalSlug = buildProductSlug(data.id, data.nama || "produk");
+  // gambar_url khusus untuk share link (OG / Twitter), bukan gambar_utama / gambar_list
+  const shareImageUrl =
+    typeof data.gambar_url === "string" && data.gambar_url.trim() !== ""
+      ? data.gambar_url.trim()
+      : "";
 
   const { data: variantData } = await supabase
     .from("product_variants")
@@ -40,7 +45,7 @@ async function loadProduct(slug: string) {
     .eq("product_id", id);
 
   const variants = mapVariants(variantData, product);
-  return { product, variants, canonicalSlug };
+  return { product, variants, canonicalSlug, shareImageUrl };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -55,12 +60,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const { product, canonicalSlug } = result;
+  const { product, canonicalSlug, shareImageUrl } = result;
   const title = product.title;
   const description =
     product.desc.slice(0, 155) + (product.desc.length > 155 ? "…" : "");
-  const images = product.images;
-  const ogImage = images[0] ?? "";
+  // Share link (OG / Twitter) hanya memakai gambar_url, bukan gambar_utama / gambar_list
+  const ogImage = shareImageUrl || "";
   const canonical = `/produk/${canonicalSlug}`;
 
   return {
@@ -72,23 +77,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       url: `https://almacofashion.com${canonical}`,
       type: "website",
-      images: [
-        {
-          url: ogImage,          // ← only 1 image
-          alt: title,
-        },
-      ],
+      images: ogImage
+        ? [
+            {
+              url: ogImage,
+              alt: title,
+            },
+          ]
+        : [],
     },
     twitter: {
       card: "summary_large_image",
       title: `${title} | ALMACO FASHION`,
       description,
-      images: [
-        {
-          url: ogImage,          // ← only 1 image
-          alt: title,
-        },
-      ],
+      images: ogImage
+        ? [
+            {
+              url: ogImage,
+              alt: title,
+            },
+          ]
+        : [],
     },
   };
 }
