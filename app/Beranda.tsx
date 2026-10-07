@@ -27,6 +27,9 @@ import {
   Package,
   AlertCircle,
   RefreshCcw,
+  Truck,
+  Award,
+  Headphones,
 } from "lucide-react";
 import { useKeranjang } from "./penyimpanan/KeranjangContext";
 import { useAuth } from "./penyimpanan/authcontext";
@@ -46,6 +49,66 @@ interface VariantItem {
   warna: string;
   ukuran: string;
   stok: number;
+}
+
+function LayananKeunggulan() {
+  const features = [
+    {
+      icon: (
+        <Truck
+          className="w-5 h-5 sm:w-6 sm:h-6 text-amber-900"
+          strokeWidth={1.75}
+        />
+      ),
+      title: "PENGIRIMAN SELURUH INDONESIA",
+      desc: "Kurir pengiriman yang lengkap dan murah",
+    },
+    {
+      icon: (
+        <Award
+          className="w-5 h-5 sm:w-6 sm:h-6 text-amber-900"
+          strokeWidth={1.75}
+        />
+      ),
+      title: "KUALITAS TERBAIK",
+      desc: "Kualitas terbaik dari setiap produk yang kami miliki",
+    },
+    {
+      icon: (
+        <Headphones
+          className="w-5 h-5 sm:w-6 sm:h-6 text-amber-900"
+          strokeWidth={1.75}
+        />
+      ),
+      title: "CUSTOMER SUPPORT",
+      desc: "Silahkan hubungi kami jika ingin menanyakan tentang produk",
+    },
+  ];
+
+  return (
+    <section className="w-full max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+      <div className="bg-white border border-stone-200/90 rounded-sm shadow-xs py-5 px-2 sm:px-6">
+        <div className="grid grid-cols-3 divide-x divide-stone-200/80 text-center items-start">
+          {features.map((item, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col items-center justify-start px-1.5 sm:px-4 space-y-2 sm:space-y-3"
+            >
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-50/70 border border-amber-200/60 flex items-center justify-center shrink-0">
+                {item.icon}
+              </div>
+              <h3 className="text-[10px] sm:text-xs font-bold tracking-tight sm:tracking-wider uppercase text-neutral-900 leading-snug sm:leading-normal">
+                {item.title}
+              </h3>
+              <p className="text-[9px] sm:text-xs text-neutral-500 leading-tight sm:leading-relaxed max-w-[220px]">
+                {item.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function Beranda() {
@@ -190,7 +253,7 @@ export default function Beranda() {
     }
   };
 
-  // 2. FETCH DATA SUPABASE AMAN TANPA CRASH TIMEOUT PROMISE.RACE
+  // 2. FETCH DATA SUPABASE
   const fetchDataFromSupabase = async () => {
     setIsLoading(true);
     setIsFetchError(false);
@@ -375,27 +438,13 @@ export default function Beranda() {
 
   const quickStepQty = isQuickProductGrosir ? minAllowedQuickQty : 1;
 
-  useEffect(() => {
-    if (currentAvailableStock > 0) {
-      if (quickQty > currentAvailableStock) {
-        if (isQuickProductGrosir) {
-          const maxMultiples =
-            Math.floor(currentAvailableStock / minAllowedQuickQty) *
-            minAllowedQuickQty;
-          setQuickQty(Math.max(minAllowedQuickQty, maxMultiples));
-        } else {
-          setQuickQty(currentAvailableStock);
-        }
-      } else if (quickQty < minAllowedQuickQty) {
-        setQuickQty(minAllowedQuickQty);
-      }
+  const handleSelectQuickColor = (warna: string) => {
+    setQuickColor(warna);
+    const stokPilihan = getQuickColorStock(warna);
+    if (stokPilihan > 0 && quickQty > stokPilihan) {
+      setQuickQty(stokPilihan);
     }
-  }, [
-    quickColor,
-    currentAvailableStock,
-    minAllowedQuickQty,
-    isQuickProductGrosir,
-  ]);
+  };
 
   const handleConfirmAddToCart = () => {
     if (!activeQuickProduct || currentAvailableStock <= 0) return;
@@ -855,8 +904,8 @@ export default function Beranda() {
         )}
       </header>
 
-      {/* HERO BANNER SLIDER */}
-      <section className="relative w-full bg-[#FAF8F5] overflow-hidden leading-none select-none">
+      {/* HERO BANNER SLIDER - PRIORITASKAN LCP BANNER PERTAMA */}
+      <section className="relative w-full bg-[#FAF8F5] overflow-hidden leading-none select-none min-h-[140px] sm:min-h-[260px] md:min-h-[380px]">
         <div
           className="flex transition-transform duration-700 ease-in-out w-full"
           style={{ transform: `translateX(-${currentHeroIndex * 100}%)` }}
@@ -870,6 +919,9 @@ export default function Beranda() {
               <img
                 src={bannerSrc}
                 alt={`Almaco Fashion Banner ${index + 1}`}
+                fetchPriority={index === 0 ? "high" : "low"}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding={index === 0 ? "sync" : "async"}
                 className="w-full h-auto block select-none"
               />
             </div>
@@ -1101,18 +1153,21 @@ export default function Beranda() {
           </div>
         </div>
 
-        {/* PENANGANAN TAMPILAN: LOADING, ERROR KONEKSI, KOSONG, ATAU PRODUK */}
+        {/* TAMPILAN PRODUK: DENGAN SKELETON AGAR CLS NOL */}
         {isLoading ? (
-          <div className="py-16 flex flex-col items-center justify-center space-y-3 bg-white border border-stone-200 rounded-xs shadow-xs my-4">
-            <Loader2 className="w-9 h-9 text-amber-900 animate-spin" />
-            <div className="text-center space-y-1">
-              <p className="text-xs font-bold uppercase tracking-widest text-neutral-800">
-                Memuat Katalog Produk...
-              </p>
-              <p className="text-[10px] text-neutral-400 uppercase tracking-wider">
-                Mohon tunggu sebentar, data sedang diunduh
-              </p>
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5 my-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-white border border-stone-200 rounded-xs p-2.5 sm:p-3 space-y-2 animate-pulse"
+              >
+                <div className="aspect-[3/4] w-full bg-stone-200/80 rounded-2xs" />
+                <div className="h-3 w-16 bg-stone-200/80 rounded" />
+                <div className="h-4 w-3/4 bg-stone-200/80 rounded" />
+                <div className="h-4 w-1/2 bg-stone-200/80 rounded" />
+                <div className="h-8 w-full bg-stone-200/80 rounded-2xs mt-2" />
+              </div>
+            ))}
           </div>
         ) : isFetchError ? (
           <div className="bg-rose-50/50 border border-rose-200 p-8 sm:p-12 text-center space-y-3 my-4 rounded-xs shadow-xs">
@@ -1370,7 +1425,7 @@ export default function Beranda() {
                             key={warna}
                             type="button"
                             disabled={isHabis}
-                            onClick={() => setQuickColor(warna)}
+                            onClick={() => handleSelectQuickColor(warna)}
                             className={`px-2.5 py-1 text-[10px] font-bold border transition rounded-2xs flex items-center gap-1 ${
                               isHabis
                                 ? "bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed line-through opacity-60"
@@ -1632,7 +1687,38 @@ export default function Beranda() {
         </>
       )}
 
+      {/* KEUNGGULAN LAYANAN DI BAWAH TESTIMONI (HORIZONTAL RESPONSIVE 3 KOLOM) */}
+      <LayananKeunggulan />
+
       <Footer />
+
+      {/* MODAL ZOOM TESTIMONI */}
+      {zoomTestimoni && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setZoomTestimoni(null)}
+        >
+          <div
+            className="relative max-w-md w-full aspect-[9/16] max-h-[85vh] bg-neutral-900 rounded-xs overflow-hidden shadow-2xl border border-stone-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={zoomTestimoni}
+              alt="Testimoni Diperbesar"
+              fill
+              className="object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setZoomTestimoni(null)}
+              className="absolute top-3 right-3 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition cursor-pointer"
+              aria-label="Tutup foto"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* TOMBOL MENGAPUNG WHATSAPP */}
       <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end gap-2">
