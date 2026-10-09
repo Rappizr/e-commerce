@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
+import Script from "next/script";
 import { KeranjangProvider } from "./penyimpanan/KeranjangContext";
 import { AuthProvider } from "./penyimpanan/authcontext";
 
@@ -105,9 +106,13 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [{ url: "/logo.png", type: "image/png" }],
-    shortcut: "/logo.png",
-    apple: "/logo.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: "/apple-touch-icon.png",
+    shortcut: "/favicon.ico",
   },
   openGraph: {
     title: "ALMACO FASHION — Grosir & Eceran Busana Muslimah Berkualitas",
@@ -117,7 +122,7 @@ export const metadata: Metadata = {
     siteName: "ALMACO FASHION",
     images: [
       {
-        url: "/logo.png",
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
         alt: "Logo ALMACO FASHION — Grosir & Eceran Busana Muslimah Berkualitas",
@@ -131,7 +136,7 @@ export const metadata: Metadata = {
     title: "ALMACO FASHION — Grosir & Eceran Busana Muslimah Berkualitas",
     description:
       "Belanja busana butik Indonesia dan fashion muslimah syar'i berkualitas langsung dari konveksi di Tulungagung. Grosir & eceran gamis, abaya, dan tunik premium. Kirim ke seluruh Indonesia.",
-    images: ["/logo.png"],
+    images: ["/og-image.jpg"],
   },
   category: "fashion",
 };
@@ -146,10 +151,23 @@ export default function RootLayout({
       lang="id"
       className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
     >
+      
       <body className="min-h-full flex flex-col bg-[#E6E3DA] text-[#1A1A1A] selection:bg-amber-900 selection:text-white">
         <AuthProvider>
           <KeranjangProvider>{children}</KeranjangProvider>
         </AuthProvider>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0WSX9YWQYL"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-0WSX9YWQYL');
+          `}
+        </Script>
       </body>
     </html>
   );
