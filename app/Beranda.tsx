@@ -120,6 +120,7 @@ export default function Beranda() {
     null,
   );
   const [showAllGrosir, setShowAllGrosir] = useState(false);
+  const [showAllEceran, setShowAllEceran] = useState(false);
 
   const [showWaTooltip, setShowWaTooltip] = useState(true);
   const [zoomTestimoni, setZoomTestimoni] = useState<string | null>(null);
@@ -554,6 +555,12 @@ export default function Beranda() {
       if (sortOption === "newest") return b.id - a.id;
       return 0;
     });
+
+  // Default limit 8 produk eceran (2 baris laptop / 4 baris hp)
+  const defaultEceranLimit = 8;
+  const displayedEceran = showAllEceran
+    ? filteredProducts
+    : filteredProducts.slice(0, defaultEceranLimit);
 
   return (
     <main
@@ -1120,7 +1127,10 @@ export default function Beranda() {
             <div className="relative w-full sm:w-auto">
               <select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setShowAllEceran(false);
+                }}
                 className="w-full sm:min-w-[190px] text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-white border border-stone-300 py-2 sm:py-2.5 pl-3 pr-8 appearance-none focus:outline-none focus:border-amber-900 cursor-pointer shadow-2xs text-neutral-900 rounded-2xs"
               >
                 {categories.map((cat) => (
@@ -1217,88 +1227,112 @@ export default function Beranda() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5">
-            {filteredProducts.map((item, idx) => {
-              const isHabis = Number(item.stok || 0) <= 0;
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5">
+              {displayedEceran.map((item, idx) => {
+                const isHabis = Number(item.stok || 0) <= 0;
 
-              return (
-                <div
-                  key={item.id}
-                  className={`group bg-white border overflow-hidden flex flex-col justify-between transition-all duration-300 rounded-xs ${
-                    isHabis
-                      ? "border-stone-200 opacity-75"
-                      : "border-stone-200 hover:shadow-md"
-                  }`}
-                >
-                  <div>
-                    <Link
-                      href={`/product-detail?id=${item.id}`}
-                      className="block relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden"
-                    >
-                      <Image
-                        src={item.gambarUtama}
-                        alt={item.nama}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                        priority={idx < 4}
-                        className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                      />
+                return (
+                  <div
+                    key={item.id}
+                    className={`group bg-white border overflow-hidden flex flex-col justify-between transition-all duration-300 rounded-xs ${
+                      isHabis
+                        ? "border-stone-200 opacity-75"
+                        : "border-stone-200 hover:shadow-md"
+                    }`}
+                  >
+                    <div>
+                      <Link
+                        href={`/product-detail?id=${item.id}`}
+                        className="block relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden"
+                      >
+                        <Image
+                          src={item.gambarUtama}
+                          alt={item.nama}
+                          fill
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                          priority={idx < 4}
+                          className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                        />
 
-                      <span
-                        className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs z-10 ${
+                        <span
+                          className={`absolute top-1.5 left-1.5 sm:top-2 sm:left-2 text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-2xs shadow-2xs z-10 ${
+                            isHabis
+                              ? "bg-rose-600 text-white font-black"
+                              : "bg-white/95 text-neutral-900 border border-stone-200 font-mono"
+                          }`}
+                        >
+                          {isHabis ? "Habis" : `Sisa: ${item.stok} pcs`}
+                        </span>
+                      </Link>
+
+                      <div className="p-2 sm:p-3.5 space-y-0.5 sm:space-y-1">
+                        <span className="text-[7.5px] sm:text-[9px] uppercase tracking-widest text-amber-900/60 font-semibold block truncate">
+                          {item.kategori}
+                        </span>
+                        <Link href={`/product-detail?id=${item.id}`}>
+                          <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 hover:underline underline-offset-2">
+                            {item.nama}
+                          </h4>
+                        </Link>
+                        <p className="text-[11px] sm:text-sm font-bold text-neutral-950 tracking-tight font-mono pt-0.5">
+                          Rp {item.harga.toLocaleString("id-ID")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-stretch border-t border-stone-200 bg-stone-50">
+                      <Link
+                        href={`/product-detail?id=${item.id}`}
+                        className="w-9 sm:w-11 py-2 sm:py-2.5 flex items-center justify-center text-neutral-600 hover:text-neutral-950 hover:bg-stone-100 transition border-r border-stone-200 shrink-0"
+                        title="Lihat Detail Produk"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQuickModal(item)}
+                        disabled={isHabis}
+                        className={`flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1 min-w-0 ${
                           isHabis
-                            ? "bg-rose-600 text-white font-black"
-                            : "bg-white/95 text-neutral-900 border border-stone-200 font-mono"
+                            ? "bg-stone-200 text-stone-400 cursor-not-allowed"
+                            : "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer active:scale-95"
                         }`}
                       >
-                        {isHabis ? "Habis" : `Sisa: ${item.stok} pcs`}
-                      </span>
-                    </Link>
-
-                    <div className="p-2 sm:p-3.5 space-y-0.5 sm:space-y-1">
-                      <span className="text-[7.5px] sm:text-[9px] uppercase tracking-widest text-amber-900/60 font-semibold block truncate">
-                        {item.kategori}
-                      </span>
-                      <Link href={`/product-detail?id=${item.id}`}>
-                        <h4 className="text-[11px] sm:text-xs font-medium text-neutral-900 line-clamp-1 hover:underline underline-offset-2">
-                          {item.nama}
-                        </h4>
-                      </Link>
-                      <p className="text-[11px] sm:text-sm font-bold text-neutral-950 tracking-tight font-mono pt-0.5">
-                        Rp {item.harga.toLocaleString("id-ID")}
-                      </p>
+                        <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
+                        <span className="truncate">
+                          {isHabis ? "Stok Habis" : "+ Keranjang"}
+                        </span>
+                      </button>
                     </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  <div className="flex items-stretch border-t border-stone-200 bg-stone-50">
-                    <Link
-                      href={`/product-detail?id=${item.id}`}
-                      className="w-9 sm:w-11 py-2 sm:py-2.5 flex items-center justify-center text-neutral-600 hover:text-neutral-950 hover:bg-stone-100 transition border-r border-stone-200 shrink-0"
-                      title="Lihat Detail Produk"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenQuickModal(item)}
-                      disabled={isHabis}
-                      className={`flex-1 py-2 sm:py-2.5 px-1.5 sm:px-2 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1 min-w-0 ${
-                        isHabis
-                          ? "bg-stone-200 text-stone-400 cursor-not-allowed"
-                          : "bg-neutral-950 hover:bg-amber-950 text-white cursor-pointer active:scale-95"
-                      }`}
-                    >
-                      <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 shrink-0" />
-                      <span className="truncate">
-                        {isHabis ? "Stok Habis" : "+ Keranjang"}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            {/* Tombol Lihat Produk Eceran Lainnya */}
+            {filteredProducts.length > defaultEceranLimit && (
+              <div className="mt-6 sm:mt-8 pt-4 border-t border-stone-300/60 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAllEceran(!showAllEceran)}
+                  className="inline-flex items-center justify-center gap-2 bg-white hover:bg-neutral-950 text-neutral-900 hover:text-white border border-stone-300 hover:border-neutral-950 px-6 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider transition-all duration-300 shadow-2xs cursor-pointer active:scale-95 rounded-2xs group"
+                >
+                  <span>
+                    {showAllEceran
+                      ? "Sembunyikan Sebagian"
+                      : `Lihat (${filteredProducts.length - defaultEceranLimit}) Koleksi Eceran Lainnya`}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-amber-800 group-hover:text-amber-300 transition-transform duration-300 ${
+                      showAllEceran ? "rotate-180" : "animate-bounce"
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
 
